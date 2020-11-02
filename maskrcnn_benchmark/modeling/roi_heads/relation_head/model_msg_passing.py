@@ -44,7 +44,7 @@ class IMPContext(nn.Module):
         self.out_edge_w_fc = nn.Sequential(nn.Linear(hidden_dim*2, 1), nn.Sigmoid())
         self.in_edge_w_fc = nn.Sequential(nn.Linear(hidden_dim*2, 1), nn.Sigmoid())
 
-    
+
     def forward(self, x, proposals, union_features, rel_pair_idxs, logger=None):
         num_objs = [len(b) for b in proposals]
 
