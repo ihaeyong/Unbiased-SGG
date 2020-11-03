@@ -56,9 +56,11 @@ class ROIRelationHead(torch.nn.Module):
             # relation subsamples and assign ground truth label during training
             with torch.no_grad():
                 if self.cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
-                    proposals, rel_labels, rel_pair_idxs, rel_binarys = self.samp_processor.gtbox_relsample(proposals, targets)
+                    proposals, rel_labels, rel_pair_idxs, rel_binarys = self.samp_processor.gtbox_relsample(
+                        proposals, targets)
                 else:
-                    proposals, rel_labels, rel_pair_idxs, rel_binarys = self.samp_processor.detect_relsample(proposals, targets)
+                    proposals, rel_labels, rel_pair_idxs, rel_binarys = self.samp_processor.detect_relsample(
+                        proposals, targets)
         else:
             rel_labels, rel_binarys = None, None
             rel_pair_idxs = self.samp_processor.prepare_test_pairs(features[0].device, proposals)
@@ -77,7 +79,9 @@ class ROIRelationHead(torch.nn.Module):
 
         # final classifier that converts the features into predictions
         # should corresponding to all the functions and layers after the self.context class
-        refine_logits, relation_logits, add_losses = self.predictor(proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, union_features, logger)
+        refine_logits, relation_logits, add_losses = self.predictor(proposals, rel_pair_idxs, rel_labels,
+                                                                    rel_binarys, roi_features, union_features,
+                                                                    logger)
 
         # for test
         if not self.training:

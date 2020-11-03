@@ -31,6 +31,7 @@ from maskrcnn_benchmark.utils.logger import setup_logger, debug_print
 from maskrcnn_benchmark.utils.miscellaneous import mkdir, save_config
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
 
+from tensorboardX import SummaryWriter
 
 # See if we can use apex.DistributedDataParallel instead of the torch default,
 # and enable mixed-precision via apex.amp
@@ -40,7 +41,7 @@ except ImportError:
     raise ImportError('Use APEX for multi-precision via apex.amp')
 
 
-def train(cfg, local_rank, distributed, logger):
+def train(cfg, local_rank, distributed, logger, writer):
     debug_print(logger, 'prepare training')
     model = build_detection_model(cfg) 
     debug_print(logger, 'end model construction')
@@ -48,7 +49,7 @@ def train(cfg, local_rank, distributed, logger):
     # modules that should be always set in eval mode
     # their eval() method should be called after model.train() is called
     eval_modules = (model.rpn, model.backbone, model.roi_heads.box,)
- 
+
     fix_eval_modules(eval_modules)
 
     # NOTE, we slow down the LR of the layers start with the names in slow_heads
@@ -61,7 +62,7 @@ def train(cfg, local_rank, distributed, logger):
     # load pretrain layers to new layers
     load_mapping = {"roi_heads.relation.box_feature_extractor" : "roi_heads.box.feature_extractor",
                     "roi_heads.relation.union_feature_extractor.feature_extractor" : "roi_heads.box.feature_extractor"}
-    
+
     if cfg.MODEL.ATTRIBUTE_ON:
         load_mapping["roi_heads.relation.att_feature_extractor"] = "roi_heads.attribute.feature_extractor"
         load_mapping["roi_heads.relation.union_feature_extractor.att_feature_extractor"] = "roi_heads.attribute.feature_extractor"
@@ -158,7 +159,7 @@ def train(cfg, local_rank, distributed, logger):
         # Otherwise apply loss scaling for mixed-precision recipe
         with amp.scale_loss(losses, optimizer) as scaled_losses:
             scaled_losses.backward()
-        
+
         # add clip_grad_norm from MOTIFS, tracking gradient, used for debug
         verbose = (iteration % cfg.SOLVER.PRINT_GRAD_FREQ) == 0 or print_first_grad # print grad or not
         print_first_grad = False
@@ -192,6 +193,12 @@ def train(cfg, local_rank, distributed, logger):
                 )
             )
 
+            str_meters = str(meters).split(' ')
+            writer.add_scalar('train/lr',optimizer.param_groups[-1]["lr"],iteration)
+            writer.add_scalar('train/loss', float(str_meters[1]), iteration)
+            writer.add_scalar('train/loss_rel', float(str_meters[5]), iteration)
+            writer.add_scalar('train/loss_refine_obj', float(str_meters[9]), iteration)
+
         if iteration % checkpoint_period == 0:
             checkpointer.save("model_{:07d}".format(iteration), **arguments)
         if iteration == max_iter:
@@ -202,7 +209,18 @@ def train(cfg, local_rank, distributed, logger):
             logger.info("Start validating")
             val_result = run_val(cfg, model, val_data_loaders, distributed, logger)
             logger.info("Validation Result: %.4f" % val_result)
- 
+
+            # mode
+            if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
+                if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL:
+                    mode = 'predcls'
+                else:
+                    mode = 'sgcls'
+            else:
+                mode = 'sgdet'
+
+            writer.add_scalar('val/{}_r100'.format(mode), val_result, iteration)
+
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
         # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
         if cfg.SOLVER.SCHEDULE.TYPE == "WarmupReduceLROnPlateau":
@@ -336,7 +354,7 @@ def main():
     num_gpus = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
     args.distributed = num_gpus > 1
 
-    if args.distributed:
+    if args.distributed :
         torch.cuda.set_device(args.local_rank)
         torch.distributed.init_process_group(
             backend="nccl", init_method="env://"
@@ -351,6 +369,11 @@ def main():
     if output_dir:
         mkdir(output_dir)
 
+    logs_dir = './logs/' + output_dir.split('/')[2]
+    if logs_dir:
+        mkdir(logs_dir)
+
+    writer = SummaryWriter(logs_dir)
     logger = setup_logger("maskrcnn_benchmark", output_dir, get_rank())
     logger.info("Using {} GPUs".format(num_gpus))
     logger.info(args)
@@ -369,7 +392,7 @@ def main():
     # save overloaded model config in the output directory
     save_config(cfg, output_config_path)
 
-    model = train(cfg, args.local_rank, args.distributed, logger)
+    model = train(cfg, args.local_rank, args.distributed, logger, writer)
 
     if not args.skip_test:
         run_test(cfg, model, args.distributed, logger)

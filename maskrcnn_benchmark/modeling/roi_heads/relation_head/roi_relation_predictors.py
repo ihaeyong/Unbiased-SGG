@@ -14,8 +14,132 @@ from .model_vctree import VCTreeLSTMContext
 from .model_motifs import LSTMContext, FrequencyBias
 from .model_motifs_with_attribute import AttributeLSTMContext
 from .model_transformer import TransformerContext
+
 from .utils_relation import layer_init, get_box_info, get_box_pair_info
 from maskrcnn_benchmark.data import get_dataset_statistics
+
+from .model_sgraph import SpectralContext
+
+
+@registry.ROI_RELATION_PREDICTOR.register("SGraphPredictor")
+class SGraphPredictor(nn.Module):
+    def __init__(self, config, in_channels):
+        super(SGraphPredictor, self).__init__()
+        self.attribute_on = config.MODEL.ATTRIBUTE_ON
+        self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
+        self.num_att_cls = config.MODEL.ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES
+        self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
+
+        assert in_channels is not None
+        num_inputs = in_channels
+        self.use_vision = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_VISION
+
+        # load class dict
+        statistics = get_dataset_statistics(config)
+
+        obj_classes = statistics['obj_classes']
+        rel_classes = statistics['rel_classes']
+        att_classes = statistics['att_classes']
+
+        assert self.num_obj_cls==len(obj_classes)
+        assert self.num_att_cls==len(att_classes)
+        assert self.num_rel_cls==len(rel_classes)
+
+        # init contextual object
+        if self.attribute_on:
+            self.context_layer = AttributeSpectralContext(config, obj_classes, rel_classes, in_channels)
+        else:
+            self.context_layer = SpectralContext(config, obj_classes, rel_classes, in_channels)
+
+        # post decoding
+        self.hidden_dim = config.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM
+        self.pooling_dim = config.MODEL.ROI_RELATION_HEAD.CONTEXT_POOLING_DIM
+        self.embed_dim = config.MODEL.ROI_RELATION_HEAD.EMBED_DIM
+
+        self.vis_dists = nn.Linear(self.pooling_dim + self.hidden_dim,
+                                   self.num_rel_cls, bias=True)
+
+        self.non_vis_dists = nn.Linear(self.embed_dim * 2,
+                                       self.num_rel_cls, bias=True)
+
+        # initialize layer parameters
+        layer_init(self.vis_dists, xavier=True)
+        layer_init(self.non_vis_dists, xavier=True)
+
+        if self.pooling_dim != config.MODEL.ROI_BOX_HEAD.MLP_HEAD_DIM:
+            self.union_single_not_match = True
+            self.up_dim = nn.Linear(config.MODEL.ROI_BOX_HEAD.MLP_HEAD_DIM, self.pooling_dim)
+            layer_init(self.up_dim, xavier=True)
+        else:
+            self.union_single_not_match = False
+
+
+    def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
+                union_features, logger=None):
+        """
+        Returns:
+            obj_dists (list[Tensor]): logits of object label distribution
+            rel_dists (list[Tensor])
+            rel_pair_idxs (list[Tensor]): (num_rel, 2) index of subject and object
+            union_features (Tensor): (batch_num_rel, context_pooling_dim): visual union feature of each pair
+        """
+
+        # encode context infomation
+        if self.attribute_on:
+            obj_dists, obj_preds, att_dists, edge_ctx = self.context_layer(
+                roi_features, proposals, logger)
+        else:
+            obj_dists, obj_preds, obj_ctx_rep, obj_ctx_emb = self.context_layer(
+                roi_features, proposals, logger)
+
+        # post decode
+        num_rels = [r.shape[0] for r in rel_pair_idxs]
+        num_objs = [len(b) for b in proposals]
+        assert len(num_rels) == len(num_objs)
+
+        obj_reps = obj_ctx_rep.split(num_objs, dim=0)
+        obj_embs = obj_ctx_emb.split(num_objs, dim=0)
+        obj_preds = obj_preds.split(num_objs, dim=0)
+        
+        prod_reps = []
+        prod_embs = []
+        pair_preds = []
+        for pair_idx, obj_rep, obj_emb, obj_pred in zip(rel_pair_idxs, obj_reps, obj_embs, obj_preds):
+            prod_reps.append( torch.cat((obj_rep[pair_idx[:,0]],
+                                         obj_rep[pair_idx[:,1]]), dim=-1) )
+            prod_embs.append( torch.cat((obj_emb[pair_idx[:,0]],
+                                         obj_emb[pair_idx[:,1]]), dim=-1) )
+            pair_preds.append( torch.stack((obj_pred[pair_idx[:,0]],
+                                            obj_pred[pair_idx[:,1]]), dim=1) )
+
+        # prod_rep [:,512], prod_emb [:,400], pair_rep[:,2]
+        prod_rep = cat(prod_reps, dim=0)
+        prod_emb = cat(prod_embs, dim=0)
+        pair_pred = cat(pair_preds, dim=0)
+
+        # non-visual dists
+        non_visual = prod_emb
+        visual = torch.cat((prod_rep, union_features), 1)
+
+        non_vis_dists = self.non_vis_dists(non_visual)
+        vis_dists = self.vis_dists(visual)
+
+        # sum of non-vis/visual dists
+        rel_dists = non_vis_dists + vis_dists
+
+        obj_dists = obj_dists.split(num_objs, dim=0)
+        rel_dists = rel_dists.split(num_rels, dim=0)
+
+        # we use obj_preds instead of pred from obj_dists
+        # because in decoder_rnn, preds has been through a nms stage
+        add_losses = {}
+
+        if self.attribute_on:
+            att_dists = att_dists.split(num_objs, dim=0)
+            return (obj_dists, att_dists), rel_dists, add_losses
+        else:
+            return obj_dists, rel_dists, add_losses
+
 
 
 @registry.ROI_RELATION_PREDICTOR.register("TransformerPredictor")
@@ -197,7 +321,6 @@ class IMPPredictor(nn.Module):
         add_losses = {}
 
         return obj_dists, rel_dists, add_losses
-
 
 
 @registry.ROI_RELATION_PREDICTOR.register("MotifPredictor")
