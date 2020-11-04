@@ -84,23 +84,23 @@ class SGraphPredictor(nn.Module):
             union_features (Tensor): (batch_num_rel, context_pooling_dim): visual union feature of each pair
         """
 
+        # batch info
+        num_rels = [r.shape[0] for r in rel_pair_idxs]
+        num_objs = [len(b) for b in proposals]
+        assert len(num_rels) == len(num_objs)
+
         # encode context infomation
         if self.attribute_on:
             obj_dists, obj_preds, att_dists, edge_ctx = self.context_layer(
                 roi_features, proposals, logger)
         else:
-            obj_dists, obj_preds, obj_ctx_rep, obj_ctx_emb = self.context_layer(
-                roi_features, proposals, logger)
-
-        # post decode
-        num_rels = [r.shape[0] for r in rel_pair_idxs]
-        num_objs = [len(b) for b in proposals]
-        assert len(num_rels) == len(num_objs)
+            obj_dists,obj_preds,obj_ctx_rep,obj_ctx_emb,link_loss=self.context_layer(
+                roi_features, proposals, rel_pair_idxs, rel_labels, logger)
 
         obj_reps = obj_ctx_rep.split(num_objs, dim=0)
         obj_embs = obj_ctx_emb.split(num_objs, dim=0)
         obj_preds = obj_preds.split(num_objs, dim=0)
-        
+
         prod_reps = []
         prod_embs = []
         pair_preds = []
@@ -133,6 +133,9 @@ class SGraphPredictor(nn.Module):
         # we use obj_preds instead of pred from obj_dists
         # because in decoder_rnn, preds has been through a nms stage
         add_losses = {}
+
+        if link_loss is not None:
+            add_losses['link_loss'] = link_loss
 
         if self.attribute_on:
             att_dists = att_dists.split(num_objs, dim=0)

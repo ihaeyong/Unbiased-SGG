@@ -67,6 +67,7 @@ MODEL:
     POOLING_ALL_LEVELS: True
     LABEL_SMOOTHING_LOSS: False
     FEATURE_EXTRACTOR: "RelationFeatureExtractor"
+    #################### Spectral Graph ###############################
     #################### Select Relationship Model ####################
     #PREDICTOR: "MotifPredictor"
     #PREDICTOR: "VCTreePredictor"

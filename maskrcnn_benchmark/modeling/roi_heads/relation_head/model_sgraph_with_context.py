@@ -4,46 +4,41 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-#from .model_sgraph import FrequencyBias
-#from .utils_sgraph import to_onehot
-
 from maskrcnn_benchmark.data import get_dataset_statistics
+
+from .model_sgraph_with_freq import FrequencyBias
+from .utils_sgraph import to_onehot
 
 from collections import Counter
 from itertools import combinations, permutations, product
 
-class ObjectMessage(nn.Module):
+class SpectralMessage(nn.Module):
 
     def __init__(self, config, in_channels):
-        super(ObjectMessage, self).__init__()
+        super(SpectralMessage, self).__init__()
 
         self.obj_dim = in_channels
-        self.adj_sim = True
+        self.adj_sim = False
 
         self.obj_comp = nn.Sequential(
-            nn.Linear(self.obj_dim,
-                      self.obj_dim // 4, bias=False),
+            nn.Linear(self.obj_dim, self.obj_dim // 4, bias=False),
             nn.ReLU(inplace=True))
 
         self.obj_decomp = nn.Sequential(
-            nn.Linear(self.obj_dim // 4,
-                      self.obj_dim, bias=False),
+            nn.Linear(self.obj_dim // 4, self.obj_dim, bias=False),
             nn.ReLU(inplace=True))
 
         self.ou1 = nn.Sequential(
-            nn.Linear(self.obj_dim // 4,
-                      self.obj_dim // 4, bias=False),
+            nn.Linear(self.obj_dim // 4, self.obj_dim // 4, bias=False),
             nn.ReLU(inplace=True))
 
         if self.adj_sim:
             self.ofc_u = nn.Sequential(
-                nn.Linear(self.obj_dim // 2,
-                          self.obj_dim // 4, bias=False),
+                nn.Linear(self.obj_dim // 2, self.obj_dim // 4, bias=False),
                 nn.ReLU(inplace=True))
         else:
             self.ofc_u = nn.Sequential(
-                nn.Linear(self.obj_dim // 4,
-                          self.obj_dim // 4, bias=False),
+                nn.Linear(self.obj_dim // 4, self.obj_dim // 4, bias=False),
                 nn.ReLU(inplace=True))
 
         # adj. matrix
@@ -52,32 +47,10 @@ class ObjectMessage(nn.Module):
         self.freq_bias = FrequencyBias(config, statistics)
 
         self.adj_matrix = nn.Sequential(
-            nn.Conv2d(52, 10, 3, stride=1, padding=1, bias=False),
-            nn.Conv2d(10,  5, 3, stride=1, padding=1, bias=False),
+            nn.Conv2d(51, 10, 3, stride=1, padding=1, dilation=1, bias=False),
+            nn.Conv2d(10,  5, 3, stride=1, padding=1, dilation=1, bias=False),
             nn.Conv2d(5 ,  1, 1, stride=1, bias=False),
             nn.Tanh())
-
-    def rel_index(self, rel_inds):
-        n_obj_img = Counter(rel_inds[:,0])
-        k_imgs, v_imgs = zip(*n_obj_img.most_common())
-        k_imgs = np.array(k_imgs).astype(np.int)
-
-        start = 0
-        end = 0
-        start_list = []
-        end_list = []
-
-        num_imgs = len(k_imgs)
-        for k in range(num_imgs):
-            end += v_imgs[np.where(k_imgs==k)[0][0]]
-
-            start_list.append(start)
-            end_list.append(end)
-
-            # bg rel included
-            start += v_imgs[np.where(k_imgs==k)[0][0]]
-
-        return np.stack(start_list,0), np.stack(end_list,0)
 
     def cos_sim(self,x, y):
         '''
@@ -94,45 +67,18 @@ class ObjectMessage(nn.Module):
 
         return torch.clamp(dist, -1.0, 1.0)
 
-    def freq_graph(self, obj_feature, rm_obj_dists, num_r_objs, num_objs,
-                   rel_inds, rois, readout=False, rel_labels=None):
-        """ Create a graph """
-        # subjects and objects
-        subj = rel_inds[:,1]
-        obj = rel_inds[:,2]
-
-        # find index
-        obj_s, obj_e = self.rel_index(rois.data)
-
-        # define graph
-        device = obj_feature.get_device()
-
-        # object predictions
-        obj_preds = rm_obj_dists.max(1)[1]
-        obj_dists = Variable(to_onehot(obj_preds.data, 151))
-
-        # m_rel_labels
-        if self.training:
-            m_rel_labels = Variable(
-                torch.zeros(num_objs, num_objs)).cuda(device)
-            for j in range(rel_labels.size(0)):
-                if rel_labels[j,3].data.cpu().numpy()[0] > 0:
-                    m_rel_labels[rel_labels[j,1].data, rel_labels[j,2].data] = 1
-                else:
-                    m_rel_labels[rel_labels[j,1].data, rel_labels[j,2].data] = 1
+    def spect_graph(self, num_objs, obj_reps, obj_preds,
+                    rel_pair_idxs=None, readout=False, rel_labels=None):
 
         ofl_l_list = []
         ofl_u_list = []
         adj_link_list = []
-        for i in range(num_r_objs):
-            o_sj = obj_s[i]
-            o_ej = obj_e[i]
+        for i in range(len(num_objs)):
 
             # --------relationship------------------
-            obj_feats = obj_feature[o_sj:o_ej]
-            obj_u1 = self.ou1(obj_feats)
-
-            num_objs = obj_u1.size(0)
+            device = obj_reps[i].get_device()
+            obj_u1 = self.ou1(obj_reps[i])
+            num_obj = num_objs[i]
 
             ### --- adj_{sim} ----------###
             if self.adj_sim:
@@ -142,15 +88,11 @@ class ObjectMessage(nn.Module):
                 n_value, n_index = adj_sim.topk(2, dim=1)
 
                 obj_u1 = obj_u1[n_index.data,:]
-                obj_u1 = obj_u1.view(num_objs, -1)
+                obj_u1 = obj_u1.view(num_obj, -1)
 
             ### --- adj_{rel_dists} --- ###
-            obj_l = obj_preds[o_sj:o_ej]
-            obj_idx = [*range(num_objs)]
-
-            b_obj_dists = obj_dists[o_sj:o_ej, :]
-            obj_corr = self.cos_sim(b_obj_dists, b_obj_dists)
-            obj_probs = (obj_corr > 0.99).sum(1).float() / len(obj_l)
+            obj_l = obj_preds[i]
+            obj_idx = [*range(num_obj)]
 
             prod_idx = torch.LongTensor(
                 np.array(list(product(obj_idx, obj_idx)))).cuda(device)
@@ -163,19 +105,8 @@ class ObjectMessage(nn.Module):
             rel_u1 = Variable(torch.FloatTensor(
                 self.freq_bias.rels_with_labels(subj_obj_l))).cuda(device)
 
-            adj_fg = rel_u1.view(num_objs, num_objs, -1)[:,:,:]
-            if False:
-                adj_fg = self.adj_matrix(adj_fg.permute(2,0,1)[None,:])[0][0]
-            else:
-                adj_fg = torch.cat((adj_fg, adj_sim[:,:,None]), 2)
-                adj_fg = self.adj_matrix(adj_fg.permute(2,0,1)[None,:])[0][0]
-
-            # off-diag
-            #adj_fg = adj_fg / adj_fg.sum(1)[:,None]
-
-            if False:
-                alpha_fg = adj_fg / obj_probs[:,None]
-                adj_fg = 1/alpha_fg
+            adj_fg = rel_u1.view(num_obj, num_obj, -1)[:,:,:]
+            adj_fg = self.adj_matrix(adj_fg.permute(2,0,1)[None,:])[0][0]
 
             ofl_u = torch.matmul(adj_fg, obj_u1)
 
@@ -185,7 +116,13 @@ class ObjectMessage(nn.Module):
                 ofl_u_list.append(ofl_u)
 
             if self.training:
-                adj_gt = m_rel_labels[o_sj:o_ej, o_sj:o_ej]
+                adj_gt = Variable(
+                    torch.zeros(num_obj, num_obj)).cuda(device)
+                for j in range(rel_labels[i].size(0)):
+                    if rel_labels[i][j].item() > 0:
+                        adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1
+                    else:
+                        adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 0.1
 
                 deg = adj_gt.sum(1) + 1.0
                 d_hat =  torch.zeros_like(adj_gt)
@@ -210,33 +147,31 @@ class ObjectMessage(nn.Module):
         refine_u =torch.cat(ofl_u_list, 0)
 
         if self.training:
-            link_loss = torch.cat(adj_link_list).mean()
+            link_loss = torch.stack(adj_link_list).mean()
         else:
             link_loss = None
 
         return refine_u, link_loss
 
-    def forward(self, feature_obj, rm_obj_dists, rel_inds, rois, readout, rel_labels=None):
+    def forward(self, num_objs, obj_preds, encoder_reps, rel_pair_idxs=None,
+                readout=False, rel_labels=None):
         """
         feature_obj : [feature(num_obj x R^{4096}); embed(R^{200}); position(R^{128})]
         rel_inds :    [rel_inds[:,1], rel_inds[:,2]]
         obj_preds :   [num_obj]
         freq_bias :   [num_obj x 51]
         """
+        comp_objs = self.obj_comp(encoder_reps)
 
-        num_r_objs = rel_inds[:,0].max() + 1
-        num_objs = feature_obj.size(0)
+        obj_preds = obj_preds.split(num_objs, dim=0)
+        obj_reps = comp_objs.split(num_objs, dim=0)
 
-        comp_obj = self.obj_comp(feature_obj)
-
-        ofc_u, link_loss = self.freq_graph(comp_obj, rm_obj_dists,
-                                           num_r_objs, num_objs,
-                                           rel_inds, rois, readout,
-                                           rel_labels)
+        ofc_u, link_loss = self.spect_graph(num_objs, obj_reps, obj_preds,
+                                            rel_pair_idxs, readout, rel_labels)
 
         u_m = self.ofc_u(ofc_u)
 
         decomp_obj = self.obj_decomp(u_m)
-        out_feature = decomp_obj + feature_obj
+        encoder_reps = decomp_obj + encoder_reps
 
-        return out_feature, link_loss
+        return encoder_reps, link_loss

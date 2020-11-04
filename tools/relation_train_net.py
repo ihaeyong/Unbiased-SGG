@@ -120,7 +120,7 @@ def train(cfg, local_rank, distributed, logger, writer):
     debug_print(logger, 'end dataloader')
     checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
 
-    if cfg.SOLVER.PRE_VAL:
+    if cfg.SOLVER.PRE_VAL and False:
         logger.info("Validate before training")
         run_val(cfg, model, val_data_loaders, distributed, logger)
 
@@ -173,7 +173,6 @@ def train(cfg, local_rank, distributed, logger, writer):
 
         eta_seconds = meters.time.global_avg * (max_iter - iteration)
         eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
-
         if iteration % 200 == 0 or iteration == max_iter:
             logger.info(
                 meters.delimiter.join(
@@ -192,12 +191,14 @@ def train(cfg, local_rank, distributed, logger, writer):
                     memory=torch.cuda.max_memory_allocated() / 1024.0 / 1024.0,
                 )
             )
-
             str_meters = str(meters).split(' ')
             writer.add_scalar('train/lr',optimizer.param_groups[-1]["lr"],iteration)
-            writer.add_scalar('train/loss', float(str_meters[1]), iteration)
-            writer.add_scalar('train/loss_rel', float(str_meters[5]), iteration)
-            writer.add_scalar('train/loss_refine_obj', float(str_meters[9]), iteration)
+            writer.add_scalar('train/{}'.format(str_meters[0][:-1]), float(str_meters[1]), iteration)
+            writer.add_scalar('train/{}'.format(str_meters[4][:-1]), float(str_meters[5]), iteration)
+            writer.add_scalar('train/{}'.format(str_meters[8][:-1]), float(str_meters[9]), iteration)
+
+            if True:
+                writer.add_scalar('train/{}'.format(str_meters[12][:-1]), float(str_meters[13]), iteration)
 
         if iteration % checkpoint_period == 0:
             checkpointer.save("model_{:07d}".format(iteration), **arguments)

@@ -9,77 +9,7 @@ from torch.autograd import Variable
 from maskrcnn_benchmark.modeling.utils import cat
 from .utils_motifs import obj_edge_vectors, center_x, sort_by_score, to_onehot, get_dropout_mask, nms_overlaps, encode_box_info
 
-from .model_sgraph_with_context import ObjectMessage
-
-class FrequencyBias(nn.Module):
-    """
-    The goal of this is to provide a simplified way of computing
-    P(predicate | obj1, obj2, img).
-    """
-
-    def __init__(self, cfg, statistics, eps=1e-3):
-        super(FrequencyBias, self).__init__()
-        pred_dist = statistics['pred_dist'].float()
-        assert pred_dist.size(0) == pred_dist.size(1)
-
-        self.num_objs = pred_dist.size(0)
-        self.num_rels = pred_dist.size(2)
-
-        self.matrix = pred_dist
-
-        pred_dist = pred_dist.view(-1, self.num_rels)
-
-        self.obj_baseline = nn.Embedding(self.num_objs*self.num_objs, self.num_rels)
-        with torch.no_grad():
-            self.obj_baseline.weight.copy_(pred_dist, non_blocking=True)
-
-    def index_with_labels(self, labels):
-        """
-        :param labels: [batch_size, 2] 
-        :return: 
-        """
-        return self.obj_baseline(labels[:, 0] * self.num_objs + labels[:, 1])
-
-    def rels_with_labels(self, labels):
-        """
-        :param labels: [batch_size, 2]
-        :return:
-        """
-        labels = labels.data.cpu().numpy()
-        return self.matrix[labels[:, 0],labels[:, 1]]
-
-    def subj_with_labels(self, labels):
-        """
-        :param labels: [batch_size, 2]
-        :return:
-        """
-        labels = labels.data.cpu().numpy()
-        return self.matrix[:,labels[:,1],labels[:,2]]
-
-    def obj_with_labels(self, labels):
-        """
-        :param labels: [batch_size, 2]
-        :return:
-        """
-        labels = labels.data.cpu().numpy()
-        return self.matrix[labels[:,0],:,labels[:,2]]
-
-
-    def index_with_probability(self, pair_prob):
-        """
-        :param labels: [batch_size, num_obj, 2] 
-        :return: 
-        """
-        batch_size, num_obj, _ = pair_prob.shape
-
-        joint_prob = pair_prob[:,:,0].contiguous().view(batch_size, num_obj, 1) * pair_prob[:,:,1].contiguous().view(batch_size, 1, num_obj)
-
-        return joint_prob.view(batch_size, num_obj*num_obj)  @ self.obj_baseline.weight
-
-    def forward(self, labels):
-        # implement through index_with_labels
-        return self.index_with_labels(labels)
-
+from .model_sgraph_with_context import SpectralMessage
 
 class SpectralContext(nn.Module):
     """
@@ -121,14 +51,19 @@ class SpectralContext(nn.Module):
         self.dropout_rate = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_DROPOUT_RATE
         self.hidden_dim = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM
 
-        self.obj_ctx_rnn = nn.Linear(self.obj_dim + self.embed_dim + 128,
-                                     self.hidden_dim * 8)
+        self.obj_ctx = nn.Linear(self.obj_dim + self.embed_dim + 128,
+                                 self.hidden_dim * 8)
 
         self.nms_thresh = self.cfg.TEST.RELATION.LATER_NMS_PREDICTION_THRES
 
         # relation context
         self.lin_obj_h = nn.Linear(self.hidden_dim * 8, self.hidden_dim // 2)
         self.out_obj = nn.Linear(self.hidden_dim * 8, len(self.obj_classes))
+
+        # spectral message passing
+        self.num_ctx = 1
+        if self.num_ctx > 0:
+            self.sg_msg = SpectralMessage(config, self.hidden_dim * 8)
 
         # untreated average features
         self.average_ratio = 0.0005
@@ -145,6 +80,79 @@ class SpectralContext(nn.Module):
         # leftright order
         scores = c_x / (c_x.max() + 1)
         return sort_by_score(proposals, scores)
+
+    def obj_stx(self,
+                obj_feats,
+                proposals,
+                rel_pair_idxs,
+                obj_labels=None,
+                rel_labels=None,
+                boxes_per_cls=None,
+                ctx_average=False,
+                order=False):
+        """
+        Object context and object classification, modified by haeyong.k
+        :param obj_feats: [num_obj, img_dim + object embedding0 dim]
+        :param obj_labels: [num_obj] the GT labels of the image
+        :param box_priors: [num_obj, 4] boxes. We'll use this for NMS
+        :param boxes_per_cls
+        :return: obj_dists: [num_obj, #classes] new probability distribution.
+                 obj_preds: argmax of that distribution.
+                 obj_final_ctx: [num_obj, #feats] For later!
+        """
+        # Sort by the confidence of the maximum detection.
+        perm, inv_perm, ls_transposed = self.sort_rois(proposals)
+
+        # Pass object features, sorted by score, into the encoder
+        if order:
+            obj_inp_rep = obj_feats[perm].contiguous()
+        else:
+            obj_inp_rep = obj_feats
+
+        # === [4096 + 200 + 128, hidden_dim * 2] ===
+        encoder_rep = self.obj_ctx(obj_inp_rep)
+
+        # untreated decoder input
+        batch_size = encoder_rep.shape[0]
+
+        # --- object predictions and spectral message passing ---
+        if obj_labels is None:
+            obj_dists = self.out_obj(encoder_rep)
+            obj_preds = obj_dists[:, 1:].max(1)[1] + 1
+        else:
+            obj_preds = obj_labels
+
+        num_objs = [len(b) for b in proposals]
+        link_loss = None
+        for i in range(self.num_ctx):
+            encoder_rep, link_loss = self.sg_msg(num_objs, obj_preds, encoder_rep,
+                                                 rel_pair_idxs,
+                                                 readout=(i==3),
+                                                 rel_labels=rel_labels)
+
+        # --- object predictions and spectral message passing ---
+        if (not self.training) and self.effect_analysis and ctx_average:
+            decoder_inp = self.untreated_dcd_feat.view(1, -1).expand(batch_size, -1)
+        else:
+            decoder_inp = encoder_rep
+
+        if self.training and self.effect_analysis:
+            self.untreated_dcd_feat = self.moving_average(
+                self.untreated_dcd_feat, decode_inp)
+
+        # Decode in order if True
+        if order:
+            decoder_inp = decoder_inp[inv_perm]
+
+        # obj. predictions
+        obj_dists, obj_preds = self.decoder(
+            decoder_inp,
+            obj_labels=obj_labels if obj_labels is not None else None,
+            boxes_per_cls=boxes_per_cls if boxes_per_cls is not None else None,)
+
+        encoder_rep = self.lin_obj_h(decoder_inp)
+
+        return obj_dists, obj_preds, encoder_rep, perm, inv_perm, ls_transposed, link_loss
 
     def decoder(self, obj_fmap, obj_labels, boxes_per_cls):
 
@@ -185,62 +193,14 @@ class SpectralContext(nn.Module):
 
         return obj_dists2, obj_preds
 
-    def obj_stx(self, obj_feats, proposals, obj_labels=None, boxes_per_cls=None,
-                ctx_average=False, order=False):
-        """
-        Object context and object classification, modified by haeyong.k
-        :param obj_feats: [num_obj, img_dim + object embedding0 dim]
-        :param obj_labels: [num_obj] the GT labels of the image
-        :param box_priors: [num_obj, 4] boxes. We'll use this for NMS
-        :param boxes_per_cls
-        :return: obj_dists: [num_obj, #classes] new probability distribution.
-                 obj_preds: argmax of that distribution.
-                 obj_final_ctx: [num_obj, #feats] For later!
-        """
-        # Sort by the confidence of the maximum detection.
-        perm, inv_perm, ls_transposed = self.sort_rois(proposals)
-
-        # Pass object features, sorted by score, into the encoder
-        if order:
-            obj_inp_rep = obj_feats[perm].contiguous()
-        else:
-            obj_inp_rep = obj_feats
-
-        # === [4096 + 200 + 128, hidden_dim * 2] ===
-        encoder_rep = self.obj_ctx_rnn(obj_inp_rep)
-
-        # untreated decoder input
-        batch_size = encoder_rep.shape[0]
-
-        if (not self.training) and self.effect_analysis and ctx_average:
-            decoder_inp = self.untreated_dcd_feat.view(1, -1).expand(batch_size, -1)
-        else:
-            decoder_inp = encoder_rep
-
-        if self.training and self.effect_analysis:
-            self.untreated_dcd_feat = self.moving_average(
-                self.untreated_dcd_feat, decode_inp)
-
-        # Decode in order if True
-        if order:
-            decoder_inp = decoder_inp[inv_perm]
-
-        obj_dists, obj_preds = self.decoder(
-            decoder_inp,
-            obj_labels=obj_labels if obj_labels is not None else None,
-            boxes_per_cls=boxes_per_cls if boxes_per_cls is not None else None,)
-
-        encoder_rep = self.lin_obj_h(decoder_inp)
-
-        return obj_dists, obj_preds, encoder_rep, perm, inv_perm, ls_transposed
-
     def moving_average(self, holder, input):
         assert len(input.shape) == 2
         with torch.no_grad():
             holder = holder * (1 - self.average_ratio) + self.average_ratio * input.mean(0).view(-1)
         return holder
 
-    def forward(self, x, proposals, rel_pair_idxs, logger=None, all_average=False, ctx_average=False):
+    def forward(self, x, proposals, rel_pair_idxs, rel_labels=None,
+                logger=None, all_average=False, ctx_average=False):
 
         # labels will be used in DecoderRNN during training (for nms)
         if self.training or self.cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
@@ -268,8 +228,9 @@ class SpectralContext(nn.Module):
             boxes_per_cls = cat([proposal.get_field('boxes_per_cls') for proposal in proposals], dim=0) # comes from post process of box_head
 
         # object level contextual feature
-        obj_dists, obj_preds, obj_ctx, perm, inv_perm, ls_transposed = self.obj_stx(
-            obj_pre_rep, proposals, obj_labels, boxes_per_cls, ctx_average=ctx_average)
+        obj_dists,obj_preds,obj_ctx,perm,inv_perm,ls_transposed,link_loss=self.obj_stx(
+            obj_pre_rep, proposals, rel_pair_idxs,
+            obj_labels, rel_labels, boxes_per_cls, ctx_average=ctx_average)
 
         # edge level contextual feature
         updated_obj_embed = self.updated_obj_embed(obj_preds.long())
@@ -287,5 +248,5 @@ class SpectralContext(nn.Module):
             self.untreated_obj_feat = self.moving_average(self.untreated_obj_feat, obj_pre_rep)
             self.untreated_edg_feat = self.moving_average(self.untreated_edg_feat, cat((obj_embed2, x), -1))
 
-        return obj_dists, obj_preds, edge_ctx, edge_obj
+        return obj_dists, obj_preds, edge_ctx, edge_obj, link_loss
 
