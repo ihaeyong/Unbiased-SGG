@@ -191,14 +191,40 @@ def train(cfg, local_rank, distributed, logger, writer):
                     memory=torch.cuda.max_memory_allocated() / 1024.0 / 1024.0,
                 )
             )
-            str_meters = str(meters).split(' ')
-            writer.add_scalar('train/lr',optimizer.param_groups[-1]["lr"],iteration)
-            writer.add_scalar('train/{}'.format(str_meters[0][:-1]), float(str_meters[1]), iteration)
-            writer.add_scalar('train/{}'.format(str_meters[4][:-1]), float(str_meters[5]), iteration)
-            writer.add_scalar('train/{}'.format(str_meters[8][:-1]), float(str_meters[9]), iteration)
 
-            if True:
-                writer.add_scalar('train/{}'.format(str_meters[12][:-1]), float(str_meters[13]), iteration)
+            writer.add_scalar('train/lr',optimizer.param_groups[-1]["lr"],iteration)
+            str_meters = str(meters)
+
+            loss_str = 'loss:'
+            if str_meters.find(loss_str) != -1:
+                idx = str_meters.find(loss_str) + len(loss_str) + 1
+                writer.add_scalar('train/{}'.format(
+                    loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
+
+            loss_str = 'loss_rel:'
+            if str_meters.find(loss_str) != -1:
+                idx = str_meters.find(loss_str) + len(loss_str) + 1
+                writer.add_scalar('train/{}'.format(
+                    loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
+
+            loss_str = 'loss_refine_obj:'
+            if str_meters.find(loss_str) != -1:
+                idx = str_meters.find(loss_str) + len(loss_str) + 1
+                writer.add_scalar('train/{}'.format(
+                    loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
+
+            loss_str = 'rel_cl_loss:'
+            if str_meters.find(loss_str) != -1:
+                idx = str_meters.find(loss_str) + len(loss_str) + 1
+                writer.add_scalar('train/{}'.format(
+                    loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
+
+            loss_str = 'link_loss:'
+            if str_meters.find(loss_str) != -1:
+                idx = str_meters.find(loss_str) + len(loss_str) + 1
+                writer.add_scalar('train/{}'.format(
+                    loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
+                
 
         if iteration % checkpoint_period == 0:
             checkpointer.save("model_{:07d}".format(iteration), **arguments)

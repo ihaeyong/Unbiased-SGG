@@ -19,7 +19,7 @@ from .utils_relation import layer_init, get_box_info, get_box_pair_info
 from maskrcnn_benchmark.data import get_dataset_statistics
 
 from .model_sgraph import SpectralContext
-
+from .model_sgraph_with_cl import SupConLoss, NpairLoss
 
 @registry.ROI_RELATION_PREDICTOR.register("SGraphPredictor")
 class SGraphPredictor(nn.Module):
@@ -72,6 +72,11 @@ class SGraphPredictor(nn.Module):
             layer_init(self.up_dim, xavier=True)
         else:
             self.union_single_not_match = False
+
+        # constrastive loss
+        self.rel_const = True
+        if self.rel_const:
+            self.rel_cl_loss = NpairLoss(l2_reg=0.02)
 
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
@@ -127,12 +132,24 @@ class SGraphPredictor(nn.Module):
         # sum of non-vis/visual dists
         rel_dists = non_vis_dists + vis_dists
 
+        # rel constrastive learning
+        rel_cl_loss = None
+        if self.rel_const and self.training:
+            anchors = visual
+            positives = visual
+            rel_labels = torch.cat(rel_labels)
+            rel_cl_loss = self.rel_cl_loss(anchors, positives, rel_labels)
+
+        # ---------------------------------------------
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
 
         # we use obj_preds instead of pred from obj_dists
         # because in decoder_rnn, preds has been through a nms stage
         add_losses = {}
+
+        if rel_cl_loss is not None:
+            add_losses['rel_cl_loss'] = rel_cl_loss
 
         if link_loss is not None:
             add_losses['link_loss'] = link_loss

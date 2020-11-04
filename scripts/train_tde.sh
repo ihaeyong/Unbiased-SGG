@@ -24,7 +24,7 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/spectral-ctx1-bg0.1-motifs-sgcls
+           OUTPUT_DIR ./checkpoints/rel-cl-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
@@ -44,5 +44,5 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/spectral-ctx1-bg0.1-motifs-predcls
+           OUTPUT_DIR ./checkpoints/rel-cl-predcls
 fi
