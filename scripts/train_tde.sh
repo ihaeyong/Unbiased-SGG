@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=$3,$4,$5,$6
 
 if [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10026 \
+           --master_port 10030 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -16,6 +16,8 @@ if [ $2 == "sgcls" ]; then
            MODEL.ROI_RELATION_HEAD.PREDICTOR SGraphPredictor \
            MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM 512 \
            MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS False \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 0 \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 1 \
            SOLVER.IMS_PER_BATCH 12 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
@@ -24,11 +26,11 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/symeig-ctx2-rel-cl-sgcls
+           OUTPUT_DIR ./checkpoints/rel-graph-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10027 \
+           --master_port 10029 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -37,6 +39,8 @@ elif [ $2 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.PREDICTOR SGraphPredictor \
            MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM 512 \
            MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS False \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 0 \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 1 \
            SOLVER.IMS_PER_BATCH 12 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
@@ -44,5 +48,5 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/symeig-ctx2-rel-cl-predcls
+           OUTPUT_DIR ./checkpoints/rel-graph-predcls
 fi

@@ -8,6 +8,7 @@ from maskrcnn_benchmark.data import get_dataset_statistics
 
 from .model_sgraph_with_freq import FrequencyBias
 from .utils_sgraph import to_onehot
+from .utils_relation import layer_init
 
 from collections import Counter
 from itertools import combinations, permutations, product
@@ -51,6 +52,13 @@ class SpectralMessage(nn.Module):
             nn.Conv2d(10,  5, 3, stride=1, padding=1, dilation=1, bias=False),
             nn.Conv2d(5 ,  1, 1, stride=1, bias=False),
             nn.Tanh())
+
+        # initialize layers
+        layer_init(self.obj_comp, xavier=True)
+        layer_init(self.obj_decomp, xavier=True)
+        layer_init(self.ou1, xavier=True)
+        layer_init(self.ofc_u, xavier=True)
+        layer_init(self.adj_matrix, xavier=True)
 
     def cos_sim(self,x, y):
         '''

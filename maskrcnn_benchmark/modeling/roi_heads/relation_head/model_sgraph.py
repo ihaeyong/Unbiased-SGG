@@ -9,6 +9,8 @@ from torch.autograd import Variable
 from maskrcnn_benchmark.modeling.utils import cat
 from .utils_motifs import obj_edge_vectors, center_x, sort_by_score, to_onehot, get_dropout_mask, nms_overlaps, encode_box_info
 
+from .utils_relation import layer_init
+
 from .model_sgraph_with_context import SpectralMessage
 
 class SpectralContext(nn.Module):
@@ -61,18 +63,27 @@ class SpectralContext(nn.Module):
         self.out_obj = nn.Linear(self.hidden_dim * 8, len(self.obj_classes))
 
         # spectral message passing
-        self.num_ctx = 2
-        if self.num_ctx > 0:
+        self.obj_ctx_layer = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER
+        if self.obj_ctx_layer > 0:
             self.sg_msg = SpectralMessage(config, self.hidden_dim * 8)
+
+
+        # initialize layers
+        layer_init(self.obj_ctx, xavier=True)
+        layer_init(self.lin_obj_h, xavier=True)
+        layer_init(self.out_obj, xavier=True)
 
         # untreated average features
         self.average_ratio = 0.0005
         self.effect_analysis = config.MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS
 
         if self.effect_analysis:
-            self.register_buffer("untreated_dcd_feat", torch.zeros(self.hidden_dim + self.obj_dim + self.embed_dim + 128))
-            self.register_buffer("untreated_obj_feat", torch.zeros(self.obj_dim+self.embed_dim + 128))
-            self.register_buffer("untreated_edg_feat", torch.zeros(self.embed_dim + self.obj_dim))
+            self.register_buffer("untreated_dcd_feat",
+                                 torch.zeros(self.hidden_dim + self.obj_dim + self.embed_dim + 128))
+            self.register_buffer("untreated_obj_feat",
+                                 torch.zeros(self.obj_dim+self.embed_dim + 128))
+            self.register_buffer("untreated_edg_feat",
+                                 torch.zeros(self.embed_dim + self.obj_dim))
 
     def sort_rois(self, proposals):
         c_x = center_x(proposals)
@@ -124,7 +135,7 @@ class SpectralContext(nn.Module):
 
         num_objs = [len(b) for b in proposals]
         link_loss = None
-        for i in range(self.num_ctx):
+        for i in range(self.obj_ctx_layer):
             encoder_rep, link_loss = self.sg_msg(num_objs, obj_preds, encoder_rep,
                                                  rel_pair_idxs,
                                                  readout=(i==3),

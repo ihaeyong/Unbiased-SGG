@@ -30,6 +30,7 @@ class ROIRelationHead(torch.nn.Module):
         else:
             self.box_feature_extractor = make_roi_box_feature_extractor(cfg, in_channels)
             feat_dim = self.box_feature_extractor.out_channels
+
         self.predictor = make_roi_relation_predictor(cfg, feat_dim)
         self.post_processor = make_roi_relation_post_processor(cfg)
         self.loss_evaluator = make_roi_relation_loss_evaluator(cfg)

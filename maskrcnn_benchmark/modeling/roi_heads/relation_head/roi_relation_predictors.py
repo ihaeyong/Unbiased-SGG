@@ -19,6 +19,7 @@ from .utils_relation import layer_init, get_box_info, get_box_pair_info
 from maskrcnn_benchmark.data import get_dataset_statistics
 
 from .model_sgraph import SpectralContext
+from .model_sgraph_with_vratt import UnionRegionAttention
 from .model_sgraph_with_cl import SupConLoss, NpairLoss
 
 @registry.ROI_RELATION_PREDICTOR.register("SGraphPredictor")
@@ -29,6 +30,8 @@ class SGraphPredictor(nn.Module):
         self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
         self.num_att_cls = config.MODEL.ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES
         self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
+
+        self.rel_ctx_layer = config.MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER
 
         assert in_channels is not None
         num_inputs = in_channels
@@ -50,6 +53,10 @@ class SGraphPredictor(nn.Module):
             self.context_layer = AttributeSpectralContext(config, obj_classes, rel_classes, in_channels)
         else:
             self.context_layer = SpectralContext(config, obj_classes, rel_classes, in_channels)
+
+        # init contextual relation
+        if self.rel_ctx_layer > 0:
+            self.rel_sg_msg = UnionRegionAttention(obj_dim=256, union_features=512, cfg=config)
 
         # post decoding
         self.hidden_dim = config.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM
@@ -74,7 +81,7 @@ class SGraphPredictor(nn.Module):
             self.union_single_not_match = False
 
         # constrastive loss
-        self.rel_const = True
+        self.rel_const = False
         if self.rel_const:
             self.rel_cl_loss = NpairLoss(l2_reg=0.02)
 
@@ -121,6 +128,10 @@ class SGraphPredictor(nn.Module):
         prod_rep = cat(prod_reps, dim=0)
         prod_emb = cat(prod_embs, dim=0)
         pair_pred = cat(pair_preds, dim=0)
+
+        # relational message passing
+        if self.rel_ctx_layer > 0:
+            union_features = self.rel_sg_msg(union_features, prod_rep, prod_emb)
 
         # non-visual dists
         non_visual = prod_emb
