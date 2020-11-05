@@ -61,7 +61,7 @@ class SpectralContext(nn.Module):
         self.out_obj = nn.Linear(self.hidden_dim * 8, len(self.obj_classes))
 
         # spectral message passing
-        self.num_ctx = 0
+        self.num_ctx = 2
         if self.num_ctx > 0:
             self.sg_msg = SpectralMessage(config, self.hidden_dim * 8)
 

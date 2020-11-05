@@ -101,9 +101,11 @@ class SpectralMessage(nn.Module):
             obj_pl = obj_l[prod_idx[:,1]]
 
             subj_obj_l = torch.stack((subj_pl, obj_pl), 1)
-
-            rel_u1 = Variable(torch.FloatTensor(
-                self.freq_bias.rels_with_labels(subj_obj_l))).cuda(device)
+            if False:
+                rel_u1 = Variable(torch.FloatTensor(
+                    self.freq_bias.rels_with_labels(subj_obj_l))).cuda(device)
+            else:
+                rel_u1 = self.freq_bias.index_with_labels(subj_obj_l)
 
             adj_fg = rel_u1.view(num_obj, num_obj, -1)[:,:,:]
             adj_fg = self.adj_matrix(adj_fg.permute(2,0,1)[None,:])[0][0]
@@ -137,9 +139,26 @@ class SpectralMessage(nn.Module):
                 dot_d_hat = torch.matmul(d_hat_dot_A, d_hat.transpose(0,1))
                 lap = lap - dot_d_hat
 
-                eig_v = torch.eig(lap,True)[1]
-                eig_v[-1] = 0
-                lap = eig_v * lap
+                if False:
+                    eig_val,eig_vec = torch.eig(lap,True)
+                    img_indices = np.where(eig_val[:,1].cpu() != 0)[0]
+
+                    true_eig_vec = eig_vec
+                    if len(img_indices) > 2:
+                        for j in range(len(img_indices),2):
+                            true_eig_vec[j] = eig_vec[:,j] + eig_vec[:,j+1]
+                            true_eig_vec[j+1] = eig_vec[:,j] - eig_vec[:,j+1]
+
+                            eig_val_sorted, indices=torch.sort(eig_val,
+                                                               dim=1,
+                                                               descending=True)
+                    eig_vec_sorted = true_eig_vec.gather(dim=1, index=indices)
+                    eig_vec_sorted[-1] = 0
+
+                eig_val, eig_vec = torch.symeig(lap, True, False)
+                if num_obj > 2:
+                    eig_vec[:,2:] = 0
+                lap = eig_vec * lap
 
                 link_loss = torch.abs(adj_fg-lap) * adj_gt
                 adj_link_list.append(link_loss.sum() / adj_gt.sum())
