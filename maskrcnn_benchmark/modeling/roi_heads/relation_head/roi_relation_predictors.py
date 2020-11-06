@@ -56,7 +56,10 @@ class SGraphPredictor(nn.Module):
 
         # init contextual relation
         if self.rel_ctx_layer > 0:
-            self.rel_sg_msg = UnionRegionAttention(obj_dim=256, union_features=512, cfg=config)
+            self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
+                                                   rib_scale=1,
+                                                   power=1,
+                                                   cfg=config)
 
         # post decoding
         self.hidden_dim = config.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM

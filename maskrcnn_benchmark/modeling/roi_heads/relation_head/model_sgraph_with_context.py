@@ -8,7 +8,7 @@ from maskrcnn_benchmark.data import get_dataset_statistics
 
 from .model_sgraph_with_freq import FrequencyBias
 from .utils_sgraph import to_onehot
-from .utils_relation import layer_init
+from .utils_relation import layer_init, seq_init
 
 from collections import Counter
 from itertools import combinations, permutations, product
@@ -54,12 +54,11 @@ class SpectralMessage(nn.Module):
             nn.Tanh())
 
         # initialize layers
-        if False:
-            layer_init(self.obj_comp, xavier=True)
-            layer_init(self.obj_decomp, xavier=True)
-            layer_init(self.ou1, xavier=True)
-            layer_init(self.ofc_u, xavier=True)
-            layer_init(self.adj_matrix, xavier=True)
+        self.obj_comp.apply(seq_init)
+        self.obj_decomp.apply(seq_init)
+        self.ou1.apply(seq_init)
+        self.ofc_u.apply(seq_init)
+        self.adj_matrix.apply(seq_init)
 
     def cos_sim(self,x, y):
         '''

@@ -6,7 +6,7 @@ from torch.autograd import Variable
 from collections import Counter
 
 #from lib.iba import PerSampleBottleneck
-from .utils_relation import layer_init
+from .utils_relation import layer_init, seq_init
 
 from maskrcnn_benchmark.modeling.roi_heads.box_head.roi_box_feature_extractors import make_roi_box_feature_extractor
 
@@ -16,10 +16,11 @@ class UnionRegionAttention(nn.Module):
     if None of geo, cat and appr was specified, only upconvolution is used.
     """
 
-    def __init__(self, obj_dim=256,union_features=512, cfg=None):
+    def __init__(self, obj_dim=256, rib_scale = 1, power=1, cfg=None):
         super(UnionRegionAttention, self).__init__()
 
-        self.rib_scale = 1
+        self.power = power
+        self.rib_scale = rib_scale
         self.rel_iba = False
 
         self.cfg = cfg.clone()
@@ -65,8 +66,8 @@ class UnionRegionAttention(nn.Module):
             self.union_upconv = nn.Sequential(*union_upconv)
             self.union_downconv = nn.Sequential(*union_downconv)
 
-            fmap_size = 7
-            channel = 256
+            self.fmap_size = 7
+            self.channel = 128
 
         if self.rib_scale == 2:
             subjobj_mask = [
@@ -77,17 +78,22 @@ class UnionRegionAttention(nn.Module):
             self.subjobj_mask = nn.Sequential(*subjobj_mask)
 
             union_upconv = [
-                nn.ConvTranspose2d(512, 128, 3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(128),]
+                nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(128),
+                nn.Conv2d(128, 64, 3, stride=1, padding=1, bias=False),
+                nn.BatchNorm2d(64),
+            ]
             union_downconv = [
-                nn.Conv2d(128, 512, 3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(512),]
+                nn.Conv2d(64, 128, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(128),
+                nn.Conv2d(128, 256, 3, stride=1, padding=1, bias=False),
+                nn.BatchNorm2d(256),]
 
             self.union_upconv = nn.Sequential(*union_upconv)
             self.union_downconv = nn.Sequential(*union_downconv)
 
-            fmap_size = 13
-            channel = 128
+            self.fmap_size = 13
+            self.channel = 64
 
         if self.rib_scale == 4:
 
@@ -101,7 +107,7 @@ class UnionRegionAttention(nn.Module):
             self.subjobj_mask = nn.Sequential(*subjobj_mask)
 
             union_upconv = [
-                nn.ConvTranspose2d(512, 128, 3, stride=2, padding=1, bias=False),
+                nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, bias=False),
                 nn.BatchNorm2d(128),
                 nn.Conv2d(128, 128, 3, padding=1, bias=False),
                 nn.BatchNorm2d(128),
@@ -113,26 +119,27 @@ class UnionRegionAttention(nn.Module):
                 nn.BatchNorm2d(128),
                 nn.Conv2d(128, 128, 3, stride=1, padding=1, bias=False),
                 nn.BatchNorm2d(128),
-                nn.Conv2d(128, 512, 3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(512)]
+                nn.Conv2d(128, 256, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(256)]
 
             self.union_upconv = nn.Sequential(*union_upconv)
             self.union_downconv = nn.Sequential(*union_downconv)
 
-            fmap_size = 25
-            channel = 32
+            self.fmap_size = 25
+            self.channel = 32
 
         if self.rel_iba:
             self.iba = PerSampleBottleneck(sigma=1.0,
-                                           fmap_size=fmap_size,
-                                           channel=channel)
+                                           fmap_size=self.fmap_size,
+                                           channel=self.channel)
 
-        #init
-        if False:
-            layer_init(self.subjobj_upconv, xavier=True)
-            layer_init(self.geo_upconv, xavier=True)
-            layer_init(self.union_upconv, xavier=True)
-            layer_init(self.union_downconv, xavier=True)
+        # init weight
+        self.subjobj_upconv.apply(seq_init)
+        self.subjobj_emb_upconv.apply(seq_init)
+        self.subjobj_mask.apply(seq_init)
+        self.union_upconv.apply(seq_init)
+        self.union_downconv.apply(seq_init)
+
 
 
     def normalized_adj(self, batch, A):
@@ -145,16 +152,19 @@ class UnionRegionAttention(nn.Module):
         # Some additional trick I found to be useful
         A_hat[A_hat > 0.0001] = A_hat[A_hat > 0.0001] - 0.2
 
+        if self.power > 1:
+            A_hat = A_hat**self.power
+
         return A_hat
 
     def forward(self, union_fmap, subjobj_fmap, subjobj_embed):
         """
-        union_fmap: 512 x 7 x 7
-        sub_rep: subject representation
-        obj_rep: obj reprsentation
-        sub_cat_emb: embedding of subject catergory
-        obj_cat_emb: embedding of object category
-        geo_emb: spatial embeddign of object pairs
+        Input:
+        union_fmap: batch x 256 x 7 x 7
+        subjobj_fmap: batch x 512
+        subjobj_embed : batch x 400
+        Output:
+        union_fmap: batch x 256 x 7 x 7
         """
         batch = union_fmap.size(0)
         subjobj_upconv = self.subjobj_upconv(subjobj_fmap[:,:,None,None])
@@ -171,9 +181,10 @@ class UnionRegionAttention(nn.Module):
         mask = self.normalized_adj(batch, mask)
 
         # ----graph ----------------------------
-        mask = mask.view(batch, 1, -1).expand(-1, 7 * 7, -1) # b, N*N, N*N
-        union_fmap = union_fmap.view(batch, 128, -1).permute(0,2,1) # b, N*N,128
-        union_fmap = torch.bmm(mask, union_fmap).permute(0,2,1).view(batch, 128, 7, 7) # b, 128,N,N
+        mask = mask.view(batch, 1, -1).expand(-1, self.fmap_size ** 2, -1) # b, N*N, N*N
+        union_fmap = union_fmap.view(batch, self.channel, -1).permute(0,2,1) # b, N*N,128
+        union_fmap = torch.bmm(mask, union_fmap).permute(0,2,1).view(batch, self.channel,
+                                                                     self.fmap_size, self.fmap_size) # b, 128,N,N
         union_fmap = residual + union_fmap # b,128,N,N
 
         # -----union_downconv------------------
