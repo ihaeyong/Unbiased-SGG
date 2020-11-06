@@ -48,8 +48,8 @@ class SpectralMessage(nn.Module):
         self.freq_bias = FrequencyBias(config, statistics)
 
         self.adj_matrix = nn.Sequential(
-            nn.Conv2d(51, 10, 3, stride=1, padding=1, dilation=1, bias=False),
-            nn.Conv2d(10,  5, 3, stride=1, padding=1, dilation=1, bias=False),
+            nn.Conv2d(51, 10, 3, stride=1, padding=1, bias=False),
+            nn.Conv2d(10,  5, 3, stride=1, padding=1, bias=False),
             nn.Conv2d(5 ,  1, 1, stride=1, bias=False),
             nn.Sigmoid())
 
