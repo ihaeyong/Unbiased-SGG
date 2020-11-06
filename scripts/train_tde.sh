@@ -16,8 +16,8 @@ if [ $2 == "sgcls" ]; then
            MODEL.ROI_RELATION_HEAD.PREDICTOR SGraphPredictor \
            MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM 512 \
            MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS False \
-           MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 2 \
-           MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 1 \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 1 \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 0 \
            SOLVER.IMS_PER_BATCH 12 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
@@ -26,7 +26,7 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/rel_graph_scale-sgcls
+           OUTPUT_DIR ./checkpoints/obj_spectrum_ctx1_few3-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \

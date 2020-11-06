@@ -134,10 +134,11 @@ class SpectralMessage(nn.Module):
                     else:
                         adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 0.1
 
+                # ----- laplacian --------
+                # node degree
                 deg = adj_gt.sum(1) + 1.0
                 d_hat =  torch.zeros_like(adj_gt)
-                n_obj = adj_gt.size(0)
-                d_hat[range(n_obj), range(n_obj)] = (deg + 1e-5)**(-0.5)
+                d_hat[range(num_obj), range(num_obj)] = (deg + 1e-5)**(-0.5)
 
                 lap = torch.zeros_like(adj_gt)
                 lap[range(n_obj), range(n_obj)] = 1.0
@@ -164,8 +165,8 @@ class SpectralMessage(nn.Module):
                     eig_vec_sorted[-1] = 0
 
                 eig_val, eig_vec = torch.symeig(lap, True, False)
-                if num_obj > 2:
-                    eig_vec[:,2:] = 0
+                if num_obj > 3:
+                    eig_vec[:,3:] = 0
                 lap = eig_vec * lap
 
                 link_loss = torch.abs(adj_fg-lap) * adj_gt

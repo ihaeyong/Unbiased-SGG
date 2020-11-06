@@ -22,6 +22,8 @@ from .model_sgraph import SpectralContext
 from .model_sgraph_with_vratt import UnionRegionAttention
 from .model_sgraph_with_cl import SupConLoss, NpairLoss
 
+from maskrcnn_benchmark.modeling.roi_heads.box_head.roi_box_feature_extractors import make_roi_box_feature_extractor
+
 @registry.ROI_RELATION_PREDICTOR.register("SGraphPredictor")
 class SGraphPredictor(nn.Module):
     def __init__(self, config, in_channels):
@@ -60,6 +62,13 @@ class SGraphPredictor(nn.Module):
                                                    rib_scale=1,
                                                    power=1,
                                                    cfg=config)
+
+        # box feature rois pooling
+        in_channels = 256
+        pool_all_levels = config.MODEL.ROI_RELATION_HEAD.POOLING_ALL_LEVELS
+        self.feature_extractor = make_roi_box_feature_extractor(config,
+                                                                in_channels,
+                                                                cat_all_levels=pool_all_levels)
 
         # post decoding
         self.hidden_dim = config.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM
@@ -135,6 +144,9 @@ class SGraphPredictor(nn.Module):
         # relational message passing
         if self.rel_ctx_layer > 0:
             union_features = self.rel_sg_msg(union_features, prod_rep, prod_emb)
+
+        # rois pooling
+        union_features = self.feature_extractor.forward_without_pool(union_features)
 
         # non-visual dists
         non_visual = prod_emb

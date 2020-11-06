@@ -8,8 +8,6 @@ from collections import Counter
 #from lib.iba import PerSampleBottleneck
 from .utils_relation import layer_init, seq_init
 
-from maskrcnn_benchmark.modeling.roi_heads.box_head.roi_box_feature_extractors import make_roi_box_feature_extractor
-
 class UnionRegionAttention(nn.Module):
     """
     None dim means that not to use that sub module.
@@ -22,11 +20,6 @@ class UnionRegionAttention(nn.Module):
         self.power = power
         self.rib_scale = rib_scale
         self.rel_iba = False
-
-        self.cfg = cfg.clone()
-        in_channels = obj_dim
-        pool_all_levels = cfg.MODEL.ROI_RELATION_HEAD.POOLING_ALL_LEVELS
-        self.feature_extractor = make_roi_box_feature_extractor(cfg, in_channels, cat_all_levels=pool_all_levels)
 
         subjobj_upconv = [
             nn.ConvTranspose2d(obj_dim * 2, 128, 3, bias=False),
@@ -189,6 +182,5 @@ class UnionRegionAttention(nn.Module):
 
         # -----union_downconv------------------
         union_fmap = self.union_downconv(union_fmap.contiguous())
-        union_fmap = self.feature_extractor.forward_without_pool(union_fmap) # (total_num_rel, out_channels)
 
         return union_fmap
