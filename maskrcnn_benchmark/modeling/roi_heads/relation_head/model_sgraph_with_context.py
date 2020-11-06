@@ -42,7 +42,7 @@ class SpectralMessage(nn.Module):
                 nn.Linear(self.obj_dim // 4, self.obj_dim // 4, bias=False),
                 nn.ReLU(inplace=True))
 
-        # adj. matrix
+        # adj. matrix (edges of graph)
         self.use_bias = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS
         statistics = get_dataset_statistics(config)
         self.freq_bias = FrequencyBias(config, statistics)
@@ -51,7 +51,7 @@ class SpectralMessage(nn.Module):
             nn.Conv2d(51, 10, 3, stride=1, padding=1, dilation=1, bias=False),
             nn.Conv2d(10,  5, 3, stride=1, padding=1, dilation=1, bias=False),
             nn.Conv2d(5 ,  1, 1, stride=1, bias=False),
-            nn.Tanh())
+            nn.Sigmoid())
 
         # initialize layers
         self.obj_comp.apply(seq_init)
@@ -74,6 +74,22 @@ class SpectralMessage(nn.Module):
         dist = torch.matmul(x_norm, y_norm.transpose(0,1))
 
         return torch.clamp(dist, -1.0, 1.0)
+
+    def laplacian(self, A, N):
+        '''
+        A : adjacency matrix (edges of a graph)
+        N : number of objects
+        '''
+        # ----- laplacian --------
+        # we assume symmetric nomalized Laplacian
+        A_hat = A + torch.eye(N).cuda(A.get_device())  # Add self-loops
+        D_hat = torch.sum(A_hat, 1)  # Node degrees
+        D_hat = (D_hat + 1e-5) ** (-0.5)  # D^-1/2
+
+        # Rescaled normalized graph Laplacian with self-loops
+        L_hat = D_hat.view(N, 1) * A_hat * D_hat.view(1, N)
+
+        return L_hat
 
     def spect_graph(self, num_objs, obj_reps, obj_preds,
                     rel_pair_idxs=None, readout=False, rel_labels=None):
@@ -109,16 +125,14 @@ class SpectralMessage(nn.Module):
             obj_pl = obj_l[prod_idx[:,1]]
 
             subj_obj_l = torch.stack((subj_pl, obj_pl), 1)
-            if False:
-                rel_u1 = Variable(torch.FloatTensor(
-                    self.freq_bias.rels_with_labels(subj_obj_l))).cuda(device)
-            else:
-                rel_u1 = self.freq_bias.index_with_labels(subj_obj_l)
+            rel_u1 = self.freq_bias.index_with_labels(subj_obj_l)
 
             adj_fg = rel_u1.view(num_obj, num_obj, -1)[:,:,:]
             adj_fg = self.adj_matrix(adj_fg.permute(2,0,1)[None,:])[0][0]
 
-            ofl_u = torch.matmul(adj_fg, obj_u1)
+            # ----- laplacian --------
+            hat_lap = self.laplacian(adj_fg, num_obj)
+            ofl_u = torch.matmul(hat_lap, obj_u1)
 
             if readout:
                 ofl_u_list.append(ofl_u + obj_l1.mean(0))
@@ -126,50 +140,16 @@ class SpectralMessage(nn.Module):
                 ofl_u_list.append(ofl_u)
 
             if self.training:
-                adj_gt = Variable(
-                    torch.zeros(num_obj, num_obj)).cuda(device)
+                adj_gt = torch.zeros_like(adj_fg)
+                adj_mask = torch.zeros_like(adj_fg)
                 for j in range(rel_labels[i].size(0)):
+                    adj_mask[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1.0
                     if rel_labels[i][j].item() > 0:
-                        adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1
+                        adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1.0
                     else:
                         adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 0.1
 
-                # ----- laplacian --------
-                # node degree
-                deg = adj_gt.sum(1) + 1.0
-                d_hat =  torch.zeros_like(adj_gt)
-                d_hat[range(num_obj), range(num_obj)] = (deg + 1e-5)**(-0.5)
-
-                lap = torch.zeros_like(adj_gt)
-                lap[range(n_obj), range(n_obj)] = 1.0
-
-                # d_hat^T adj_gt
-                d_hat_dot_A = torch.matmul(d_hat, adj_gt.transpose(0,1))
-                dot_d_hat = torch.matmul(d_hat_dot_A, d_hat.transpose(0,1))
-                lap = lap - dot_d_hat
-
-                if False:
-                    eig_val,eig_vec = torch.eig(lap,True)
-                    img_indices = np.where(eig_val[:,1].cpu() != 0)[0]
-
-                    true_eig_vec = eig_vec
-                    if len(img_indices) > 2:
-                        for j in range(len(img_indices),2):
-                            true_eig_vec[j] = eig_vec[:,j] + eig_vec[:,j+1]
-                            true_eig_vec[j+1] = eig_vec[:,j] - eig_vec[:,j+1]
-
-                            eig_val_sorted, indices=torch.sort(eig_val,
-                                                               dim=1,
-                                                               descending=True)
-                    eig_vec_sorted = true_eig_vec.gather(dim=1, index=indices)
-                    eig_vec_sorted[-1] = 0
-
-                eig_val, eig_vec = torch.symeig(lap, True, False)
-                if num_obj > 3:
-                    eig_vec[:,3:] = 0
-                lap = eig_vec * lap
-
-                link_loss = torch.abs(adj_fg-lap) * adj_gt
+                link_loss = torch.abs(adj_fg-adj_gt) * adj_mask
                 adj_link_list.append(link_loss.sum() / adj_gt.sum())
 
         refine_u =torch.cat(ofl_u_list, 0)
