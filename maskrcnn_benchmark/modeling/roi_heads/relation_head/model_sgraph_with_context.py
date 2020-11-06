@@ -54,11 +54,12 @@ class SpectralMessage(nn.Module):
             nn.Tanh())
 
         # initialize layers
-        layer_init(self.obj_comp, xavier=True)
-        layer_init(self.obj_decomp, xavier=True)
-        layer_init(self.ou1, xavier=True)
-        layer_init(self.ofc_u, xavier=True)
-        layer_init(self.adj_matrix, xavier=True)
+        if False:
+            layer_init(self.obj_comp, xavier=True)
+            layer_init(self.obj_decomp, xavier=True)
+            layer_init(self.ou1, xavier=True)
+            layer_init(self.ofc_u, xavier=True)
+            layer_init(self.adj_matrix, xavier=True)
 
     def cos_sim(self,x, y):
         '''

@@ -244,7 +244,10 @@ class SpectralContext(nn.Module):
             obj_labels, rel_labels, boxes_per_cls, ctx_average=ctx_average)
 
         # edge level contextual feature
-        updated_obj_embed = self.updated_obj_embed(obj_preds.long())
+        if False:
+            updated_obj_embed = self.updated_obj_embed(obj_preds.long())
+        else:
+            updated_obj_embed = F.softmax(obj_dists, dim=1) @ self.updated_obj_embed.weight
 
         if (all_average or ctx_average) and self.effect_analysis and (not self.training):
             obj_rel_rep = cat((self.untreated_edg_feat.view(1, -1).expand(batch_size, -1), obj_ctx), dim=-1)
