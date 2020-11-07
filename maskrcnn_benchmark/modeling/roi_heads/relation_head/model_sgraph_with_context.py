@@ -142,15 +142,13 @@ class SpectralMessage(nn.Module):
             if self.training:
                 adj_gt = torch.zeros_like(adj_fg)
                 adj_mask = torch.zeros_like(adj_fg)
+                rel_inv_dists = F.softmax(1./rel_u1, 1)
                 for j in range(rel_labels[i].size(0)):
+                    adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1.0 - rel_inv_dists[j,rel_labels[i][j]]
                     adj_mask[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1.0
-                    if rel_labels[i][j].item() > 0:
-                        adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1.0
-                    else:
-                        adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 0.1
 
                 link_loss = torch.abs(adj_fg-adj_gt) * adj_mask
-                adj_link_list.append(link_loss.sum() / adj_gt.sum())
+                adj_link_list.append(link_loss.sum()/ adj_mask.sum())
 
         refine_u =torch.cat(ofl_u_list, 0)
 

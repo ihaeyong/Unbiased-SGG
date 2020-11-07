@@ -173,7 +173,7 @@ class SpectralContext(nn.Module):
             obj_dists2 = self.out_obj(obj_fmap)
 
         # Do NMS here as a post-processing step
-        if not self.training and boxes_per_cls is not None:
+        if self.mode == 'sgdet' and not self.training and boxes_per_cls is not None:
             is_overlap = nms_overlaps(boxes_per_cls).view(
                 boxes_for_nms.size(0), boxes_per_cls.size(0),
                 boxes_for_nms.size(1)
