@@ -49,5 +49,5 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/obj_spectrum_ctx1_bias_label-predcls
+           OUTPUT_DIR ./checkpoints/obj_spectrum_ctx1_cheb_K1_bias_label-predcls
 fi
