@@ -95,6 +95,7 @@ class SpectralContext(nn.Module):
     def obj_stx(self,
                 obj_feats,
                 proposals,
+                freq_bias,
                 rel_pair_idxs,
                 obj_labels=None,
                 rel_labels=None,
@@ -136,7 +137,10 @@ class SpectralContext(nn.Module):
         num_objs = [len(b) for b in proposals]
         link_loss = None
         for i in range(self.obj_ctx_layer):
-            encoder_rep, link_loss = self.sg_msg(num_objs, obj_preds, encoder_rep,
+            encoder_rep, link_loss = self.sg_msg(num_objs,
+                                                 obj_preds,
+                                                 encoder_rep,
+                                                 freq_bias,
                                                  rel_pair_idxs,
                                                  readout=(i==3),
                                                  rel_labels=rel_labels)
@@ -210,7 +214,7 @@ class SpectralContext(nn.Module):
             holder = holder * (1 - self.average_ratio) + self.average_ratio * input.mean(0).view(-1)
         return holder
 
-    def forward(self, x, proposals, rel_pair_idxs, rel_labels=None,
+    def forward(self, x, proposals, freq_bias, rel_pair_idxs, rel_labels=None,
                 logger=None, all_average=False, ctx_average=False):
 
         # labels will be used in DecoderRNN during training (for nms)
@@ -240,7 +244,7 @@ class SpectralContext(nn.Module):
 
         # object level contextual feature
         obj_dists,obj_preds,obj_ctx,perm,inv_perm,ls_transposed,link_loss=self.obj_stx(
-            obj_pre_rep, proposals, rel_pair_idxs,
+            obj_pre_rep, proposals, freq_bias, rel_pair_idxs,
             obj_labels, rel_labels, boxes_per_cls, ctx_average=ctx_average)
 
         # edge level contextual feature

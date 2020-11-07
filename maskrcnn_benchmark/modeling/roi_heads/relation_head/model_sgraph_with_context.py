@@ -43,10 +43,6 @@ class SpectralMessage(nn.Module):
                 nn.ReLU(inplace=True))
 
         # adj. matrix (edges of graph)
-        self.use_bias = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS
-        statistics = get_dataset_statistics(config)
-        self.freq_bias = FrequencyBias(config, statistics)
-
         self.adj_matrix = nn.Sequential(
             nn.Conv2d(51, 10, 3, stride=1, padding=1, bias=False),
             nn.Conv2d(10,  5, 3, stride=1, padding=1, bias=False),
@@ -91,7 +87,7 @@ class SpectralMessage(nn.Module):
 
         return L_hat
 
-    def spect_graph(self, num_objs, obj_reps, obj_preds,
+    def spect_graph(self, num_objs, obj_reps, obj_preds, freq_bias,
                     rel_pair_idxs=None, readout=False, rel_labels=None):
 
         ofl_l_list = []
@@ -125,7 +121,7 @@ class SpectralMessage(nn.Module):
             obj_pl = obj_l[prod_idx[:,1]]
 
             subj_obj_l = torch.stack((subj_pl, obj_pl), 1)
-            rel_u1 = self.freq_bias.index_with_labels(subj_obj_l)
+            rel_u1 = freq_bias.index_with_labels(subj_obj_l)
 
             adj_fg = rel_u1.view(num_obj, num_obj, -1)[:,:,:]
             adj_fg = self.adj_matrix(adj_fg.permute(2,0,1)[None,:])[0][0]
@@ -159,7 +155,7 @@ class SpectralMessage(nn.Module):
 
         return refine_u, link_loss
 
-    def forward(self, num_objs, obj_preds, encoder_reps, rel_pair_idxs=None,
+    def forward(self, num_objs, obj_preds, encoder_reps, freq_bias, rel_pair_idxs=None,
                 readout=False, rel_labels=None):
         """
         feature_obj : [feature(num_obj x R^{4096}); embed(R^{200}); position(R^{128})]
@@ -172,7 +168,7 @@ class SpectralMessage(nn.Module):
         obj_preds = obj_preds.split(num_objs, dim=0)
         obj_reps = comp_objs.split(num_objs, dim=0)
 
-        ofc_u, link_loss = self.spect_graph(num_objs, obj_reps, obj_preds,
+        ofc_u, link_loss = self.spect_graph(num_objs, obj_reps, obj_preds, freq_bias,
                                             rel_pair_idxs, readout, rel_labels)
 
         u_m = self.ofc_u(ofc_u)

@@ -92,17 +92,17 @@ def layer_init(layer, init_para=0.1, normal=False, xavier=True):
 def seq_init(m):
 
     if type(m) == nn.Linear:
-        torch.nn.init.xavier_normal_(m.weight, gain=0.1)
+        torch.nn.init.xavier_normal_(m.weight, gain=0.01)
         if m.bias is not None:
             torch.nn.init.constant_(m.bias, 0)
 
     elif type(m) == nn.Conv2d :
-        torch.nn.init.xavier_normal_(m.weight, gain=0.1)
+        torch.nn.init.xavier_normal_(m.weight, gain=0.01)
         if m.bias is not None:
             torch.nn.init.constant_(m.bias, 0)
 
     elif type(m) == nn.ConvTranspose2d :
-        torch.nn.init.xavier_normal_(m.weight, gain=0.1)
+        torch.nn.init.xavier_normal_(m.weight, gain=0.01)
         if m.bias is not None:
             torch.nn.init.constant_(m.bias, 0)
 

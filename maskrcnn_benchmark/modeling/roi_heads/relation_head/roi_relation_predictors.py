@@ -38,6 +38,7 @@ class SGraphPredictor(nn.Module):
         assert in_channels is not None
         num_inputs = in_channels
         self.use_vision = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_VISION
+        self.use_bias = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS
 
         # load class dict
         statistics = get_dataset_statistics(config)
@@ -97,6 +98,10 @@ class SGraphPredictor(nn.Module):
         if self.rel_const:
             self.rel_cl_loss = NpairLoss(l2_reg=0.02)
 
+        if self.use_bias:
+            # convey statistics into FrequencyBias to avoid loading again
+            self.freq_bias = FrequencyBias(config, statistics)
+
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
                 union_features, logger=None):
@@ -119,7 +124,7 @@ class SGraphPredictor(nn.Module):
                 roi_features, proposals, logger)
         else:
             obj_dists,obj_preds,obj_ctx_rep,obj_ctx_emb,link_loss=self.context_layer(
-                roi_features, proposals, rel_pair_idxs, rel_labels, logger)
+                roi_features, proposals, self.freq_bias, rel_pair_idxs, rel_labels, logger)
 
         obj_reps = obj_ctx_rep.split(num_objs, dim=0)
         obj_embs = obj_ctx_emb.split(num_objs, dim=0)
@@ -166,7 +171,10 @@ class SGraphPredictor(nn.Module):
             rel_labels = torch.cat(rel_labels)
             rel_cl_loss = self.rel_cl_loss(anchors, positives, rel_labels)
 
-        # ---------------------------------------------
+        # use frequence bias
+        if self.use_bias:
+            rel_dists = rel_dists + self.freq_bias.index_with_labels(pair_pred)
+
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
 
