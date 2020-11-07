@@ -30,7 +30,7 @@ if [ $2 == "sgcls" ]; then
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10038 \
+           --master_port 10039 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -49,5 +49,5 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/obj_spectrum_ctx1_bias_label-predcls
+           OUTPUT_DIR ./checkpoints/obj_spectrum_ctx1_iid_bias_label-predcls
 fi
