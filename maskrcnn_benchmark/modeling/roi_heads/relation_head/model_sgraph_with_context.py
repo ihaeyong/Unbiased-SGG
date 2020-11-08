@@ -43,7 +43,7 @@ class SpectralMessage(nn.Module):
                 nn.ReLU(inplace=True))
 
         # adj. matrix (edges of graph)
-        if False:
+        if True:
             self.adj_matrix = nn.Sequential(
                 nn.Conv2d(51, 10, 3, stride=1, padding=1, bias=False),
                 nn.Conv2d(10,  5, 3, stride=1, padding=1, bias=False),
