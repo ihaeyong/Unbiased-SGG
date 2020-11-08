@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=$3,$4,$5,$6
 
 if [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10034 \
+           --master_port 10035 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -16,7 +16,7 @@ if [ $2 == "sgcls" ]; then
            MODEL.ROI_RELATION_HEAD.PREDICTOR SGraphPredictor \
            MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM 512 \
            MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS False \
-           MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 0 \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 1 \
            MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 0 \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            SOLVER.IMS_PER_BATCH 12 \
@@ -27,7 +27,7 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/obj_spectrum_freq-sgdcls
+           OUTPUT_DIR ./checkpoints/obj_spectrum_ctx1_cheb-sgdcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \

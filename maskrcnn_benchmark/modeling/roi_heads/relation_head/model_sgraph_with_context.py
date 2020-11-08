@@ -38,7 +38,7 @@ class SpectralMessage(nn.Module):
                 nn.Linear(self.obj_dim // 2, self.obj_dim // 4, bias=False),
                 nn.ReLU(inplace=True))
         else:
-            self.K = 1
+            self.K = 2
             self.ofc_u = nn.Sequential(
                 nn.Linear(self.obj_dim // 4 * self.K, self.obj_dim // 4, bias=False),
                 nn.ReLU(inplace=True))
@@ -156,7 +156,7 @@ class SpectralMessage(nn.Module):
             adj_fg = self.adj_matrix(adj_fg.permute(2,0,1)[None,:])[0][0]
 
             # ----- laplacian --------
-            if True:
+            if False:
                 hat_lap = self.laplacian(adj_fg, num_obj)
                 ofl_u = torch.matmul(hat_lap, obj_u1)
             else:
