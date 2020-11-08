@@ -38,8 +38,9 @@ class SpectralMessage(nn.Module):
                 nn.Linear(self.obj_dim // 2, self.obj_dim // 4, bias=False),
                 nn.ReLU(inplace=True))
         else:
+            self.K = 2
             self.ofc_u = nn.Sequential(
-                nn.Linear(self.obj_dim // 4, self.obj_dim // 4, bias=False),
+                nn.Linear(self.obj_dim // 4 * self.K, self.obj_dim // 4, bias=False),
                 nn.ReLU(inplace=True))
 
         # adj. matrix (edges of graph)
@@ -94,6 +95,27 @@ class SpectralMessage(nn.Module):
 
         return L_hat
 
+    def chebyshev(self, A, N, X):
+        # K : # Maximum number of hops (filter size)
+        D = torch.sum(A, 1)  # Node degrees
+        D = (D + 1e-5) ** (-0.5)  # D^-1/2
+
+        # Rescaled normalized graph Laplacian without self-loops
+        L_hat = - D.view(N, 1) * A * D.view(1, N)
+
+        # Node features, Average features of 1-hop neighbors
+        X_cheb = [X, torch.mm(L_hat, X)]
+
+        # Recursive computation of features projected onto the Chebyshev basis
+        if self.K > 2:
+            for k in range(2, self.K):
+                X_cheb.append(2 * torch.mm(L_hat, X_cheb[k - 1]) - X_cheb[k - 2])
+
+        # Input features in the Chebyshev basis: torch.Size([6, 2, 3])
+        X_cheb = torch.stack(X_cheb, 2)
+
+        return X_cheb.view(N, -1)
+
     def spect_graph(self, num_objs, obj_reps, obj_preds, freq_bias,
                     rel_pair_idxs=None, readout=False, rel_labels=None):
 
@@ -134,8 +156,11 @@ class SpectralMessage(nn.Module):
             adj_fg = self.adj_matrix(adj_fg.permute(2,0,1)[None,:])[0][0]
 
             # ----- laplacian --------
-            hat_lap = self.laplacian(adj_fg, num_obj)
-            ofl_u = torch.matmul(hat_lap, obj_u1)
+            if False:
+                hat_lap = self.laplacian(adj_fg, num_obj)
+                ofl_u = torch.matmul(hat_lap, obj_u1)
+            else:
+                ofl_u = self.chebyshev(adj_fg, num_obj, obj_u1)
 
             if readout:
                 ofl_u_list.append(ofl_u + obj_l1.mean(0))
