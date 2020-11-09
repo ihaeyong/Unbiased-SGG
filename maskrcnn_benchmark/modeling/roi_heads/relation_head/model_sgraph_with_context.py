@@ -173,12 +173,8 @@ class SpectralMessage(nn.Module):
                 #rel_inv_dists = F.softmax(1./rel_u1, 1)
                 rel_inv_dists = F.softmax(rel_u1, 1)
                 for j in range(rel_labels[i].size(0)):
-                    if rel_labels[i][j].cpu() > 0:
-                        adj_mask[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1.0
-                    else:
-                        adj_mask[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 0.1
-
                     adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1.0 - rel_inv_dists[j,rel_labels[i][j]]
+                    adj_mask[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1.0
 
                 link_loss = torch.abs(adj_fg-adj_gt) * adj_mask
                 adj_link_list.append(link_loss.sum()/ adj_mask.sum())
