@@ -44,6 +44,10 @@ class RelationLossComputation(object):
             self.criterion_loss = Label_Smoothing_Regression(e=0.01)
         else:
             self.criterion_loss = nn.CrossEntropyLoss()
+            if True:
+                self.criterion_rel_loss = nn.CrossEntropyLoss(self.pred_weight)
+            else:
+                self.criterion_loss = nn.CrossEntropyLoss()
 
 
     def __call__(self, proposals, rel_labels, relation_logits, refine_logits):
@@ -75,7 +79,7 @@ class RelationLossComputation(object):
         fg_labels = cat([proposal.get_field("labels") for proposal in proposals], dim=0)
         rel_labels = cat(rel_labels, dim=0)
 
-        loss_relation = self.criterion_loss(relation_logits, rel_labels.long())
+        loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
         loss_refine_obj = self.criterion_loss(refine_obj_logits, fg_labels.long())
 
         # The following code is used to calcaulate sampled attribute loss

@@ -177,7 +177,7 @@ class SpectralMessage(nn.Module):
                         adj_mask[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1.0
                     else:
                         adj_mask[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 0.1
-                        
+
                     adj_gt[rel_pair_idxs[i][j,0].data, rel_pair_idxs[i][j,1].data] = 1.0 - rel_inv_dists[j,rel_labels[i][j]]
 
                 link_loss = torch.abs(adj_fg-adj_gt) * adj_mask
