@@ -10,6 +10,7 @@ from maskrcnn_benchmark.modeling.box_coder import BoxCoder
 from maskrcnn_benchmark.modeling.matcher import Matcher
 from maskrcnn_benchmark.structures.boxlist_ops import boxlist_iou
 from maskrcnn_benchmark.modeling.utils import cat
+from .model_sgraph_with_rel_weight import RelWeight
 
 class RelationLossComputation(object):
     """
@@ -38,19 +39,24 @@ class RelationLossComputation(object):
         self.attribute_sampling = attribute_sampling
         self.attribute_bgfg_ratio = attribute_bgfg_ratio
         self.use_label_smoothing = use_label_smoothing
+
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
+
+        self.weight = 'batchweight'
+        if self.weight == 'batchweight':
+            self.rel_weight = RelWeight(temp=1e2)
 
         if self.use_label_smoothing:
             self.criterion_loss = Label_Smoothing_Regression(e=0.01)
         else:
             self.criterion_loss = nn.CrossEntropyLoss()
-            if True:
+            if self.weight == 'reweight':
                 self.criterion_rel_loss = nn.CrossEntropyLoss(self.pred_weight)
             else:
-                self.criterion_loss = nn.CrossEntropyLoss()
+                self.criterion_rel_loss = nn.CrossEntropyLoss()
 
 
-    def __call__(self, proposals, rel_labels, relation_logits, refine_logits):
+    def __call__(self, proposals, rel_labels, relation_logits, refine_logits, freq_bias):
         """
         Computes the loss for relation triplet.
         This requires that the subsample method has been called beforehand.
@@ -79,7 +85,11 @@ class RelationLossComputation(object):
         fg_labels = cat([proposal.get_field("labels") for proposal in proposals], dim=0)
         rel_labels = cat(rel_labels, dim=0)
 
-        loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
+        if self.weight == 'batchweight':
+            rel_weight = self.rel_weight(freq_bias)
+            loss_relation = F.cross_entropy(relation_logits, rel_labels.long(), rel_weight)
+        else:
+            loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
         loss_refine_obj = self.criterion_loss(refine_obj_logits, fg_labels.long())
 
         # The following code is used to calcaulate sampled attribute loss
@@ -96,8 +106,8 @@ class RelationLossComputation(object):
                 refine_att_logits = refine_att_logits[0].view(1, -1)
                 attribute_targets = attribute_targets[0].view(1, -1)
 
-            loss_refine_att = self.attribute_loss(refine_att_logits, attribute_targets, 
-                                             fg_bg_sample=self.attribute_sampling, 
+            loss_refine_att = self.attribute_loss(refine_att_logits, attribute_targets,
+                                             fg_bg_sample=self.attribute_sampling,
                                              bg_fg_ratio=self.attribute_bgfg_ratio)
             return loss_relation, (loss_refine_obj, loss_refine_att)
         else:
@@ -131,7 +141,7 @@ class RelationLossComputation(object):
 
             num_fg = fg_loss.shape[0]
             # if there is no fg, add at least one bg
-            num_bg = max(int(num_fg * bg_fg_ratio), 1)   
+            num_bg = max(int(num_fg * bg_fg_ratio), 1)
             perm = torch.randperm(bg_loss.shape[0], device=bg_loss.device)[:num_bg]
             bg_loss = bg_loss[perm]
 

@@ -173,7 +173,8 @@ class SGraphPredictor(nn.Module):
 
         # use frequence bias
         if self.use_bias:
-            rel_dists = rel_dists + self.freq_bias.index_with_labels(pair_pred)
+            freq_bias = self.freq_bias.index_with_labels(pair_pred)
+            rel_dists = rel_dists + freq_bias
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
@@ -192,7 +193,7 @@ class SGraphPredictor(nn.Module):
             att_dists = att_dists.split(num_objs, dim=0)
             return (obj_dists, att_dists), rel_dists, add_losses
         else:
-            return obj_dists, rel_dists, add_losses
+            return obj_dists, rel_dists, add_losses, freq_bias
 
 
 
