@@ -30,9 +30,14 @@ elif [ $1 == "predcls" ]; then
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
            MODEL.ROI_RELATION_HEAD.USE_GT_BOX True \
            MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL True \
-           MODEL.ROI_RELATION_HEAD.PREDICTOR MotifPredictor \
+           MODEL.ROI_RELATION_HEAD.PREDICTOR SGraphPredictor \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM 512 \
+           MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS False \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 0 \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 0 \
+           MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            TEST.IMS_PER_BATCH 1 DTYPE "float16" \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/motif-precls-exmp \
-           OUTPUT_DIR ./checkpoints/motif-precls-baseline
+           OUTPUT_DIR ./checkpoints/obj_spectrum_freq-predcls
 fi
