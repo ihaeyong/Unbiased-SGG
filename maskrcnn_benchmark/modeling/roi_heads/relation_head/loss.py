@@ -44,7 +44,7 @@ class RelationLossComputation(object):
 
         self.weight = 'batchweight'
         if self.weight == 'batchweight':
-            self.rel_weight = RelWeight(predicate_proportion, temp=1e2)
+            self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
 
         if self.use_label_smoothing:
             self.criterion_loss = Label_Smoothing_Regression(e=0.01)

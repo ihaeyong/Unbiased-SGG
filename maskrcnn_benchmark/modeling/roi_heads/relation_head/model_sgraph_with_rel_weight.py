@@ -36,7 +36,7 @@ class RelWeight(nn.Module):
 
         freq_dists = F.softmax(freq_bias, 1)
         batch_freq = freq_dists.sum(0).data.cpu().numpy()
-        log_batch_freq = np.log(10.0 + batch_freq)
+        log_batch_freq = np.log(3.0 + batch_freq)
 
         # temp = [1, 1000]
         cls_num_list = self.softmax_with_temp(log_batch_freq, self.temp)
@@ -47,7 +47,7 @@ class RelWeight(nn.Module):
         # skew_v > 0 : more weight in the left tail
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
-        if skew_v > 0.5 :
+        if skew_v > 1.0 :
             beta = 1.0 - ent_v
         else:
             beta = 1.0
