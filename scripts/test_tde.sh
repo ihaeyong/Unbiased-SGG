@@ -36,8 +36,9 @@ elif [ $1 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 0 \
            MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 0 \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
+           MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum \
            TEST.IMS_PER_BATCH 1 DTYPE "float16" \
            GLOVE_DIR ./datasets/glove \
-           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/motif-precls-exmp \
-           OUTPUT_DIR ./checkpoints/obj_spectrum_freq-predcls
+           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/obj_spectrum_skew1.0_brw_temp1e0-log1-sum-predcls \
+           OUTPUT_DIR ./checkpoints/obj_spectrum_skew1.0_brw_temp1e0-log1-sum-predcls
 fi

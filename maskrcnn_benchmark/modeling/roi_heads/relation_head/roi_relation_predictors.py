@@ -76,14 +76,20 @@ class SGraphPredictor(nn.Module):
         self.pooling_dim = config.MODEL.ROI_RELATION_HEAD.CONTEXT_POOLING_DIM
         self.embed_dim = config.MODEL.ROI_RELATION_HEAD.EMBED_DIM
 
-        self.vis_dists = nn.Linear(self.pooling_dim + self.hidden_dim,
+        self.fusion_type = config.MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE
+
+        self.vis_dists = nn.Linear(self.pooling_dim,
                                    self.num_rel_cls, bias=True)
+
+        self.vis_ctx_dists = nn.Linear(self.hidden_dim,
+                                       self.num_rel_cls, bias=True)
 
         self.non_vis_dists = nn.Linear(self.embed_dim * 2,
                                        self.num_rel_cls, bias=True)
 
         # initialize layer parameters
         layer_init(self.vis_dists, xavier=True)
+        layer_init(self.vis_ctx_dists, xavier=True)
         layer_init(self.non_vis_dists, xavier=True)
 
         if self.pooling_dim != config.MODEL.ROI_BOX_HEAD.MLP_HEAD_DIM:
@@ -102,6 +108,9 @@ class SGraphPredictor(nn.Module):
             # convey statistics into FrequencyBias to avoid loading again
             self.freq_bias = FrequencyBias(config, statistics)
 
+        if self.fusion_type == 'gate':
+            self.ctx_gate_fc = nn.Linear(self.hidden_dim, self.num_rel_cls)
+            layer_init(self.ctx_gate_fc, xavier=True)
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
                 union_features, logger=None):
@@ -153,15 +162,14 @@ class SGraphPredictor(nn.Module):
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
 
-        # non-visual dists
-        non_visual = prod_emb
-        visual = torch.cat((prod_rep, union_features), 1)
-
-        non_vis_dists = self.non_vis_dists(non_visual)
-        vis_dists = self.vis_dists(visual)
+        # use frequence bias
+        if self.use_bias:
+            embed_bias = self.non_vis_dists(prod_emb)
+            freq_bias = self.freq_bias.index_with_labels(pair_pred)
 
         # sum of non-vis/visual dists
-        rel_dists = non_vis_dists + vis_dists
+        #rel_dists = non_vis_dists + vis_dists
+        rel_dists = self.rel_logits(union_features, prod_rep, embed_bias, freq_bias)
 
         # rel constrastive learning
         rel_cl_loss = None
@@ -170,11 +178,6 @@ class SGraphPredictor(nn.Module):
             positives = visual
             rel_labels = torch.cat(rel_labels)
             rel_cl_loss = self.rel_cl_loss(anchors, positives, rel_labels)
-
-        # use frequence bias
-        if self.use_bias:
-            freq_bias = self.freq_bias.index_with_labels(pair_pred)
-            rel_dists = rel_dists + freq_bias
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
@@ -195,6 +198,23 @@ class SGraphPredictor(nn.Module):
         else:
             return obj_dists, rel_dists, add_losses, freq_bias
 
+
+    def rel_logits(self, vis_rep, ctx_rep, emb_dists, freq_dists):
+
+        vis_dists = self.vis_dists(vis_rep)
+        ctx_dists = self.vis_ctx_dists(ctx_rep)
+
+        if self.fusion_type == 'gate':
+            ctx_gate_dists = self.ctx_gate_fc(ctx_rep)
+            union_dists = ctx_dists * torch.sigmoid(vis_dists + freq_dists + emb_dists + ctx_gate_dists)
+
+        elif self.fusion_type == 'sum':
+            union_dists = vis_dists + ctx_dists + freq_dists + emb_dists
+
+        else:
+            print('invalid fusion type')
+
+        return union_dists
 
 
 @registry.ROI_RELATION_PREDICTOR.register("TransformerPredictor")
