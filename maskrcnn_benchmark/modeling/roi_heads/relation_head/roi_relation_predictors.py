@@ -171,6 +171,9 @@ class SGraphPredictor(nn.Module):
         #rel_dists = non_vis_dists + vis_dists
         rel_dists = self.rel_logits(union_features, prod_rep, embed_bias, freq_bias)
 
+        # define language prior
+        freq_bias = freq_bias + embed_bias
+
         # rel constrastive learning
         rel_cl_loss = None
         if self.rel_const and self.training:
@@ -210,6 +213,10 @@ class SGraphPredictor(nn.Module):
 
         elif self.fusion_type == 'sum':
             union_dists = vis_dists + ctx_dists + freq_dists + emb_dists
+
+        elif self.fusion_type == 'gate_sum':
+            alpha = torch.sigmoid(freq_dists + emb_dists)
+            union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists)
 
         else:
             print('invalid fusion type')
@@ -869,12 +876,6 @@ class CausalAnalysisPredictor(nn.Module):
             print('invalid fusion type')
 
         return union_dists
-
-    def binary_ce_loss(self, logits, gt):
-        batch_size, num_cat = logits.shape
-        answer = torch.zeros((batch_size, num_cat), device=gt.device).float()
-        answer[torch.arange(batch_size, device=gt.device), gt.long()] = 1.0
-        return F.binary_cross_entropy_with_logits(logits, answer) * num_cat
 
     def fusion(self, x, y):
         return F.relu(x + y) - (x - y) ** 2
