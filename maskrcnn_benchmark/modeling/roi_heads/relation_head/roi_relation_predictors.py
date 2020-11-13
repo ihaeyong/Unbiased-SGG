@@ -169,10 +169,10 @@ class SGraphPredictor(nn.Module):
 
         # sum of non-vis/visual dists
         #rel_dists = non_vis_dists + vis_dists
-        rel_dists = self.rel_logits(union_features, prod_rep, embed_bias, freq_bias)
-
-        # define language prior
-        freq_bias = freq_bias + embed_bias
+        rel_dists, freq_bias = self.rel_logits(union_features,
+                                               prod_rep,
+                                               embed_bias,
+                                               freq_bias)
 
         # rel constrastive learning
         rel_cl_loss = None
@@ -221,7 +221,7 @@ class SGraphPredictor(nn.Module):
         else:
             print('invalid fusion type')
 
-        return union_dists
+        return union_dists, alpha
 
 
 @registry.ROI_RELATION_PREDICTOR.register("TransformerPredictor")
