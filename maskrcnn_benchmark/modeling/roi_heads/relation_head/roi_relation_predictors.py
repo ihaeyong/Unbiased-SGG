@@ -24,6 +24,8 @@ from .model_sgraph_with_cl import SupConLoss, NpairLoss
 
 from maskrcnn_benchmark.modeling.roi_heads.box_head.roi_box_feature_extractors import make_roi_box_feature_extractor
 
+from .model_sgraph_with_geom import Geometric
+
 @registry.ROI_RELATION_PREDICTOR.register("SGraphPredictor")
 class SGraphPredictor(nn.Module):
     def __init__(self, config, in_channels):
@@ -112,6 +114,13 @@ class SGraphPredictor(nn.Module):
             self.ctx_gate_fc = nn.Linear(self.hidden_dim, self.num_rel_cls)
             layer_init(self.ctx_gate_fc, xavier=True)
 
+        self.geomtric = True
+        if self.geomtric:
+            self.geo_dists = nn.Linear(256, self.num_rel_cls, bias=True)
+            layer_init(self.geo_dists, xavier=True)
+
+            self.geo_embed = Geometric(out_features=256, bias=True)
+
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
                 union_features, logger=None):
         """
@@ -155,6 +164,10 @@ class SGraphPredictor(nn.Module):
         prod_emb = cat(prod_embs, dim=0)
         pair_pred = cat(pair_preds, dim=0)
 
+        # geometric embedding
+        if self.geomtric:
+            geo_embed = self.geo_embed(proposals, rel_pair_idxs)
+
         # relational message passing
         if self.rel_ctx_layer > 0:
             union_features = self.rel_sg_msg(union_features, prod_rep, prod_emb)
@@ -171,6 +184,7 @@ class SGraphPredictor(nn.Module):
         #rel_dists = non_vis_dists + vis_dists
         rel_dists, freq_bias = self.rel_logits(union_features,
                                                prod_rep,
+                                               geo_embed,
                                                embed_bias,
                                                freq_bias)
 
@@ -202,21 +216,27 @@ class SGraphPredictor(nn.Module):
             return obj_dists, rel_dists, add_losses, freq_bias
 
 
-    def rel_logits(self, vis_rep, ctx_rep, emb_dists, freq_dists):
+    def rel_logits(self, vis_rep, ctx_rep, geo_emb, emb_dists, freq_dists):
 
         vis_dists = self.vis_dists(vis_rep)
         ctx_dists = self.vis_ctx_dists(ctx_rep)
+        geo_dists = self.geo_dists(geo_emb)
 
         if self.fusion_type == 'gate':
             ctx_gate_dists = self.ctx_gate_fc(ctx_rep)
             union_dists = ctx_dists * torch.sigmoid(vis_dists + freq_dists + emb_dists + ctx_gate_dists)
 
         elif self.fusion_type == 'sum':
-            union_dists = vis_dists + ctx_dists + freq_dists + emb_dists
+            alpha = torch.sigmoid(freq_dists + emb_dists + geo_dists)
+            union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
 
         elif self.fusion_type == 'gate_sum':
             alpha = torch.sigmoid(freq_dists + emb_dists)
             union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists)
+
+        elif self.fusion_type == 'gate_geo_sum':
+            alpha = torch.sigmoid(freq_dists + emb_dists + geo_dists)
+            union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists + geo_dists)
 
         else:
             print('invalid fusion type')

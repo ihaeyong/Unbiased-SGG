@@ -19,13 +19,22 @@ class Geometric(nn.Module):
             nn.Linear(self.geo_features,
                       self.out_features,
                       bias=bias),
-            nn.ReLU(inplace=True), # v1
-            nn.Dropout(0.3) # v1
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3)
         ])
 
-    def forward(self, rois, rel_inds):
-        sub_boxes = rois[rel_inds[:, 1], :][:, 1:]
-        obj_boxes = rois[rel_inds[:, 2], :][:, 1:]
+    def forward(self, proposals, rel_pair_idxs):
+        subj_boxes = []
+        obj_boxes = []
+        for proposal, rel_pair_idx in zip(proposals, rel_pair_idxs):
+            head_proposal = proposal[rel_pair_idx[:, 0]]
+            tail_proposal = proposal[rel_pair_idx[:, 1]]
+            subj_boxes.append(head_proposal.bbox)
+            obj_boxes.append(head_proposal.bbox)
+
+        sub_boxes = torch.cat(subj_boxes)
+        obj_boxes = torch.cat(obj_boxes)
+
         sub_widths = sub_boxes[:, 2] - sub_boxes[:, 0] + 1.0
         sub_heights = sub_boxes[:, 3] - sub_boxes[:, 1] + 1.0
         obj_widths = obj_boxes[:, 2] - obj_boxes[:, 0] + 1.0
