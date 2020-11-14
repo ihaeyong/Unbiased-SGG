@@ -36,7 +36,7 @@ class RelWeight(nn.Module):
 
         #freq_dists = F.softmax(freq_bias, 1)
         batch_freq = freq_bias.sum(0).data.cpu().numpy()
-        #log_batch_freq = np.log(1.0 + batch_freq)
+        log_batch_freq = np.log(1.0 + batch_freq)
         cls_num_list = batch_freq
 
         # temp = [1, 1000]
