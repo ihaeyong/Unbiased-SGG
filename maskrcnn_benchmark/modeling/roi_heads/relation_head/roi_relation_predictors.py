@@ -116,10 +116,9 @@ class SGraphPredictor(nn.Module):
 
         self.geomtric = True
         if self.geomtric:
-            self.geo_dists = nn.Linear(256, self.num_rel_cls, bias=True)
-            layer_init(self.geo_dists, xavier=True)
-
-            self.geo_embed = Geometric(out_features=256, bias=True)
+            geo_dim = 128
+            self.geo_embed = Geometric(out_features=geo_dim)
+            self.geo_dists = nn.Linear(geo_dim, self.num_rel_cls, bias=True)
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
                 union_features, logger=None):

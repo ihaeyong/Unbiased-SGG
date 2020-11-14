@@ -11,14 +11,15 @@ class Geometric(nn.Module):
     Geometric Embedding
     """
 
-    def __init__(self, out_features=128, bias=False):
+    def __init__(self, out_features=128, bias=True):
         super(Geometric, self).__init__()
-        self.geo_features = 9
+        self.geo_features = 8
         self.out_features = out_features
         self.geo_embedding = nn.Sequential(*[
-            nn.Linear(self.geo_features,
-                      self.out_features,
-                      bias=bias),
+            nn.Linear(self.geo_features, 32, bias=bias),
+            nn.BatchNorm1d(32, momentum= 0.001),
+            nn.Linear(32, out_features, bias=bias),
+            nn.BatchNorm1d(out_features, momentum= 0.001),
             nn.ReLU(inplace=True),
             nn.Dropout(0.3)
         ])
@@ -64,7 +65,7 @@ class Geometric(nn.Module):
         geo[:, 5] = obj_widths / sub_widths
         geo[:, 6] = (obj_heights * obj_widths) / (sub_heights * sub_widths)
         geo[:, 7] = (obj_heights + obj_widths) / (sub_heights + sub_widths)
-        geo[:, 8] = angles / np.pi
+        #geo[:, 8] = angles / np.pi
 
         embedded_geo = self.geo_embedding(geo)
 
