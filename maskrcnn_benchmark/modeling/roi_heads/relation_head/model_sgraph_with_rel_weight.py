@@ -19,7 +19,7 @@ class RelWeight(nn.Module):
         self.pred_prop[0] = 1.0 # set as backgrounds
         self.pred_idx = self.pred_prop.argsort()[::-1]
 
-        self.temp = temp
+        self.temp = 1
 
     def softmax_with_temp(self,z, T=1):
 
@@ -34,12 +34,13 @@ class RelWeight(nn.Module):
 
     def forward(self, freq_bias):
 
-        #freq_dists = F.softmax(freq_bias, 1)
+        freq_bais = F.softmax(freq_bias/self.temp, 1)
         batch_freq = freq_bias.sum(0).data.cpu().numpy()
-        log_batch_freq = np.log(1.0 + batch_freq)
+        cls_num_list = batch_freq
+        #log_batch_freq = np.log(1.0 + batch_freq)
 
         # temp = [1, 1000]
-        cls_num_list = self.softmax_with_temp(log_batch_freq, self.temp)
+        #cls_num_list = self.softmax_with_temp(log_batch_freq, self.temp)
 
         # entropy * scale
         cls_order = cls_num_list[self.pred_idx]
