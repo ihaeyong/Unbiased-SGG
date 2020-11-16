@@ -37,13 +37,22 @@ class UnionRegionAttention(nn.Module):
             nn.ConvTranspose2d(64, 32, 3, bias=False),
             nn.BatchNorm2d(32), nn.ReLU(inplace=True),]
 
+        subjobj_geo_upconv = [
+            nn.ConvTranspose2d(128, 128, 3, bias=False),
+            nn.BatchNorm2d(128), nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(128, 64, 3, bias=False),
+            nn.BatchNorm2d(64), nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(64, 32, 3, bias=False),
+            nn.BatchNorm2d(32), nn.ReLU(inplace=True),]
+
         self.subjobj_upconv = nn.Sequential(*subjobj_upconv)
         self.subjobj_emb_upconv = nn.Sequential(*subjobj_emb_upconv)
+        self.subjobj_geo_upconv = nn.Sequential(*subjobj_geo_upconv)
 
         if self.rib_scale == 1:
 
             subjobj_mask = [
-                nn.Conv2d(32*2, 1, 1, stride=1, bias=False),
+                nn.Conv2d(32*3, 1, 1, stride=1, bias=False),
                 nn.Sigmoid(),
             ]
 
@@ -64,7 +73,7 @@ class UnionRegionAttention(nn.Module):
 
         if self.rib_scale == 2:
             subjobj_mask = [
-                nn.ConvTranspose2d(32*2, 16, 3, stride=2, padding=1, bias=False),
+                nn.ConvTranspose2d(32*3, 16, 3, stride=2, padding=1, bias=False),
                 nn.BatchNorm2d(16),
                 nn.Conv2d(16,1,1,stride=1, bias=False),
                 nn.Sigmoid(),]
@@ -91,12 +100,13 @@ class UnionRegionAttention(nn.Module):
         if self.rib_scale == 4:
 
             subjobj_mask = [
-                nn.ConvTranspose2d(32*2, 16, 3, stride=2, padding=1, bias=False),
+                nn.ConvTranspose2d(32*3, 16, 3, stride=2, padding=1, bias=False),
                 nn.BatchNorm2d(16),
                 nn.ConvTranspose2d(16, 8, 3, stride=2, padding=1, bias=False),
                 nn.BatchNorm2d(8),
                 nn.Conv2d(8,1,1,stride=1, bias=False),
                 nn.Sigmoid()]
+
             self.subjobj_mask = nn.Sequential(*subjobj_mask)
 
             union_upconv = [
@@ -129,6 +139,7 @@ class UnionRegionAttention(nn.Module):
         # init weight
         self.subjobj_upconv.apply(seq_init)
         self.subjobj_emb_upconv.apply(seq_init)
+        self.subjobj_geo_upconv.apply(seq_init)
         self.subjobj_mask.apply(seq_init)
         self.union_upconv.apply(seq_init)
         self.union_downconv.apply(seq_init)
@@ -150,7 +161,7 @@ class UnionRegionAttention(nn.Module):
 
         return A_hat
 
-    def forward(self, union_fmap, subjobj_fmap, subjobj_embed):
+    def forward(self, union_fmap, subjobj_fmap, subjobj_embed, geo_embed):
         """
         Input:
         union_fmap: batch x 256 x 7 x 7
@@ -162,12 +173,15 @@ class UnionRegionAttention(nn.Module):
         batch = union_fmap.size(0)
         subjobj_upconv = self.subjobj_upconv(subjobj_fmap[:,:,None,None])
         subjobj_emb_upconv = self.subjobj_emb_upconv(subjobj_embed[:,:,None,None])
+        subjobj_geo_upconv = self.subjobj_geo_upconv(geo_embed[:,:,None,None])
 
         # -----union_upconv---------------------
         union_fmap = self.union_upconv(union_fmap)
         residual = union_fmap
 
-        subjobj_upconv = torch.cat((subjobj_upconv, subjobj_emb_upconv), 1)
+        subjobj_upconv = torch.cat((subjobj_upconv,
+                                    subjobj_emb_upconv,
+                                    subjobj_geo_upconv), 1)
         mask = self.subjobj_mask(subjobj_upconv)
 
         # normalize adjacency matrix

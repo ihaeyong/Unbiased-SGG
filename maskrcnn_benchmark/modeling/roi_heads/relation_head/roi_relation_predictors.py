@@ -62,7 +62,7 @@ class SGraphPredictor(nn.Module):
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
-                                                   rib_scale=1,
+                                                   rib_scale=2,
                                                    power=1,
                                                    cfg=config)
 
@@ -169,7 +169,8 @@ class SGraphPredictor(nn.Module):
 
         # relational message passing
         if self.rel_ctx_layer > 0:
-            union_features = self.rel_sg_msg(union_features, prod_rep, prod_emb)
+            union_features = self.rel_sg_msg(
+                union_features, prod_rep, prod_emb, geo_embed)
 
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
