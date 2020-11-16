@@ -136,7 +136,8 @@ class UnionRegionAttention(nn.Module):
                                            fmap_size=self.fmap_size,
                                            channel=self.channel)
 
-        self.g_type = 'skip'
+        self.g_type = 'gcn'
+        self.r_type = False
 
         if self.g_type is 'conv':
             g_conv = [nn.Conv2d(self.channel, self.channel, self.fmap_size,
@@ -213,7 +214,8 @@ class UnionRegionAttention(nn.Module):
         elif self.g_type is 'skip':
             union_fmap = mask * union_fmap
 
-        union_fmap = residual + union_fmap # b,128,N,N
+        if self.r_type:
+            union_fmap = residual + union_fmap # b,128,N,N
 
         # -----union_downconv------------------
         union_fmap = self.union_downconv(union_fmap.contiguous())
