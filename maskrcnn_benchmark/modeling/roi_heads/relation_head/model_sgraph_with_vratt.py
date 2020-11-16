@@ -136,6 +136,17 @@ class UnionRegionAttention(nn.Module):
                                            fmap_size=self.fmap_size,
                                            channel=self.channel)
 
+        self.g_type = 'conv'
+
+        if self.g_type is 'conv':
+            g_conv = [nn.Conv2d(self.channel, self.channel, self.fmap_size,
+                                stride=1, padding=self.fmap_size // 2),
+                      nn.ReLU()]
+
+            self.g_conv = nn.Sequential(*g_conv)
+
+            #self.g_conv.apply(seq_init)
+
         # init weight
         self.subjobj_upconv.apply(seq_init)
         self.subjobj_emb_upconv.apply(seq_init)
@@ -143,8 +154,6 @@ class UnionRegionAttention(nn.Module):
         self.subjobj_mask.apply(seq_init)
         self.union_upconv.apply(seq_init)
         self.union_downconv.apply(seq_init)
-
-
 
     def normalized_adj(self, batch, A):
 
@@ -160,6 +169,11 @@ class UnionRegionAttention(nn.Module):
             A_hat = A_hat**self.power
 
         return A_hat
+
+    def global_conv(self, x):
+        x = self.g_conv(x)
+        #x = F.max_pool2d(x, 4)
+        return x
 
     def forward(self, union_fmap, subjobj_fmap, subjobj_embed, geo_embed):
         """
@@ -184,14 +198,19 @@ class UnionRegionAttention(nn.Module):
                                     subjobj_geo_upconv), 1)
         mask = self.subjobj_mask(subjobj_upconv)
 
-        # normalize adjacency matrix
-        mask = self.normalized_adj(batch, mask)
-
         # ----graph ----------------------------
-        mask = mask.view(batch, 1, -1).expand(-1, self.fmap_size ** 2, -1) # b, N*N, N*N
-        union_fmap = union_fmap.view(batch, self.channel, -1).permute(0,2,1) # b, N*N,128
-        union_fmap = torch.bmm(mask, union_fmap).permute(0,2,1).view(batch, self.channel,
-                                                                     self.fmap_size, self.fmap_size) # b, 128,N,N
+        if self.g_type is 'gcn':
+            # normalize adjacency matrix
+            mask = self.normalized_adj(batch, mask)
+            mask = mask.view(batch, 1, -1).expand(-1, self.fmap_size ** 2, -1) # b, N*N, N*N
+            union_fmap = union_fmap.view(batch, self.channel, -1).permute(0,2,1) # b, N*N,128
+            union_fmap = torch.bmm(mask, union_fmap).permute(0,2,1).view(
+                batch, self.channel,
+                self.fmap_size, self.fmap_size) # b,128,N,N
+        elif self.g_type is 'conv':
+            union_fmap = mask * union_fmap
+            union_fmap = self.global_conv(union_fmap)
+
         union_fmap = residual + union_fmap # b,128,N,N
 
         # -----union_downconv------------------
