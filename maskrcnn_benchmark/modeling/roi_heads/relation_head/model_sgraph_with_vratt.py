@@ -211,6 +211,9 @@ class UnionRegionAttention(nn.Module):
             union_fmap = mask * union_fmap
             union_fmap = self.global_conv(union_fmap)
 
+        elif self.g_type is 'skip':
+            union_fmap = mask * union_fmap
+
         union_fmap = residual + union_fmap # b,128,N,N
 
         # -----union_downconv------------------
