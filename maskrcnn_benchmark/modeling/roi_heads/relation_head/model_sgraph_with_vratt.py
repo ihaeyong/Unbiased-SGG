@@ -136,7 +136,7 @@ class UnionRegionAttention(nn.Module):
                                            fmap_size=self.fmap_size,
                                            channel=self.channel)
 
-        self.g_type = 'conv'
+        self.g_type = 'skip'
 
         if self.g_type is 'conv':
             g_conv = [nn.Conv2d(self.channel, self.channel, self.fmap_size,
@@ -144,8 +144,7 @@ class UnionRegionAttention(nn.Module):
                       nn.ReLU()]
 
             self.g_conv = nn.Sequential(*g_conv)
-
-            #self.g_conv.apply(seq_init)
+            self.g_conv.apply(seq_init)
 
         # init weight
         self.subjobj_upconv.apply(seq_init)
