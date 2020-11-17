@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from collections import Counter
 
-#from lib.iba import PerSampleBottleneck
+from .model_sgraph_with_iba import PerSampleBottleneck
 from .utils_relation import layer_init, seq_init
 
 class UnionRegionAttention(nn.Module):
@@ -131,12 +131,7 @@ class UnionRegionAttention(nn.Module):
             self.fmap_size = 25
             self.channel = 32
 
-        if self.rel_iba:
-            self.iba = PerSampleBottleneck(sigma=1.0,
-                                           fmap_size=self.fmap_size,
-                                           channel=self.channel)
-
-        self.g_type = 'gcn'
+        self.g_type = 'iba'
         self.r_type = False
 
         if self.g_type is 'conv':
@@ -146,6 +141,11 @@ class UnionRegionAttention(nn.Module):
 
             self.g_conv = nn.Sequential(*g_conv)
             self.g_conv.apply(seq_init)
+
+        elif self.g_type is 'iba':
+            self.iba = PerSampleBottleneck(sigma=1.0,
+                                           fmap_size=self.fmap_size,
+                                           channel=self.channel)
 
         # init weight
         self.subjobj_upconv.apply(seq_init)
@@ -213,6 +213,9 @@ class UnionRegionAttention(nn.Module):
 
         elif self.g_type is 'skip':
             union_fmap = mask * union_fmap
+
+        elif self.g_type is 'iba':
+            union_fmap = self.iba(mask, union_fmap)
 
         if self.r_type:
             union_fmap = residual + union_fmap # b,128,N,N

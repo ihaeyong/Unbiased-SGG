@@ -172,6 +172,9 @@ class SGraphPredictor(nn.Module):
             union_features = self.rel_sg_msg(
                 union_features, prod_rep, prod_emb, geo_embed)
 
+            # information bottlenecks
+            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 3e-2
+
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
 
@@ -208,6 +211,9 @@ class SGraphPredictor(nn.Module):
 
         if link_loss is not None:
             add_losses['link_loss'] = link_loss
+
+        if iba_loss is not None:
+            add_losses['iba_loss'] = iba_loss
 
         if self.attribute_on:
             att_dists = att_dists.split(num_objs, dim=0)

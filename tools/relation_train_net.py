@@ -225,6 +225,12 @@ def train(cfg, local_rank, distributed, logger, writer):
                 writer.add_scalar('train/{}'.format(
                     loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
 
+            loss_str = 'iba_loss:'
+            if str_meters.find(loss_str) != -1:
+                idx = str_meters.find(loss_str) + len(loss_str) + 1
+                writer.add_scalar('train/{}'.format(
+                    loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
+
 
         if iteration % checkpoint_period == 0:
             checkpointer.save("model_{:07d}".format(iteration), **arguments)
