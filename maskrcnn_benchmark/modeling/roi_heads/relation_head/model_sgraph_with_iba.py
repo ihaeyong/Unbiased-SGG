@@ -21,9 +21,12 @@ class SpatialGaussianKernel(nn.Module):
         self.kernel_size = kernel_size
         assert kernel_size % 2 == 1, "kernel_size must be an odd number (for padding), {} given".format(self.kernel_size)
         variance = sigma ** 2.
-        x_cord = torch.arange(kernel_size)  # 1, 2, 3, 4
-        x_grid = x_cord.repeat(kernel_size).view(kernel_size, kernel_size)  # 1, 2, 3 \ 1, 2, 3 \ 1, 2, 3
-        y_grid = x_grid.t()  # 1, 1, 1 \ 2, 2, 2 \ 3, 3, 3
+        # 1, 2, 3, 4
+        x_cord = torch.arange(kernel_size)
+        # 1, 2, 3 \ 1, 2, 3 \ 1, 2, 3
+        x_grid = x_cord.repeat(kernel_size).view(kernel_size, kernel_size)
+        # 1, 1, 1 \ 2, 2, 2 \ 3, 3, 3
+        y_grid = x_grid.t()
         xy_grid = torch.stack([x_grid, y_grid], dim=-1)
         mean_xy = (kernel_size - 1) / 2.
         kernel_2d = (1. / (2. * math.pi * variance)) * torch.exp(
@@ -43,6 +46,9 @@ class SpatialGaussianKernel(nn.Module):
         self.pad = nn.ReflectionPad2d(int((kernel_size - 1) / 2))
 
     def forward(self, x):
+        # x : [batch, 32, 25, 25]
+        # pad : [batch, 32, 29, 29]
+        # conv : [batch, 32, 25, 25]
         return self.conv(self.pad(x))
 
 class AttributionBottleneck(nn.Module):

@@ -19,7 +19,6 @@ class UnionRegionAttention(nn.Module):
 
         self.power = power
         self.rib_scale = rib_scale
-        self.rel_iba = False
 
         subjobj_upconv = [
             nn.ConvTranspose2d(obj_dim * 2, 128, 3, bias=False),
@@ -131,7 +130,7 @@ class UnionRegionAttention(nn.Module):
             self.fmap_size = 25
             self.channel = 32
 
-        self.g_type = 'iba'
+        self.g_type = 'gcn_iba'
         self.r_type = False
 
         if self.g_type is 'conv':
@@ -142,8 +141,8 @@ class UnionRegionAttention(nn.Module):
             self.g_conv = nn.Sequential(*g_conv)
             self.g_conv.apply(seq_init)
 
-        elif self.g_type is 'iba':
-            self.iba = PerSampleBottleneck(sigma=1.0,
+        elif self.g_type is 'iba' or self.g_type is 'gcn_iba':
+            self.iba = PerSampleBottleneck(sigma=0.0,
                                            fmap_size=self.fmap_size,
                                            channel=self.channel)
 
@@ -215,6 +214,10 @@ class UnionRegionAttention(nn.Module):
             union_fmap = mask * union_fmap
 
         elif self.g_type is 'iba':
+            union_fmap = self.iba(mask, union_fmap)
+
+        elif self.g_type is 'gcn_iba':
+            mask = self.normalized_adj(batch, mask)
             union_fmap = self.iba(mask, union_fmap)
 
         if self.r_type:
