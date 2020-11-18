@@ -62,7 +62,7 @@ class SGraphPredictor(nn.Module):
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
-                                                   rib_scale=1,
+                                                   rib_scale=4,
                                                    power=1,
                                                    cfg=config)
 
@@ -119,6 +119,7 @@ class SGraphPredictor(nn.Module):
             geo_dim = 128
             self.geo_embed = Geometric(out_features=geo_dim)
             self.geo_dists = nn.Linear(geo_dim, self.num_rel_cls, bias=True)
+            layer_init(self.geo_dists, xavier=True)
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
                 union_features, logger=None):
@@ -173,7 +174,7 @@ class SGraphPredictor(nn.Module):
                 union_features, prod_rep, prod_emb, geo_embed)
 
             # information bottlenecks
-            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 1e-2
+            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 3e-2
 
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)

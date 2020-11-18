@@ -130,7 +130,7 @@ class UnionRegionAttention(nn.Module):
             self.fmap_size = 25
             self.channel = 32
 
-        self.g_type = 'gcn_iba'
+        self.g_type = 'iba'
         self.r_type = False
 
         if self.g_type is 'conv':
@@ -142,7 +142,7 @@ class UnionRegionAttention(nn.Module):
             self.g_conv.apply(seq_init)
 
         elif self.g_type is 'iba' or self.g_type is 'gcn_iba':
-            self.iba = PerSampleBottleneck(sigma=0.0,
+            self.iba = PerSampleBottleneck(sigma=1.0,
                                            fmap_size=self.fmap_size,
                                            channel=self.channel)
 

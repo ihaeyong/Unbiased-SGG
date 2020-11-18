@@ -42,6 +42,9 @@ class RelationLossComputation(object):
 
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
 
+        self.focal = True
+        self.gamma = 1.0
+
         self.weight = 'batchweight'
         if self.weight == 'batchweight':
             self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
@@ -87,7 +90,14 @@ class RelationLossComputation(object):
 
         if self.weight == 'batchweight':
             rel_weight = self.rel_weight(freq_bias)
-            loss_relation = F.cross_entropy(relation_logits, rel_labels.long(), rel_weight)
+            if self.focal :
+                loss_relation = F.cross_entropy(relation_logits,
+                                                rel_labels.long(),
+                                                reduction='none',
+                                                weight=rel_weight)
+                loss_relation = self.focal_loss(loss_relation, self.gamma)
+            else:
+                loss_relation = F.cross_entropy(relation_logits, rel_labels.long(), rel_weight)
         else:
             loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
         loss_refine_obj = self.criterion_loss(refine_obj_logits, fg_labels.long())
@@ -112,6 +122,12 @@ class RelationLossComputation(object):
             return loss_relation, (loss_refine_obj, loss_refine_att)
         else:
             return loss_relation, loss_refine_obj
+
+    def focal_loss(self, input_values, gamma):
+        """Computes the focal loss"""
+        p = torch.exp(-input_values)
+        loss = (1 - p) ** gamma * input_values
+        return loss.mean()
 
     def generate_attributes_target(self, attributes):
         """
