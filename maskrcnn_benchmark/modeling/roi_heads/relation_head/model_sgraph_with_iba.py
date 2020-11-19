@@ -23,7 +23,7 @@ class SpatialGaussianKernel(nn.Module):
         self.kernel_size = kernel_size
         assert kernel_size % 2 == 1, "kernel_size must be an odd number (for padding), {} given".format(self.kernel_size)
 
-        f_type = 'gabor'
+        f_type = 'gaussian'
 
         if f_type is 'gaussian':
             variance = sigma ** 2.

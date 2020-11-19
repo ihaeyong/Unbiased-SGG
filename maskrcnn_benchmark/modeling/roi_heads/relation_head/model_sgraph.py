@@ -78,12 +78,10 @@ class SpectralContext(nn.Module):
         self.effect_analysis = config.MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS
 
         if self.effect_analysis:
-            self.register_buffer("untreated_dcd_feat",
-                                 torch.zeros(self.hidden_dim + self.obj_dim + self.embed_dim + 128))
             self.register_buffer("untreated_obj_feat",
-                                 torch.zeros(self.obj_dim+self.embed_dim + 128))
-            self.register_buffer("untreated_edg_feat",
-                                 torch.zeros(self.embed_dim + self.obj_dim))
+                                 torch.zeros(self.obj_dim + self.embed_dim + 128))
+            self.register_buffer("untreated_ctx_feat",
+                                 torch.zeros(256))
 
     def sort_rois(self, proposals):
         c_x = center_x(proposals)
@@ -146,12 +144,12 @@ class SpectralContext(nn.Module):
                                                  rel_labels=rel_labels)
 
         # --- object predictions and spectral message passing ---
-        if (not self.training) and self.effect_analysis and ctx_average:
+        if (not self.training) and self.effect_analysis and ctx_average and False:
             decoder_inp = self.untreated_dcd_feat.view(1, -1).expand(batch_size, -1)
         else:
             decoder_inp = encoder_rep
 
-        if self.training and self.effect_analysis:
+        if self.training and self.effect_analysis and False:
             self.untreated_dcd_feat = self.moving_average(
                 self.untreated_dcd_feat, decode_inp)
 
@@ -234,7 +232,8 @@ class SpectralContext(nn.Module):
 
         batch_size = x.shape[0]
         if all_average and self.effect_analysis and (not self.training):
-            obj_pre_rep = self.untreated_obj_feat.view(1, -1).expand(batch_size, -1)
+            obj_pre_rep = cat((x, obj_embed, pos_embed), -1)
+            obj_pre_rep = self.untreated_obj_feat.view(1, -1).expand(batch_size, -1) * obj_pre_rep
         else:
             obj_pre_rep = cat((x, obj_embed, pos_embed), -1)
 
@@ -254,9 +253,9 @@ class SpectralContext(nn.Module):
             updated_obj_embed = F.softmax(obj_dists, dim=1) @ self.updated_obj_embed.weight
 
         if (all_average or ctx_average) and self.effect_analysis and (not self.training):
-            obj_rel_rep = cat((self.untreated_edg_feat.view(1, -1).expand(batch_size, -1), obj_ctx), dim=-1)
+            obj_ctx = self.untreated_ctx_feat.view(1, -1).expand(batch_size, -1) * obj_ctx
         else:
-            obj_rel_rep = cat((updated_obj_embed, x, obj_ctx), -1)
+            obj_ctx = obj_ctx
 
         edge_ctx =  obj_ctx
         edge_obj = updated_obj_embed
@@ -264,7 +263,7 @@ class SpectralContext(nn.Module):
         # memorize average feature
         if self.training and self.effect_analysis:
             self.untreated_obj_feat = self.moving_average(self.untreated_obj_feat, obj_pre_rep)
-            self.untreated_edg_feat = self.moving_average(self.untreated_edg_feat, cat((obj_embed2, x), -1))
+            self.untreated_ctx_feat = self.moving_average(self.untreated_ctx_feat, obj_ctx)
 
         return obj_dists, obj_preds, edge_ctx, edge_obj, link_loss
 

@@ -31,7 +31,7 @@ if [ $2 == "sgcls" ]; then
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10041 \
+           --master_port 10042 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -39,7 +39,7 @@ elif [ $2 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL True \
            MODEL.ROI_RELATION_HEAD.PREDICTOR SGraphPredictor \
            MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM 512 \
-           MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS False \
+           MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS True \
            MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 0 \
            MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 1 \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
@@ -51,5 +51,5 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/obj_spectrum_rel_iba25x25_gabor0.65_sum-predcls
+           OUTPUT_DIR ./checkpoints/obj_spectrum_effect_iba25x25s1e-2_sum-predcls
 fi
