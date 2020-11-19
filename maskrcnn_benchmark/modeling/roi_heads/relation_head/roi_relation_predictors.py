@@ -174,7 +174,7 @@ class SGraphPredictor(nn.Module):
                 union_features, prod_rep, prod_emb, geo_embed)
 
             # information bottlenecks
-            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 1e-2
+            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 3e-2
 
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
