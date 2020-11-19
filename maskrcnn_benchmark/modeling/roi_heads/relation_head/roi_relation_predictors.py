@@ -245,6 +245,15 @@ class SGraphPredictor(nn.Module):
             alpha = torch.sigmoid(freq_dists + emb_dists + geo_dists)
             union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists + geo_dists)
 
+        elif self.fusion_type == 'gate_geo_sum_v1':
+            alpha = torch.sigmoid(freq_dists)
+            union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists + geo_dists)
+            
+        elif self.fusion_type == 'gate_geo_sum_v2':
+            alpha = torch.sigmoid(freq_dists + emb_dists)
+            union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists + geo_dists)
+
+
         else:
             print('invalid fusion type')
 
