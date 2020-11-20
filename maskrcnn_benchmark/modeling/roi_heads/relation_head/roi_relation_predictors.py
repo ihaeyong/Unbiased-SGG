@@ -141,8 +141,11 @@ class SGraphPredictor(nn.Module):
             obj_dists, obj_preds, att_dists, edge_ctx = self.context_layer(
                 roi_features, proposals, logger)
         else:
+            obj_iba_loss = None
             obj_dists,obj_preds,obj_ctx_rep,obj_ctx_emb,link_loss=self.context_layer(
                 roi_features, proposals, self.freq_bias, rel_pair_idxs, rel_labels, logger)
+
+            obj_iba_loss = self.context_layer.buffer_capacity.mean() * 1e-2
 
         obj_reps = obj_ctx_rep.split(num_objs, dim=0)
         obj_embs = obj_ctx_emb.split(num_objs, dim=0)
@@ -174,7 +177,7 @@ class SGraphPredictor(nn.Module):
                 union_features, prod_rep, prod_emb, geo_embed)
 
             # information bottlenecks
-            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 1e-2
+            rel_iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 1e-2
 
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
@@ -213,8 +216,11 @@ class SGraphPredictor(nn.Module):
         if link_loss is not None:
             add_losses['link_loss'] = link_loss
 
-        if iba_loss is not None:
-            add_losses['iba_loss'] = iba_loss
+        if rel_iba_loss is not None:
+            add_losses['rel_iba_loss'] = rel_iba_loss
+
+        if obj_iba_loss is not None:
+            add_losses['obj_iba_loss'] = obj_iba_loss
 
         if self.attribute_on:
             att_dists = att_dists.split(num_objs, dim=0)

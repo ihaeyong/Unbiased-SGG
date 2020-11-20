@@ -12,6 +12,14 @@ from .utils_motifs import obj_edge_vectors, center_x, sort_by_score, to_onehot, 
 from .utils_relation import layer_init
 
 from .model_sgraph_with_context import SpectralMessage
+from torch.distributions import Normal
+
+from math import pi, sqrt, exp
+
+def gauss(n=7,sigma=1):
+    r = range(-int(n/2),int(n/2)+1)
+    return [1 / (sigma * sqrt(2*pi)) * exp(-float(x)**2/(2*sigma**2)) for x in r]
+
 
 class SpectralContext(nn.Module):
     """
@@ -53,9 +61,7 @@ class SpectralContext(nn.Module):
         self.dropout_rate = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_DROPOUT_RATE
         self.hidden_dim = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM
 
-        self.obj_ctx = nn.Linear(self.obj_dim + self.embed_dim + 128,
-                                 self.hidden_dim * 8)
-
+        #self.obj_ctx = nn.Linear(self.obj_dim, self.obj_dim)
         self.nms_thresh = self.cfg.TEST.RELATION.LATER_NMS_PREDICTION_THRES
 
         # relation context
@@ -69,7 +75,7 @@ class SpectralContext(nn.Module):
 
 
         # initialize layers
-        layer_init(self.obj_ctx, xavier=True)
+        #layer_init(self.obj_ctx, xavier=True)
         layer_init(self.lin_obj_h, xavier=True)
         layer_init(self.out_obj, xavier=True)
 
@@ -78,10 +84,42 @@ class SpectralContext(nn.Module):
         self.effect_analysis = config.MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS
 
         if self.effect_analysis:
-            self.register_buffer("untreated_obj_feat",
-                                 torch.zeros(self.obj_dim + self.embed_dim + 128))
-            self.register_buffer("untreated_ctx_feat",
-                                 torch.zeros(256))
+                self.obj_ctx_mean = nn.Linear(self.obj_dim + self.embed_dim + 128,
+                                              self.obj_dim)
+
+                self.obj_ctx_std = nn.Linear(self.obj_dim + self.embed_dim + 128,
+                                             self.obj_dim)
+
+                obj_lamb = [nn.Linear(self.embed_dim + 128,
+                                      self.hidden_dim * 8),
+                            nn.Sigmoid(),]
+
+                self.obj_lamb = nn.Sequential(*obj_lamb)
+
+                kernel_size = 5
+                kernel_1d = torch.FloatTensor(gauss(n=kernel_size, sigma=1))
+                self.smooth = nn.Conv1d(1, 1, kernel_size, stride=1)
+                self.smooth.weight.data.copy_(kernel_1d)
+                self.smooth.weight.requires_grad = False
+                self.pad = nn.ReflectionPad1d(int((kernel_size - 1) / 2))
+
+                layer_init(self.obj_ctx_mean)
+                layer_init(self.obj_ctx_std)
+
+                self.beta = 10.0 / (self.hidden_dim * 8)
+                self.buffer_capacity = None
+
+    def _sample_z(self, mu, log_noise_var):
+        """ return mu with additive noise """
+        log_noise_var = torch.clamp(log_noise_var, -10, 10)
+        noise_std = (log_noise_var / 2).exp()
+        eps = mu.data.new(mu.size()).normal_()
+        return mu + Variable(noise_std.data * eps)
+
+    def _calc_capacity(self, mu, log_var) -> torch.Tensor:
+        # KL[Q(z|x)||P(z)]
+        # 0.5 * (tr(noise_cov) + mu ^ T mu - k  -  log det(noise)
+        return -0.5 * (1 + log_var - mu**2 - log_var.exp())
 
     def sort_rois(self, proposals):
         c_x = center_x(proposals)
@@ -115,12 +153,9 @@ class SpectralContext(nn.Module):
 
         # Pass object features, sorted by score, into the encoder
         if order:
-            obj_inp_rep = obj_feats[perm].contiguous()
+            encoder_rep = obj_feats[perm].contiguous()
         else:
-            obj_inp_rep = obj_feats
-
-        # === [4096 + 200 + 128, hidden_dim * 2] ===
-        encoder_rep = self.obj_ctx(obj_inp_rep)
+            encoder_rep = obj_feats
 
         # untreated decoder input
         batch_size = encoder_rep.shape[0]
@@ -144,26 +179,17 @@ class SpectralContext(nn.Module):
                                                  rel_labels=rel_labels)
 
         # --- object predictions and spectral message passing ---
-        if (not self.training) and self.effect_analysis and ctx_average and False:
-            decoder_inp = self.untreated_dcd_feat.view(1, -1).expand(batch_size, -1)
-        else:
-            decoder_inp = encoder_rep
-
-        if self.training and self.effect_analysis and False:
-            self.untreated_dcd_feat = self.moving_average(
-                self.untreated_dcd_feat, decode_inp)
-
         # Decode in order if True
         if order:
-            decoder_inp = decoder_inp[inv_perm]
+            encoder_inp = encoder_rep[inv_perm]
 
         # obj. predictions
         obj_dists, obj_preds = self.decoder(
-            decoder_inp,
+            encoder_rep,
             obj_labels=obj_labels if obj_labels is not None else None,
             boxes_per_cls=boxes_per_cls if boxes_per_cls is not None else None,)
 
-        encoder_rep = self.lin_obj_h(decoder_inp)
+        encoder_rep = self.lin_obj_h(encoder_rep)
 
         return obj_dists, obj_preds, encoder_rep, perm, inv_perm, ls_transposed, link_loss
 
@@ -231,11 +257,43 @@ class SpectralContext(nn.Module):
         pos_embed = self.pos_embed(encode_box_info(proposals))
 
         batch_size = x.shape[0]
-        if all_average and self.effect_analysis and (not self.training):
-            obj_pre_rep = cat((x, obj_embed, pos_embed), -1)
-            obj_pre_rep = self.untreated_obj_feat.view(1, -1).expand(batch_size, -1) * obj_pre_rep
-        else:
-            obj_pre_rep = cat((x, obj_embed, pos_embed), -1)
+        if self.effect_analysis :
+            x = cat((x, obj_embed, pos_embed), -1)
+            lamb = self.obj_lamb(cat((obj_embed, pos_embed), -1))
+
+            # smoothing
+            lamb = self.pad(lamb[:,None])
+            lamb = self.smooth(lamb).squeeze(1)
+
+            # normal dists
+            mean = self.obj_ctx_mean(x)
+            std = F.softplus(self.obj_ctx_std(x))
+
+            if False:
+                norm = (x - mean) / std
+            else:
+                obj_prob = Normal(mean, std)
+                norm = obj_prob.sample()
+
+            # scaled signal
+            scaled_signal = norm * lamb
+
+            # Get sampling parameters
+            eps = 1e-8
+            noise_var = (1 - lamb + eps)**2
+            noise_log_var = torch.log(noise_var)
+
+            # Sample new output values from p(z|r)
+            z_norm = self._sample_z(scaled_signal, noise_log_var)
+
+            # Denormalize z to match magnitude of r
+            if False:
+                obj_pre_rep = torch.clamp(z_norm * std + mean, 0.0)
+            else:
+                obj_pre_rep = z_norm * std + mean
+
+            self.buffer_capacity = self._calc_capacity(scaled_signal,
+                                                       noise_log_var) * self.beta
 
         boxes_per_cls = None
         if self.mode == 'sgdet' and not self.training:
@@ -252,7 +310,7 @@ class SpectralContext(nn.Module):
         else:
             updated_obj_embed = F.softmax(obj_dists, dim=1) @ self.updated_obj_embed.weight
 
-        if (all_average or ctx_average) and self.effect_analysis and (not self.training):
+        if (all_average or ctx_average) and self.effect_analysis and (not self.training) and False:
             obj_ctx = self.untreated_ctx_feat.view(1, -1).expand(batch_size, -1) * obj_ctx
         else:
             obj_ctx = obj_ctx
@@ -261,7 +319,7 @@ class SpectralContext(nn.Module):
         edge_obj = updated_obj_embed
 
         # memorize average feature
-        if self.training and self.effect_analysis:
+        if self.training and self.effect_analysis and False:
             self.untreated_obj_feat = self.moving_average(self.untreated_obj_feat, obj_pre_rep)
             self.untreated_ctx_feat = self.moving_average(self.untreated_ctx_feat, obj_ctx)
 
