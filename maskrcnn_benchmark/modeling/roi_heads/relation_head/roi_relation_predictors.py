@@ -174,7 +174,7 @@ class SGraphPredictor(nn.Module):
                 union_features, prod_rep, prod_emb, geo_embed)
 
             # information bottlenecks
-            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 3e-2
+            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 1e-2
 
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
@@ -248,11 +248,30 @@ class SGraphPredictor(nn.Module):
         elif self.fusion_type == 'gate_geo_sum_v1':
             alpha = torch.sigmoid(freq_dists)
             union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists + geo_dists)
-            
+
         elif self.fusion_type == 'gate_geo_sum_v2':
             alpha = torch.sigmoid(freq_dists + emb_dists)
             union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists + geo_dists)
 
+        elif self.fusion_type == 'gate_geo_sum_v3':
+            alpha = torch.sigmoid(freq_dists + emb_dists)
+            beta = torch.sigmoid(geo_dists)
+            union_dists = (alpha+beta)*(vis_dists+ctx_dists)+(1.0-alpha)*(freq_dists+emb_dists)+(1.0-beta)*geo_dists
+
+        elif self.fusion_type == 'gate_geo_sum_v4':
+            alpha = torch.sigmoid(freq_dists + emb_dists)
+            beta = torch.sigmoid(geo_dists)
+            union_dists = (alpha*beta)*(vis_dists+ctx_dists)+(1.0-alpha)*(freq_dists+emb_dists)+(1.0-beta)*geo_dists
+
+        elif self.fusion_type == 'gate_geo_sum_v5':
+            alpha = torch.sigmoid(freq_dists + emb_dists)
+            beta = torch.sigmoid(geo_dists)
+            union_dists = ctx_dists * (torch.sigmoid(vis_dists) + alpha + beta)
+
+        elif self.fusion_type == 'gate_geo_sum_v6':
+            alpha = torch.sigmoid(freq_dists + emb_dists)
+            beta = torch.sigmoid(geo_dists)
+            union_dists = vis_dists * (torch.sigmoid(ctx_dists) + alpha + beta)
 
         else:
             print('invalid fusion type')
