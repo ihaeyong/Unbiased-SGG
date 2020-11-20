@@ -234,8 +234,17 @@ class SGraphPredictor(nn.Module):
             union_dists = ctx_dists * torch.sigmoid(vis_dists + freq_dists + emb_dists + ctx_gate_dists)
 
         elif self.fusion_type == 'sum':
-            alpha = torch.sigmoid(freq_dists + emb_dists + geo_dists)
+            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
             union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
+
+        elif self.fusion_type == 'sum_softmax':
+            freq_bias = torch.sigmoid(freq_dists + emb_dists)
+            union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
+
+        elif self.fusion_type == 'sum_softmax_v1':
+            freq_bias = torch.sigmoid(freq_dists + emb_dists)
+            union_dists = torch.sigmoid(vis_dists + ctx_dists) + torch.sigmoid(
+                freq_dists + emb_dists + geo_dists)
 
         elif self.fusion_type == 'gate_sum':
             alpha = torch.sigmoid(freq_dists + emb_dists)
@@ -276,7 +285,7 @@ class SGraphPredictor(nn.Module):
         else:
             print('invalid fusion type')
 
-        return union_dists, alpha
+        return union_dists, freq_bias
 
 
 @registry.ROI_RELATION_PREDICTOR.register("TransformerPredictor")
