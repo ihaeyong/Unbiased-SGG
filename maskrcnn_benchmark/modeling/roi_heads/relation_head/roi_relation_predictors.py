@@ -233,6 +233,16 @@ class SGraphPredictor(nn.Module):
             ctx_gate_dists = self.ctx_gate_fc(ctx_rep)
             union_dists = ctx_dists * torch.sigmoid(vis_dists + freq_dists + emb_dists + ctx_gate_dists)
 
+        elif self.fusion_type == 'geo':
+            #
+            freq_bias = torch.sigmoid(freq_dists)
+            union_dists = geo_dists
+
+        elif self.fusion_type == 'freq_geo':
+            #
+            freq_bias = torch.sigmoid(freq_dists)
+            union_dists = geo_dists + freq_dists
+
         elif self.fusion_type == 'sum':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
             freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
