@@ -34,12 +34,12 @@ class RelWeight(nn.Module):
 
     def forward(self, freq_bias):
 
-        freq_dists = F.softmax(freq_bias, 1)
+        #freq_dists = F.softmax(freq_bias, 1)
         batch_freq = freq_bias.sum(0).data.cpu().numpy()
-        log_batch_freq = np.log(1.0 + batch_freq)
-
+        #log_batch_freq = np.log(1.0 + batch_freq)
         # temp = [1, 1000]
-        cls_num_list = self.softmax_with_temp(log_batch_freq, self.temp)
+        #cls_num_list = self.softmax_with_temp(log_batch_freq, self.temp)
+        cls_num_list = batch_freq
 
         # entropy * scale
         cls_order = cls_num_list[self.pred_idx]
@@ -48,7 +48,7 @@ class RelWeight(nn.Module):
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
         if skew_v > 1.0 :
-            beta = 1.0 - ent_v
+            beta = 1.0 - ent_v * 0.2
         else:
             beta = 0.0
 
