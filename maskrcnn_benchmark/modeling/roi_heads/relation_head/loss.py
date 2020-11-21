@@ -45,7 +45,7 @@ class RelationLossComputation(object):
         self.focal = False
         self.gamma = 1.0
 
-        self.weight = 'none' #'batchweight'
+        self.weight = 'batchweight' #'batchweight'
         if self.weight == 'batchweight':
             self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
 
