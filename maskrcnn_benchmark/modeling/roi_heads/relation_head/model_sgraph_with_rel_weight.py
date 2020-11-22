@@ -48,7 +48,7 @@ class RelWeight(nn.Module):
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
         if skew_v > 1.0 :
-            beta = 1.0 - ent_v * 0.2
+            beta = 1.0 - ent_v * 0.7
         else:
             beta = 0.0
 
