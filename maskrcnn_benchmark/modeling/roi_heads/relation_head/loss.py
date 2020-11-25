@@ -89,7 +89,7 @@ class RelationLossComputation(object):
         rel_labels = cat(rel_labels, dim=0)
 
         if self.weight == 'batchweight':
-            rel_weight, rel_margin = self.rel_weight(freq_bias, rel_labels)
+            rel_weight, rel_margin = self.rel_weight(freq_bias, rel_labels, self.gamma)
             if self.l_type is 'focal' :
                 loss_relation = F.cross_entropy(relation_logits,
                                                 rel_labels.long(),
