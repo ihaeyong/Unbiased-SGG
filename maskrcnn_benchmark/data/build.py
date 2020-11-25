@@ -153,7 +153,7 @@ def make_batch_data_sampler(
     return batch_sampler
 
 
-def make_data_loader(cfg, mode='train', is_distributed=False, start_iter=0):
+def make_data_loader(cfg, mode='train', is_distributed=False, start_iter=0, is_infer=False):
     assert mode in {'train', 'val', 'test'}
     num_gpus = get_world_size()
     is_train = mode == 'train'
@@ -164,7 +164,7 @@ def make_data_loader(cfg, mode='train', is_distributed=False, start_iter=0):
         ), "SOLVER.IMS_PER_BATCH ({}) must be divisible by the number of GPUs ({}) used.".format(
             images_per_batch, num_gpus)
         images_per_gpu = images_per_batch // num_gpus
-        shuffle = True
+        shuffle = True if not is_infer else False
         num_iters = cfg.SOLVER.MAX_ITER
     else:
         images_per_batch = cfg.TEST.IMS_PER_BATCH
@@ -210,7 +210,7 @@ def make_data_loader(cfg, mode='train', is_distributed=False, start_iter=0):
     transforms = None if not is_train and cfg.TEST.BBOX_AUG.ENABLED else build_transforms(cfg, is_train)
     datasets = build_dataset(cfg, dataset_list, transforms, DatasetCatalog, is_train)
 
-    if is_train:
+    if is_train and not is_infer:
         # save category_id to label name mapping
         save_labels(datasets, cfg.OUTPUT_DIR)
 
@@ -243,11 +243,11 @@ def make_data_loader(cfg, mode='train', is_distributed=False, start_iter=0):
             if not os.path.exists(cfg.DETECTED_SGG_DIR):
                 os.makedirs(cfg.DETECTED_SGG_DIR)
 
-            with open(os.path.join(cfg.DETECTED_SGG_DIR, 'custom_data_info.json'), 'w') as outfile:  
+            with open(os.path.join(cfg.DETECTED_SGG_DIR, 'custom_data_info.json'), 'w') as outfile:
                 json.dump(custom_data_info, outfile)
             print('=====> ' + str(os.path.join(cfg.DETECTED_SGG_DIR, 'custom_data_info.json')) + ' SAVED !')
         data_loaders.append(data_loader)
-    if is_train:
+    if is_train and not is_infer:
         # during training, a single (possibly concatenated) data_loader is returned
         assert len(data_loaders) == 1
         return data_loaders[0]

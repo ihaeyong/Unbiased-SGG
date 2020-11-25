@@ -35,14 +35,14 @@ from maskrcnn_benchmark.utils.miscellaneous import mkdir, save_config
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
 
 # where to load detected scene graph
-detected_path = '/home/kaihua/checkpoints/causal_sgdet_ctx_only/inference/VG_stanford_filtered_wth_attribute_test/'
+detected_path = './checkpoints/obj_spectrum_gcn_sum_v7_0.7-predcls/inference/VG_stanford_filtered_with_attribute_test/'
 # where to save the generated annotation
-output_path = '/data1/image_retrieval/sg_of_causal_sgdet_ctx_only.json'
+output_path = './datasets/image_retrieval/sg_obj_spectrum_gcn.json'
 
-cap_graph = json.load(open('/data1/vg_capgraphs_anno.json'))
-vg_data = h5py.File('/home/kaihua/projects/maskrcnn-benchmark/datasets/vg/VG-SGG-with-attri.h5', 'r')
-vg_dict = json.load(open('/home/kaihua/projects/maskrcnn-benchmark/datasets/vg/VG-SGG-dicts-with-attri.json'))
-vg_info = json.load(open('/home/kaihua/projects/maskrcnn-benchmark/datasets/vg/image_data.json'))
+cap_graph = json.load(open('./datasets/vg_capgraphs_anno.json'))
+vg_data = h5py.File('./datasets/vg/VG-SGG-with-attri.h5', 'r')
+vg_dict = json.load(open('./datasets/vg/VG-SGG-dicts-with-attri.json'))
+vg_info = json.load(open('./datasets/vg/image_data.json'))
 
 # generate union predicate vocabulary
 sgg_rel_vocab = list(set(cap_graph['idx_to_meta_predicate'].values()))
@@ -77,16 +77,16 @@ def generate_gt_sg():
     img_obj_end = torch.LongTensor(vg_data['img_to_last_box'][:])
     img_rel_start = torch.LongTensor(vg_data['img_to_first_rel'][:])
     img_rel_end = torch.LongTensor(vg_data['img_to_last_rel'][:])
-    
+
     assert valid.shape[0] == img_obj_start.shape[0]
     assert valid.shape[0] == img_obj_end.shape[0]
     assert valid.shape[0] == img_rel_start.shape[0]
     assert valid.shape[0] == img_rel_end.shape[0]
-    
+
     img_obj_labels = torch.LongTensor(vg_data['labels'][:]).view(-1)
     img_rel_pairs = torch.LongTensor(vg_data['relationships'][:])
     img_rel_labels = torch.LongTensor(vg_data['predicates'][:]).view(-1)
-    
+
     img_to_sg = {}
     for i in range(valid.shape[0]):
         coco_id = cap_graph['vg_coco_ids'][i]
@@ -114,7 +114,7 @@ def generate_detect_sg(det_result, det_info, valid_ids, img_coco_map, obj_thres 
     predictions = det_result['predictions']
     assert len(groundtruths) == num_img
     assert len(predictions) == num_img
-    
+
     output = {}
     for i in range(num_img):
         # load detect result
@@ -126,13 +126,13 @@ def generate_detect_sg(det_result, det_info, valid_ids, img_coco_map, obj_thres 
         all_rel_pairs = predictions[i].get_field('rel_pair_idxs')
         all_rel_prob = predictions[i].get_field('pred_rel_scores')
         all_rel_scores, all_rel_labels = all_rel_prob.max(-1)
-        
+
         # filter objects and relationships
         all_obj_scores[all_obj_scores < obj_thres] = 0.0
         obj_mask = all_obj_scores >= obj_thres
         triplet_score = all_obj_scores[all_rel_pairs[:, 0]] * all_obj_scores[all_rel_pairs[:, 1]] * all_rel_scores
         rel_mask = ((all_rel_labels > 0) + (triplet_score > 0)) > 0
-        
+
         # generate filterred result
         num_obj = obj_mask.shape[0]
         num_rel = rel_mask.shape[0]
@@ -144,11 +144,11 @@ def generate_detect_sg(det_result, det_info, valid_ids, img_coco_map, obj_thres 
         filter_obj = all_obj_labels[obj_mask]
         filter_pair = torch.nonzero(rel_matrix > 0)
         filter_rel = rel_matrix[filter_pair[:, 0], filter_pair[:, 1]]
-        
+
         # generate labels
         pred_objs = [vg_dict['idx_to_label'][str(i)] for i in filter_obj.tolist()]
         pred_rels = [[i[0], i[1], cap_graph['idx_to_meta_predicate'][str(j)]] for i, j in zip(filter_pair.tolist(), filter_rel.tolist())]
-        
+
         coco_id = img_coco_map[int(image_id)]
         output[str(coco_id)] = [{'entities' : pred_objs, 'relations' : pred_rels}, ]
     return output

@@ -35,8 +35,8 @@ class SGEncoding(data.Dataset):
     """ SGEncoding dataset """
     def __init__(self, train_ids, test_ids, sg_data, test_on=False, val_on=False, num_test=5000, num_val=5000):
         super(SGEncoding, self).__init__()
-        cap_graph = json.load(open('/data1/vg_capgraphs_anno.json'))
-        vg_dict = json.load(open('/home/kaihua/projects/maskrcnn-benchmark/datasets/vg/VG-SGG-dicts-with-attri.json'))
+        cap_graph = json.load(open('./datasets/vg_capgraphs_anno.json'))
+        vg_dict = json.load(open('./datasets/vg/VG-SGG-dicts-with-attri.json'))
         self.img_txt_sg = sg_data
         self.key_list = list(self.img_txt_sg.keys())
         self.key_list.sort()
@@ -64,7 +64,7 @@ class SGEncoding(data.Dataset):
         self.num_txt_obj = len(self.txt_obj_vocab)
 
     def _to_tensor(self, inp_dict):
-        return {'entities': torch.LongTensor(inp_dict['entities']), 
+        return {'entities': torch.LongTensor(inp_dict['entities']),
                 'relations': torch.LongTensor(inp_dict['relations'])}
 
     def _generate_tensor_by_idx(self, idx):
@@ -87,7 +87,7 @@ class SGEncoding(data.Dataset):
 
     def __len__(self):
         return len(self.key_list)
-        
+
 class SimpleCollator(object):
     def __call__(self, batch):
         return list(zip(*batch))

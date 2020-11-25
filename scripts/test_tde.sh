@@ -3,12 +3,12 @@
 # Train Motifnet using different orderings
 export PYTHONPATH=$HOME/workspaces/unbiased-sg
 export PYTHONIOENCODING=utf-8
-export CUDA_VISIBLE_DEVICES=$2
+export CUDA_VISIBLE_DEVICES=$3,$4,$5,$6
 
-if [ $1 == "sgcls" ]; then
+if [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \
            --master_port 10028 \
-           --nproc_per_node=1 \
+           --nproc_per_node=$1 \
            tools/relation_test_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
            MODEL.ROI_RELATION_HEAD.USE_GT_BOX True \
@@ -17,15 +17,15 @@ if [ $1 == "sgcls" ]; then
            MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_TYPE TDE \
            MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum \
            MODEL.ROI_RELATION_HEAD.CAUSAL.CONTEXT_LAYER motifs  \
-           TEST.IMS_PER_BATCH 1 \
+           TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/causal-motifs-sgcls-exmp \
            OUTPUT_DIR ./checkpoints/causal-motifs-sgcls-baseline
 
-elif [ $1 == "predcls" ]; then
+elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10027 \
-           --nproc_per_node=1 \
+           --master_port 10023 \
+           --nproc_per_node=$1 \
            tools/relation_test_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
            MODEL.ROI_RELATION_HEAD.USE_GT_BOX True \
@@ -34,11 +34,11 @@ elif [ $1 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM 512 \
            MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS False \
            MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 0 \
-           MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 0 \
+           MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 1 \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
-           MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum \
-           TEST.IMS_PER_BATCH 1 DTYPE "float16" \
+           MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum_v7 \
+           TEST.IMS_PER_BATCH $1 DTYPE "float16" \
            GLOVE_DIR ./datasets/glove \
-           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/obj_spectrum_skew1.0_brw_temp1e0-log1-sum-predcls \
-           OUTPUT_DIR ./checkpoints/obj_spectrum_skew1.0_brw_temp1e0-log1-sum-predcls
+           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/obj_spectrum_gcn_sum_v7_0.7-predcls \
+           OUTPUT_DIR ./checkpoints/obj_spectrum_gcn_sum_v7_0.7-predcls
 fi

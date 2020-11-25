@@ -64,7 +64,7 @@ class ApplyAttention(nn.Module):
         for g in range(self.glimpses):
             layers.append(ApplySingleAttention(v_features, q_features, mid_features, drop))
         self.glimpse_layers = nn.ModuleList(layers)
-    
+
     def forward(self, v, q, atten):
         """
         v = batch, num_obj, dim
@@ -83,7 +83,7 @@ class ApplySingleAttention(nn.Module):
         self.lin_v = FCNet(v_features, mid_features, activate='relu', drop=drop)  # let self.lin take care of bias
         self.lin_q = FCNet(q_features, mid_features, activate='relu', drop=drop)
         self.lin_atten = FCNet(mid_features, mid_features, drop=drop)
-        
+
     def forward(self, v, q, atten):
         """
         v = batch, num_obj, dim
@@ -97,7 +97,7 @@ class ApplySingleAttention(nn.Module):
         v_ = torch.matmul(v_, atten.unsqueeze(1)) # batch, dim, 1, que_len
         h_ = torch.matmul(v_, q_) # batch, dim, 1, 1
         h_ = h_.squeeze(3).squeeze(2) # batch, dim
-        
+
         atten_h = self.lin_atten(h_.unsqueeze(1))
 
         return atten_h
@@ -188,7 +188,7 @@ class SGEncode(nn.Module):
 
             loss.append(triplet_bg.sum())
             encode_list.append([fg_img_encode, fg_txt_encode])
-        
+
         if is_test:
             return encode_list
         else:

@@ -84,7 +84,7 @@ def train(cfg, local_rank, distributed, logger):
             find_unused_parameters=True,
         )
     debug_print(logger, 'end distributed')
-    
+
     train_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data, test_on=False, val_on=False, num_test=5000, num_val=1000)
     val_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data, test_on=False, val_on=True, num_test=5000, num_val=1000)
     test_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data, test_on=True, val_on=False, num_test=5000, num_val=1000)
@@ -116,7 +116,7 @@ def train(cfg, local_rank, distributed, logger):
             data_time = time.time() - end
             iteration = iteration + 1
             model.train()
-        
+
             for fg_img, fg_txt, bg_img, bg_txt in zip(fg_imgs, fg_txts, bg_imgs, bg_txts):
                 fg_img['entities'] = fg_img['entities'].to(device)
                 fg_img['relations'] = fg_img['relations'].to(device)
@@ -141,7 +141,7 @@ def train(cfg, local_rank, distributed, logger):
             # Otherwise apply loss scaling for mixed-precision recipe
             with amp.scale_loss(losses, optimizer) as scaled_losses:
                 scaled_losses.backward()
-        
+
             # add clip_grad_norm from MOTIFS, used for debug
             #verbose = (iteration % cfg.SOLVER.PRINT_GRAD_FREQ) == 0 or print_first_grad # print grad or not
             #print_first_grad = False
@@ -153,7 +153,7 @@ def train(cfg, local_rank, distributed, logger):
             end = time.time()
 
         logger.info("epoch: {epoch} loss: {loss:.6f} lr: {lr:.6f}".format(epoch=epoch, loss=float(sum(epoch_loss) / len(epoch_loss)), lr=optimizer.param_groups[-1]["lr"]))
-        
+
         if epoch % checkpoint_period == 0:
             torch.save(model.state_dict(), os.path.join(cfg.OUTPUT_DIR, "model_{}.pytorch".format(str(epoch))))
         if epoch == max_iter:
@@ -169,12 +169,12 @@ def train(cfg, local_rank, distributed, logger):
             val_result = run_test(cfg, model, val_data_loader, distributed, logger)
             val_similarity = evaluator(logger, val_result)
             torch.save({'result' : val_result, 'similarity' : val_similarity}, output_path % ('val', epoch))
-        
+
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
         assert cfg.SOLVER.SCHEDULE.TYPE != "WarmupReduceLROnPlateau"
         scheduler.step()
 
-    
+
     total_training_time = time.time() - start_training_time
     total_time_str = str(datetime.timedelta(seconds=total_training_time))
     logger.info(
@@ -212,7 +212,7 @@ def run_val(cfg, model, val_data_loader, distributed, logger):
         loss_list = model(fg_imgs, fg_txts, bg_imgs, bg_txts)
 
         losses = sum(loss_list)
-        
+
         synchronize()
         val_result.append(float(losses))
     # support for multi gpu distributed testing
