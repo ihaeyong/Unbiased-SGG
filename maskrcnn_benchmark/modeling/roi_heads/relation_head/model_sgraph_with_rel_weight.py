@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+from .utils_motifs import to_onehot
+
 from scipy.stats import entropy, skew
 
 class RelWeight(nn.Module):
@@ -16,7 +18,7 @@ class RelWeight(nn.Module):
         super(RelWeight, self).__init__()
 
         self.pred_prop = np.array(predicate_proportion)
-        self.pred_prop[0] = 1.0 # set as backgrounds
+        self.pred_prop = np.concatenate(([1], self.pred_prop), 0)
         self.pred_idx = self.pred_prop.argsort()[::-1]
 
         self.temp = temp
@@ -32,18 +34,25 @@ class RelWeight(nn.Module):
 
         return y
 
-    def forward(self, freq_bias):
+    def forward(self, freq_bias, rel_labels, gamma=0.01):
 
-        #freq_dists = F.softmax(freq_bias, 1)
         batch_freq = freq_bias.sum(0).data.cpu().numpy()
-        #log_batch_freq = np.log(1.0 + batch_freq)
-        # temp = [1, 1000]
-        #cls_num_list = self.softmax_with_temp(log_batch_freq, self.temp)
         cls_num_list = batch_freq
 
+        rel_margin = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
+        #batch_label_freq = batch_label.sum(0).data.cpu().numpy()
+        #log_batch_label_freq = np.log(1.0 + batch_label_freq)
+        #cls_num_list = self.softmax_with_temp(log_batch_label_freq, self.temp)
+        fg_idx = np.where(rel_labels.cpu() > 0)[0]
+        bg_idx = np.where(rel_labels.cpu() == 0)[0]
+
+        rel_margin[fg_idx, :] = rel_margin[fg_idx, :] * gamma
+        rel_margin[bg_idx, :] = rel_margin[bg_idx, :] * 0.0
+
         # entropy * scale
-        cls_order = cls_num_list[self.pred_idx]
+        cls_order = batch_freq[self.pred_idx]
         ent_v = entropy(cls_order, base=51)
+
         # skew_v > 0 : more weight in the left tail
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
@@ -57,6 +66,6 @@ class RelWeight(nn.Module):
         per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
         rel_weight = torch.FloatTensor(per_cls_weights).cuda()
 
-        return  rel_weight
+        return  rel_weight, rel_margin
 
 
