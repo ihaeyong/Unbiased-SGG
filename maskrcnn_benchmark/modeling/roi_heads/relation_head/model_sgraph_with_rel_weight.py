@@ -54,9 +54,12 @@ class RelWeight(nn.Module):
             # target [batch_size, batch_size] in {0, 1} and normalize in (0,1)
             target = (rel_labels == torch.transpose(rel_labels[None,:], 0, 1)).float()
             target = target / torch.sum(target, dim=1, keepdim=True).float()
-            
-            rel_margin = torch.matmul(target, rel_logits.detach()) * gamma
 
+            target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
+
+            rel_margin = torch.matmul(target, rel_logits.detach())
+            rel_margin = rel_margin * target_mask * gamma
+            
         # Entropy * scale
         cls_order = batch_freq[self.pred_idx]
         ent_v = entropy(cls_order, base=51)
