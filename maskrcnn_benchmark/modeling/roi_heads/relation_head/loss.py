@@ -43,7 +43,7 @@ class RelationLossComputation(object):
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
 
         self.l_type = 'margin'
-        self.gamma = 0.01
+        self.gamma = 0.2
 
         self.weight = 'batchweight' #'batchweight'
         if self.weight == 'batchweight':
@@ -89,7 +89,10 @@ class RelationLossComputation(object):
         rel_labels = cat(rel_labels, dim=0)
 
         if self.weight == 'batchweight':
-            rel_weight, rel_margin = self.rel_weight(freq_bias, rel_labels, self.gamma)
+            rel_weight, rel_margin = self.rel_weight(relation_logits,
+                                                     freq_bias,
+                                                     rel_labels,
+                                                     self.gamma)
             if self.l_type is 'focal' :
                 loss_relation = F.cross_entropy(relation_logits,
                                                 rel_labels.long(),

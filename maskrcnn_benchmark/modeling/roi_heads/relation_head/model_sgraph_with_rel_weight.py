@@ -34,22 +34,30 @@ class RelWeight(nn.Module):
 
         return y
 
-    def forward(self, freq_bias, rel_labels, gamma=0.01):
+    def forward(self, rel_logits, freq_bias, rel_labels, gamma=0.01):
 
         batch_freq = freq_bias.sum(0).data.cpu().numpy()
         cls_num_list = batch_freq
 
-        rel_margin = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
-        #batch_label_freq = batch_label.sum(0).data.cpu().numpy()
-        #log_batch_label_freq = np.log(1.0 + batch_label_freq)
-        #cls_num_list = self.softmax_with_temp(log_batch_label_freq, self.temp)
-        fg_idx = np.where(rel_labels.cpu() > 0)[0]
-        bg_idx = np.where(rel_labels.cpu() == 0)[0]
+        if False:
+            rel_margin = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
+            #batch_label_freq = batch_label.sum(0).data.cpu().numpy()
+            #log_batch_label_freq = np.log(1.0 + batch_label_freq)
+            #cls_num_list = self.softmax_with_temp(log_batch_label_freq, self.temp)
+            fg_idx = np.where(rel_labels.cpu() > 0)[0]
+            bg_idx = np.where(rel_labels.cpu() == 0)[0]
 
-        rel_margin[fg_idx, :] = rel_margin[fg_idx, :] * gamma
-        rel_margin[bg_idx, :] = rel_margin[bg_idx, :] * 0.0
+            rel_margin[fg_idx, :] = rel_margin[fg_idx, :] * gamma
+            rel_margin[bg_idx, :] = rel_margin[bg_idx, :] * gamma
 
-        # entropy * scale
+        else:
+            # target [batch_size, batch_size] in {0, 1} and normalize in (0,1)
+            target = (rel_labels == torch.transpose(rel_labels[None,:], 0, 1)).float()
+            target = target / torch.sum(target, dim=1, keepdim=True).float()
+            
+            rel_margin = torch.matmul(target, rel_logits.detach()) * gamma
+
+        # Entropy * scale
         cls_order = batch_freq[self.pred_idx]
         ent_v = entropy(cls_order, base=51)
 
