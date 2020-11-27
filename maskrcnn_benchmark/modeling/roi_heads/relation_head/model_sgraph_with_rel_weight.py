@@ -58,7 +58,13 @@ class RelWeight(nn.Module):
             target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
 
             rel_margin = torch.matmul(target, rel_logits.detach())
-            rel_margin = 1/torch.sigmoid(rel_margin) * target_mask * gamma
+
+            r_type = 'inverse'
+            if r_type is 'sigmoid':
+                rel_margin = 1/torch.sigmoid(rel_margin) * target_mask * gamma
+            elif r_type is 'inverse':
+                rel_margin = 1/(torch.abs(rel_margin)+1) * target_mask * gamma
+
 
         # Entropy * scale
         cls_order = batch_freq[self.pred_idx]
