@@ -177,14 +177,15 @@ class SpectralContext(nn.Module):
         # Do NMS here as a post-processing step
         if self.mode == 'sgdet' and not self.training and boxes_per_cls is not None:
             is_overlap = nms_overlaps(boxes_per_cls).view(
-                boxes_for_nms.size(0), boxes_per_cls.size(0),
-                boxes_for_nms.size(1)
+                boxes_per_cls.size(0), boxes_per_cls.size(0),
+                boxes_per_cls.size(1)
             ).cpu().numpy() >= self.nms_thresh
 
-            out_dists_sampled = F.softmax(out_dists2,1).cpu().numpy()
+            out_dists_sampled = F.softmax(obj_dists2,1).cpu().numpy()
             out_dists_sampled[:,0] = 0
 
-            out_commitments = out_commitments[0].new(len(out_commitments)).fill_(0)
+            out_commitments = torch.zeros(obj_dists2.shape[0]).cuda(
+                obj_dists2.get_device()).long()
 
             for i in range(out_commitments.size(0)):
                 box_ind, cls_ind = np.unravel_index(
@@ -244,7 +245,11 @@ class SpectralContext(nn.Module):
         # object level contextual feature
         obj_dists,obj_preds,obj_ctx,perm,inv_perm,ls_transposed,link_loss=self.obj_stx(
             obj_pre_rep, proposals, freq_bias, rel_pair_idxs,
-            obj_labels, rel_labels, boxes_per_cls, ctx_average=ctx_average)
+            obj_labels=obj_labels,
+            rel_labels=rel_labels,
+            boxes_per_cls=boxes_per_cls,
+            ctx_average=ctx_average,
+            order=False)
 
         # edge level contextual feature
         if False:

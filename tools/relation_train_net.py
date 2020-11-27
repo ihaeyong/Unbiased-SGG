@@ -120,7 +120,7 @@ def train(cfg, local_rank, distributed, logger, writer):
     debug_print(logger, 'end dataloader')
     checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
 
-    if cfg.SOLVER.PRE_VAL and False:
+    if cfg.SOLVER.PRE_VAL and True:
         logger.info("Validate before training")
         run_val(cfg, model, val_data_loaders, distributed, logger)
 
