@@ -43,23 +43,39 @@ try:
 except ImportError:
     raise ImportError('Use APEX for multi-precision via apex.amp')
 
-sg_model_name = 'motif'
-sg_fusion_name = 'rubi'
-sg_type_name = 'origin'
+sg_model_name = 'obj_spectrum_gcn_sum_v7_0.7-predcls'
+sg_fusion_name = 'sum'
+sg_type_name = 'none'
 
-sg_train_path = '/data1/image_retrieval/causal_{}_sgdet_{}_{}_train.pytorch'.format(sg_model_name, sg_fusion_name, sg_type_name)
-sg_test_path = '/data1/image_retrieval/causal_{}_sgdet_{}_{}_test.pytorch'.format(sg_model_name, sg_fusion_name, sg_type_name)
-output_path = '/data1/image_retrieval_model/causal_'+sg_model_name+'_sgdet_'+sg_fusion_name+'_'+sg_type_name+'_output_%s_%d.pytorch'
+sg_train_path = './datasets/image_retrieval/sg_of_{}-train.json'.format(
+    sg_model_name)
+sg_test_path = './datasets/image_retrieval/sg_of_{}-test.json'.format(
+    sg_model_name)
+output_path = './datasets/image_retrieval_model/sg_of_' + sg_model_name + '_output_%s_%d.pytorch'
 
 #sg_train_path = '/data1/image_retrieval/causal_sgdet_rubi_TDE_train.json'
 #sg_test_path = '/data1/image_retrieval/causal_sgdet_rubi_TDE_test.json'
 #output_path = '/data1/image_retrieval/causal_sgdet_rubi_TDE_output_%s_%d.pytorch'
 
-sg_data = torch.load(sg_train_path)
-sg_data.update(torch.load(sg_test_path))
+if False:
+    sg_data = torch.load(sg_train_path)
+    sg_data.update(torch.load(sg_test_path))
 
-train_ids = list(torch.load(sg_train_path).keys())
-test_ids = list(torch.load(sg_test_path).keys())
+    train_ids = list(torch.load(sg_train_path).keys())
+    test_ids = list(torch.load(sg_test_path).keys())
+
+else:
+    with open(sg_train_path) as f:
+        sg_data_train = json.load(f)
+
+    with open(sg_test_path) as f:
+        sg_data_test = json.load(f)
+
+    sg_data = sg_data_train
+    sg_data.update(sg_data_test)
+
+    train_ids = list(sg_data_train.keys())
+    test_ids = list(sg_data_test.keys())
 
 def train(cfg, local_rank, distributed, logger):
     model = SGEncode()
@@ -71,6 +87,7 @@ def train(cfg, local_rank, distributed, logger):
     optimizer = make_optimizer(cfg, model, logger, rl_factor=float(num_batch))
     scheduler = make_lr_scheduler(cfg, optimizer, logger)
     debug_print(logger, 'end optimizer and shcedule')
+
     # Initialize mixed-precision training
     use_mixed_precision = cfg.DTYPE == "float16"
     amp_opt_level = 'O1' if use_mixed_precision else 'O0'
@@ -85,14 +102,17 @@ def train(cfg, local_rank, distributed, logger):
         )
     debug_print(logger, 'end distributed')
 
-    train_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data, test_on=False, val_on=False, num_test=5000, num_val=1000)
-    val_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data, test_on=False, val_on=True, num_test=5000, num_val=1000)
-    test_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data, test_on=True, val_on=False, num_test=5000, num_val=1000)
+    train_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data,
+                                   test_on=False, val_on=False, num_test=5000, num_val=1000)
+    val_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data,
+                                 test_on=False, val_on=True, num_test=5000, num_val=1000)
+    test_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data,
+                                  test_on=True, val_on=False, num_test=5000, num_val=1000)
 
     debug_print(logger, 'end dataloader')
     checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
 
-    if os.path.exists(cfg.MODEL.PRETRAINED_DETECTOR_CKPT):
+    if os.path.exists(cfg.MODEL.PRETRAINED_DETECTOR_CKPT) and False:
         checkpoint = torch.load(cfg.MODEL.PRETRAINED_DETECTOR_CKPT, map_location=torch.device("cpu"))
         model.load_state_dict(checkpoint)
 
@@ -145,14 +165,16 @@ def train(cfg, local_rank, distributed, logger):
             # add clip_grad_norm from MOTIFS, used for debug
             #verbose = (iteration % cfg.SOLVER.PRINT_GRAD_FREQ) == 0 or print_first_grad # print grad or not
             #print_first_grad = False
-            #clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.requires_grad], max_norm=cfg.SOLVER.GRAD_NORM_CLIP, logger=logger, verbose=verbose, clip=True)
+            #clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.requires_grad],
+            #max_norm=cfg.SOLVER.GRAD_NORM_CLIP, logger=logger, verbose=verbose, clip=True)
 
             optimizer.step()
 
             batch_time = time.time() - end
             end = time.time()
 
-        logger.info("epoch: {epoch} loss: {loss:.6f} lr: {lr:.6f}".format(epoch=epoch, loss=float(sum(epoch_loss) / len(epoch_loss)), lr=optimizer.param_groups[-1]["lr"]))
+        logger.info("epoch: {epoch} loss: {loss:.6f} lr: {lr:.6f}".format(
+            epoch=epoch, loss=float(sum(epoch_loss) / len(epoch_loss)), lr=optimizer.param_groups[-1]["lr"]))
 
         if epoch % checkpoint_period == 0:
             torch.save(model.state_dict(), os.path.join(cfg.OUTPUT_DIR, "model_{}.pytorch".format(str(epoch))))
@@ -173,7 +195,6 @@ def train(cfg, local_rank, distributed, logger):
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
         assert cfg.SOLVER.SCHEDULE.TYPE != "WarmupReduceLROnPlateau"
         scheduler.step()
-
 
     total_training_time = time.time() - start_training_time
     total_time_str = str(datetime.timedelta(seconds=total_training_time))
