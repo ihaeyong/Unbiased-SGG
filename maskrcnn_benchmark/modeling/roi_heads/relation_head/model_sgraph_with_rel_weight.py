@@ -67,7 +67,8 @@ class RelWeight(nn.Module):
             elif r_type is 'diff' :
                 rel_mask_logits = rel_logits.detach() * target_mask
                 rel_margin = rel_margin * target_mask
-                rel_diff = rel_mask_logits - rel_margin
+                # mean - logits
+                rel_diff = rel_margin - rel_mask_logits
                 rel_diff_mask = (rel_diff < 0).float()
                 rel_margin = rel_margin * rel_diff_mask * gamma
 

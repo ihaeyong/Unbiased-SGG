@@ -51,7 +51,7 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/obj_spectrum_gcn_var_diff_margin0.2_sum_v3_0.7-predcls
+           OUTPUT_DIR ./checkpoints/obj_spectrum_gcn_var_diff_margin0.3_sum_v3_0.7-predcls
 
     elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \
