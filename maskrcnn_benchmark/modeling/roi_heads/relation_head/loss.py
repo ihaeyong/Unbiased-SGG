@@ -42,7 +42,7 @@ class RelationLossComputation(object):
 
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
 
-        self.l_type = 'var_margin'
+        self.l_type = 'margin'
         self.gamma = 0.2
 
         self.weight = 'batchweight' #'batchweight'
@@ -105,7 +105,7 @@ class RelationLossComputation(object):
                                                 rel_weight)
 
             elif self.l_type is 'var_margin':
-                loss_relation = F.cross_entropy((rel_margin - relation_logits),
+                loss_relation = F.cross_entropy((rel_margin - relation_logits)**2,
                                                 rel_labels.long(),
                                                 rel_weight)
 
