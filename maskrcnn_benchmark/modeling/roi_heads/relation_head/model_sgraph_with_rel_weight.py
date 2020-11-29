@@ -52,11 +52,18 @@ class RelWeight(nn.Module):
 
         else:
             # target [batch_size, batch_size] in {0, 1} and normalize in (0,1)
+            fg_idx = np.where(rel_labels.cpu() > 0)[0]
+            bg_idx = np.where(rel_labels.cpu() == 0)[0]
+
             target = (rel_labels == torch.transpose(rel_labels[None,:], 0, 1)).float()
             target = target / torch.sum(target, dim=1, keepdim=True).float()
 
             target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
 
+            if True:
+                target_mask[bg_idx, :] = len(fg_idx) / (len(fg_idx) + len(bg_idx))
+                target_mask[fg_idx, :] = len(bg_idx) / (len(fg_idx) + len(bg_idx))
+                
             rel_margin = torch.matmul(target, rel_logits.detach())
 
             r_type = 'diff'
