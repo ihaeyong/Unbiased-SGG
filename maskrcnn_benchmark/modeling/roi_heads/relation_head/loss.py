@@ -10,7 +10,7 @@ from maskrcnn_benchmark.modeling.box_coder import BoxCoder
 from maskrcnn_benchmark.modeling.matcher import Matcher
 from maskrcnn_benchmark.structures.boxlist_ops import boxlist_iou
 from maskrcnn_benchmark.modeling.utils import cat
-from .model_sgraph_with_rel_weight import RelWeight
+from .model_sgraph_with_rel_weight import RelWeight, ObjWeight
 
 class RelationLossComputation(object):
     """
@@ -47,6 +47,7 @@ class RelationLossComputation(object):
 
         self.weight = 'batchweight' #'batchweight'
         if self.weight == 'batchweight':
+            self.obj_weight = ObjWeight(temp=1e0)
             self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
 
         if self.use_label_smoothing:
@@ -59,7 +60,8 @@ class RelationLossComputation(object):
                 self.criterion_rel_loss = nn.CrossEntropyLoss()
 
 
-    def __call__(self, proposals, rel_labels, relation_logits, refine_logits, freq_bias):
+    def __call__(self, proposals, rel_labels, relation_logits, refine_logits,
+                 freq_bias):
         """
         Computes the loss for relation triplet.
         This requires that the subsample method has been called beforehand.
@@ -89,6 +91,7 @@ class RelationLossComputation(object):
         rel_labels = cat(rel_labels, dim=0)
 
         if self.weight == 'batchweight':
+
             rel_weight, rel_margin = self.rel_weight(relation_logits,
                                                      freq_bias,
                                                      rel_labels,
@@ -116,7 +119,19 @@ class RelationLossComputation(object):
 
         else:
             loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
-        loss_refine_obj = self.criterion_loss(refine_obj_logits, fg_labels.long())
+
+
+        if self.weight == 'batchweight':
+            obj_weight, obj_margin = self.obj_weight(refine_obj_logits,
+                                                     fg_labels,
+                                                     self.gamma)
+
+            loss_refine_obj = F.cross_entropy(refine_obj_logits,
+                                              fg_labels.long(),
+                                              obj_weight)
+
+        else:
+            loss_refine_obj = self.criterion_loss(refine_obj_logits, fg_labels.long())
 
         # The following code is used to calcaulate sampled attribute loss
         if self.attri_on:
@@ -140,6 +155,7 @@ class RelationLossComputation(object):
             return loss_relation, loss_refine_obj
 
     def focal_loss(self, input_values, gamma):
+
         """Computes the focal loss"""
         p = torch.exp(-input_values)
         loss = (1 - p) ** gamma * input_values
@@ -166,6 +182,7 @@ class RelationLossComputation(object):
         return attribute_targets, fg_attri_idx
 
     def attribute_loss(self, logits, labels, fg_bg_sample=True, bg_fg_ratio=3):
+
         if fg_bg_sample:
             loss_matrix = F.binary_cross_entropy_with_logits(logits, labels, reduction='none').view(-1)
             fg_loss = loss_matrix[labels.view(-1) > 0]

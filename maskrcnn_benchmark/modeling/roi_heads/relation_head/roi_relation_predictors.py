@@ -191,6 +191,7 @@ class SGraphPredictor(nn.Module):
                                                geo_embed,
                                                embed_bias,
                                                freq_bias)
+        #obj_freq_bias = torch.sigmoid(obj_emb)
 
         # rel constrastive learning
         rel_cl_loss = None
