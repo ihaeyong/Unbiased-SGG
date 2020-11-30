@@ -171,7 +171,7 @@ class RelWeight(nn.Module):
             if True:
                 target_mask[bg_idx, :] = len(fg_idx) / (len(fg_idx) + len(bg_idx))
                 target_mask[fg_idx, :] = len(bg_idx) / (len(fg_idx) + len(bg_idx))
-                
+
             rel_margin = torch.matmul(target, rel_logits.detach())
 
             r_type = 'diff'
