@@ -38,9 +38,9 @@ test = True
 
 if test:
     # where to load detected scene graph
-    detected_path = './checkpoints/obj_spectrum_gcn_sum_v7_0.7-predcls/inference/VG_stanford_filtered_with_attribute_test/'
+    detected_path = './checkpoints/obj_spectrum_gcn_sum_v3_0.7-sgdet/inference/VG_stanford_filtered_with_attribute_test/'
     # where to save the generated annotation
-    output_path = './datasets/image_retrieval/sg_of_obj_spectrum_gcn_sum_v7_0.7-predcls-test.json'
+    output_path = './datasets/image_retrieval/sg_of_obj_spectrum_gcn_sum_v3_0.7-sgdet-test.json'
 else:
     # where to load detected scene graph
     detected_path = './checkpoints/obj_spectrum_gcn_sum_v7_0.7-predcls/inference/VG_stanford_filtered_with_attribute_train/'

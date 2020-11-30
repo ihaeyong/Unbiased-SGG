@@ -157,7 +157,7 @@ def make_data_loader(cfg, mode='train', is_distributed=False, start_iter=0, is_i
     assert mode in {'train', 'val', 'test'}
     num_gpus = get_world_size()
     is_train = mode == 'train'
-    if is_train:
+    if is_train and not is_infer:
         images_per_batch = cfg.SOLVER.IMS_PER_BATCH
         assert (
             images_per_batch % num_gpus == 0
