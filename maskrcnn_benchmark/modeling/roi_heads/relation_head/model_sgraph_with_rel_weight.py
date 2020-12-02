@@ -168,9 +168,15 @@ class RelWeight(nn.Module):
 
             target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
 
-            if True:
+            l_type = 'none'
+            if l_type is 'target_mask' :
                 target_mask[bg_idx, :] = len(fg_idx) / (len(fg_idx) + len(bg_idx))
                 target_mask[fg_idx, :] = len(bg_idx) / (len(fg_idx) + len(bg_idx))
+            elif l_type is 'target':
+                target[bg_idx, :] = len(fg_idx) / (len(fg_idx) + len(bg_idx))
+                target[fg_idx, :] = len(bg_idx) / (len(fg_idx) + len(bg_idx))
+            elif l_type is 'none':
+                None
 
             rel_margin = torch.matmul(target, rel_logits.detach())
 
