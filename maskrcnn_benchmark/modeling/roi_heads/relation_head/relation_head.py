@@ -80,9 +80,13 @@ class ROIRelationHead(torch.nn.Module):
 
         # final classifier that converts the features into predictions
         # should corresponding to all the functions and layers after the self.context class
-        refine_logits, relation_logits, add_losses, freq_bias = self.predictor(proposals, rel_pair_idxs, rel_labels,
-                                                                               rel_binarys, roi_features, union_features,
-                                                                               logger)
+        refine_logits, relation_logits, add_losses, freq_bias, obj_freq_bias = self.predictor(proposals,
+                                                                                              rel_pair_idxs,
+                                                                                              rel_labels,
+                                                                                              rel_binarys,
+                                                                                              roi_features,
+                                                                                              union_features,
+                                                                                              logger)
 
         # for test
         if not self.training:
@@ -91,7 +95,7 @@ class ROIRelationHead(torch.nn.Module):
 
         loss_relation, loss_refine = self.loss_evaluator(proposals,
                                                          rel_labels,
-                                                         relation_logits, refine_logits, freq_bias)
+                                                         relation_logits, refine_logits, freq_bias, obj_freq_bias)
 
         if self.cfg.MODEL.ATTRIBUTE_ON and isinstance(loss_refine, (list, tuple)):
             output_losses = dict(loss_rel=loss_relation, loss_refine_obj=loss_refine[0], loss_refine_att=loss_refine[1])

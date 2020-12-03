@@ -141,7 +141,7 @@ class SGraphPredictor(nn.Module):
             obj_dists, obj_preds, att_dists, edge_ctx = self.context_layer(
                 roi_features, proposals, logger)
         else:
-            obj_dists,obj_preds,obj_ctx_rep,obj_ctx_emb,link_loss=self.context_layer(
+            obj_dists,obj_embed_dists,obj_preds,obj_ctx_rep,obj_ctx_emb,link_loss=self.context_layer(
                 roi_features, proposals, self.freq_bias, rel_pair_idxs, rel_labels, logger)
 
         obj_reps = obj_ctx_rep.split(num_objs, dim=0)
@@ -191,7 +191,8 @@ class SGraphPredictor(nn.Module):
                                                geo_embed,
                                                embed_bias,
                                                freq_bias)
-        #obj_freq_bias = torch.sigmoid(obj_emb)
+
+        obj_freq_bias = torch.sigmoid(obj_embed_dists)
 
         # rel constrastive learning
         rel_cl_loss = None
@@ -221,7 +222,7 @@ class SGraphPredictor(nn.Module):
             att_dists = att_dists.split(num_objs, dim=0)
             return (obj_dists, att_dists), rel_dists, add_losses
         else:
-            return obj_dists, rel_dists, add_losses, freq_bias
+            return obj_dists, rel_dists, add_losses, freq_bias, obj_freq_bias
 
 
     def rel_logits(self, vis_rep, ctx_rep, geo_emb, emb_dists, freq_dists):

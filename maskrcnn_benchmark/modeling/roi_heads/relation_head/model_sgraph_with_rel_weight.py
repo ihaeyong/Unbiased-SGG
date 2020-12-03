@@ -71,9 +71,8 @@ class ObjWeight(nn.Module):
 
         return y
 
-    def forward(self, obj_logits, obj_labels, gamma=0.01):
+    def forward(self, obj_logits, freq_bias, obj_labels, gamma=0.01):
 
-        freq_bias = torch.sigmoid(obj_logits)
         batch_freq = freq_bias.sum(0).data.cpu().numpy()
         cls_num_list = batch_freq
 
@@ -105,7 +104,7 @@ class ObjWeight(nn.Module):
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
         if skew_v > 1.0 :
-            beta = 1.0 - ent_v * 0.7
+            beta = 1.0 - ent_v * 0.8
         else:
             beta = 0.0
 

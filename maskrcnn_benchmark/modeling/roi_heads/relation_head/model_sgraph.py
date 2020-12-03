@@ -62,6 +62,8 @@ class SpectralContext(nn.Module):
         self.lin_obj_h = nn.Linear(self.hidden_dim * 8, self.hidden_dim // 2)
         self.out_obj = nn.Linear(self.hidden_dim * 8, len(self.obj_classes))
 
+        self.out_embed_obj = nn.Linear(self.embed_dim, len(self.obj_classes))
+
         # spectral message passing
         self.obj_ctx_layer = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER
         if self.obj_ctx_layer > 0:
@@ -72,6 +74,7 @@ class SpectralContext(nn.Module):
         layer_init(self.obj_ctx, xavier=True)
         layer_init(self.lin_obj_h, xavier=True)
         layer_init(self.out_obj, xavier=True)
+        layer_init(self.out_embed_obj, xavier=True)
 
         # untreated average features
         self.average_ratio = 0.0005
@@ -92,6 +95,7 @@ class SpectralContext(nn.Module):
 
     def obj_stx(self,
                 obj_feats,
+                obj_embed,
                 proposals,
                 freq_bias,
                 rel_pair_idxs,
@@ -127,7 +131,7 @@ class SpectralContext(nn.Module):
 
         # --- object predictions and spectral message passing ---
         if obj_labels is None:
-            obj_dists = self.out_obj(encoder_rep)
+            obj_dists = self.out_obj(encoder_rep) + self.out_embed_obj(obj_embed)
             obj_preds = obj_dists[:, 1:].max(1)[1] + 1
         else:
             obj_preds = obj_labels
@@ -158,21 +162,22 @@ class SpectralContext(nn.Module):
             decoder_inp = decoder_inp[inv_perm]
 
         # obj. predictions
-        obj_dists, obj_preds = self.decoder(
-            decoder_inp,
+        obj_dists, obj_embed_dists, obj_preds = self.decoder(
+            decoder_inp, obj_embed,
             obj_labels=obj_labels if obj_labels is not None else None,
             boxes_per_cls=boxes_per_cls if boxes_per_cls is not None else None,)
 
         encoder_rep = self.lin_obj_h(decoder_inp)
 
-        return obj_dists, obj_preds, encoder_rep, perm, inv_perm, ls_transposed, link_loss
+        return obj_dists, obj_embed_dists, obj_preds, encoder_rep, perm, inv_perm, ls_transposed, link_loss
 
-    def decoder(self, obj_fmap, obj_labels, boxes_per_cls):
+    def decoder(self, obj_fmap, obj_embed, obj_labels, boxes_per_cls):
 
         if self.mode == 'predcls' and not self.training:
             obj_dists2 = Variable(to_onehot(obj_labels.data, len(self.obj_classes)))
         else:
-            obj_dists2 = self.out_obj(obj_fmap)
+            obj_embed_dist = self.out_embed_obj(obj_embed)
+            obj_dists2 = self.out_obj(obj_fmap) + obj_embed_dist
 
         # Do NMS here as a post-processing step
         if self.mode == 'sgdet' and not self.training and boxes_per_cls is not None:
@@ -205,7 +210,7 @@ class SpectralContext(nn.Module):
                 obj_labels
                 if not self.training else obj_dists2[:, 1:].max(1)[1] + 1)
 
-        return obj_dists2, obj_preds
+        return obj_dists2, obj_embed_dist, obj_preds
 
     def moving_average(self, holder, input):
         assert len(input.shape) == 2
@@ -243,8 +248,8 @@ class SpectralContext(nn.Module):
             boxes_per_cls = cat([proposal.get_field('boxes_per_cls') for proposal in proposals], dim=0) # comes from post process of box_head
 
         # object level contextual feature
-        obj_dists,obj_preds,obj_ctx,perm,inv_perm,ls_transposed,link_loss=self.obj_stx(
-            obj_pre_rep, proposals, freq_bias, rel_pair_idxs,
+        obj_dists,obj_embed_dists,obj_preds,obj_ctx,perm,inv_perm,ls_transposed,link_loss=self.obj_stx(
+            obj_pre_rep, obj_embed, proposals, freq_bias, rel_pair_idxs,
             obj_labels=obj_labels,
             rel_labels=rel_labels,
             boxes_per_cls=boxes_per_cls,
@@ -270,5 +275,5 @@ class SpectralContext(nn.Module):
             self.untreated_obj_feat = self.moving_average(self.untreated_obj_feat, obj_pre_rep)
             self.untreated_ctx_feat = self.moving_average(self.untreated_ctx_feat, obj_ctx)
 
-        return obj_dists, obj_preds, edge_ctx, edge_obj, link_loss
+        return obj_dists, obj_embed_dists, obj_preds, edge_ctx, edge_obj, link_loss
 

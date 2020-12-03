@@ -42,7 +42,7 @@ class RelationLossComputation(object):
 
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
 
-        self.l_type = 'margin'
+        self.l_type = 'none'
         self.gamma = 0.017
 
         self.weight = 'batchweight' #'batchweight'
@@ -61,7 +61,7 @@ class RelationLossComputation(object):
 
 
     def __call__(self, proposals, rel_labels, relation_logits, refine_logits,
-                 freq_bias):
+                 freq_bias, obj_freq_bias):
         """
         Computes the loss for relation triplet.
         This requires that the subsample method has been called beforehand.
@@ -124,6 +124,7 @@ class RelationLossComputation(object):
         if self.weight == 'batchweight':
 
             obj_weight, obj_margin = self.obj_weight(refine_obj_logits,
+                                                     obj_freq_bias,
                                                      fg_labels,
                                                      self.gamma)
 
