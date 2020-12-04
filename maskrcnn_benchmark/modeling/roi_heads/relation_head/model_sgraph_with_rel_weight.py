@@ -169,12 +169,14 @@ class RelWeight(nn.Module):
             target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
 
             l_type = 'target'
+            bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
+            fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
             if l_type is 'target_mask' :
-                target_mask[bg_idx, :] = len(fg_idx) / (len(fg_idx) + len(bg_idx))
-                target_mask[fg_idx, :] = len(bg_idx) / (len(fg_idx) + len(bg_idx))
+                target_mask[bg_idx, :] = bg_w * target_mask[bg_idx, :]
+                target_mask[fg_idx, :] = fg_w * target_mask[fg_idx, :]
             elif l_type is 'target':
-                target[bg_idx, :] = len(fg_idx) / (len(fg_idx) + len(bg_idx))
-                target[fg_idx, :] = len(bg_idx) / (len(fg_idx) + len(bg_idx))
+                target[bg_idx, :] = bg_w * target[bg_idx,:]
+                target[fg_idx, :] = fg_w * target[fg_idx,:]
             elif l_type is 'none':
                 None
 
