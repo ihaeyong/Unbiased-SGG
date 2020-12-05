@@ -104,7 +104,7 @@ class ObjWeight(nn.Module):
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
         if skew_v > 1.0 :
-            beta = 1.0 - ent_v * 0.8
+            beta = 1.0 - ent_v * 1.0
         else:
             beta = 0.0
 
@@ -167,13 +167,15 @@ class RelWeight(nn.Module):
 
             target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
 
-            l_type = 'none'
+            l_type = 'target'
+            w_bg = len(fg_idx) / (len(fg_idx) + len(bg_idx))
+            w_fg = len(bg_idx) / (len(fg_idx) + len(bg_idx))
             if l_type is 'target_mask' :
-                target_mask[bg_idx, :] = len(fg_idx) / (len(fg_idx) + len(bg_idx))
-                target_mask[fg_idx, :] = len(bg_idx) / (len(fg_idx) + len(bg_idx))
+                target_mask[bg_idx, :] = w_bg * target_mask[bg_idx, :]
+                target_mask[fg_idx, :] = w_fg * target_mask[fg_idx, :]
             elif l_type is 'target':
-                target[bg_idx, :] = len(fg_idx) / (len(fg_idx) + len(bg_idx))
-                target[fg_idx, :] = len(bg_idx) / (len(fg_idx) + len(bg_idx))
+                target[bg_idx, :] = w_bg * target[bg_idx, :]
+                target[fg_idx, :] = w_fg * target[fg_idx, :]
             elif l_type is 'none':
                 None
 
