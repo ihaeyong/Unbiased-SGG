@@ -19,14 +19,15 @@ class RelationLossComputation(object):
     """
 
     def __init__(
-        self,
-        attri_on,
-        num_attri_cat,
-        max_num_attri,
-        attribute_sampling,
-        attribute_bgfg_ratio,
-        use_label_smoothing,
-        predicate_proportion,
+            self,
+            attri_on,
+            num_attri_cat,
+            max_num_attri,
+            attribute_sampling,
+            attribute_bgfg_ratio,
+            use_label_smoothing,
+            predicate_proportion,
+            mode,
     ):
         """
         Arguments:
@@ -43,11 +44,14 @@ class RelationLossComputation(object):
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
 
         self.l_type = 'margin'
-        self.gamma = 0.021
+        self.mode = mode
+
+        self.gamma = 0.17
 
         self.weight = 'batchweight' #'batchweight'
         if self.weight == 'batchweight':
-            self.obj_weight = ObjWeight(temp=1e0)
+            if self.mode is not 'predcls':
+                self.obj_weight = ObjWeight(temp=1e0)
             self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
 
         if self.use_label_smoothing:
@@ -121,7 +125,7 @@ class RelationLossComputation(object):
             loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
 
 
-        if self.weight == 'batchweight':
+        if self.weight == 'batchweight' and self.mode is not 'predcls':
 
             obj_weight, obj_margin = self.obj_weight(refine_obj_logits,
                                                      fg_labels,
@@ -233,6 +237,15 @@ class FocalLoss(nn.Module):
 
 def make_roi_relation_loss_evaluator(cfg):
 
+    # mode
+    if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
+        if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL:
+            mode = 'predcls'
+        else:
+            mode = 'sgcls'
+    else:
+        mode = 'sgdet'
+
     loss_evaluator = RelationLossComputation(
         cfg.MODEL.ATTRIBUTE_ON,
         cfg.MODEL.ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES,
@@ -241,6 +254,7 @@ def make_roi_relation_loss_evaluator(cfg):
         cfg.MODEL.ROI_ATTRIBUTE_HEAD.ATTRIBUTE_BGFG_RATIO,
         cfg.MODEL.ROI_RELATION_HEAD.LABEL_SMOOTHING_LOSS,
         cfg.MODEL.ROI_RELATION_HEAD.REL_PROP,
+        mode,
     )
 
     return loss_evaluator
