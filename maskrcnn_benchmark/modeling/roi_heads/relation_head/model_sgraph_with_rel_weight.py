@@ -182,7 +182,7 @@ class RelWeight(nn.Module):
 
             rel_margin = torch.matmul(target, rel_logits.detach())
 
-            r_type = 'diff'
+            r_type = 'pos_diff'
             if r_type is 'sigmoid':
                 rel_margin = 1/torch.sigmoid(rel_margin) * target_mask * gamma
             elif r_type is 'inverse':
@@ -193,6 +193,13 @@ class RelWeight(nn.Module):
                 # mean - logits
                 rel_diff = rel_margin - rel_mask_logits
                 rel_diff_mask = (rel_diff < 0).float()
+                rel_margin = rel_margin * rel_diff_mask * gamma
+            elif r_type is 'pos_diff' :
+                rel_mask_logits = rel_logits.detach() * target_mask
+                rel_margin = rel_margin * target_mask
+                # mean - logits
+                rel_diff = rel_margin - rel_mask_logits
+                rel_diff_mask = (rel_diff > 0).float()
                 rel_margin = rel_margin * rel_diff_mask * gamma
 
 
