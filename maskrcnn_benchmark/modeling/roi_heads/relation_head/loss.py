@@ -45,7 +45,7 @@ class RelationLossComputation(object):
 
         self.mode = mode
         self.l_type = 'margin'
-        self.gamma = 0.3
+        self.gamma = 0.02
 
         self.weight = 'batchweight' #'batchweight'
         if self.weight == 'batchweight':
