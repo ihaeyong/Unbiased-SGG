@@ -164,11 +164,14 @@ class RelWeight(nn.Module):
             bg_idx = np.where(rel_labels.cpu() == 0)[0]
 
             target = (rel_labels == torch.transpose(rel_labels[None,:], 0, 1)).float()
-            target = target / torch.sum(target, dim=1, keepdim=True).float()
+            if False:
+                target = target / torch.sum(target, dim=1, keepdim=True).float()
+            else:
+                target = target / torch.sum(target, dim=0, keepdim=True).float()
 
             target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
 
-            l_type = 'target'
+            l_type = 'none'
             bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
             fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
             if l_type is 'target_mask' :
@@ -180,35 +183,34 @@ class RelWeight(nn.Module):
             elif l_type is 'none':
                 None
 
-            rel_margin = torch.matmul(target, rel_logits.detach())
+            rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
+            rel_mask_logits = rel_logits.detach() * target_mask
 
-            r_type = 'delta_pos_diff'
+            r_type = 'mask_pos_diff'
             if r_type is 'sigmoid':
                 rel_margin = 1/torch.sigmoid(rel_margin) * target_mask * gamma
             elif r_type is 'inverse':
                 rel_margin = 1/(torch.abs(rel_margin)+1) * target_mask * gamma
             elif r_type is 'diff' :
-                rel_mask_logits = rel_logits.detach() * target_mask
-                rel_margin = rel_margin * target_mask
                 # mean - logits
                 rel_diff = rel_margin - rel_mask_logits
                 rel_diff_mask = (rel_diff < 0).float()
                 rel_margin = rel_margin * rel_diff_mask * gamma
             elif r_type is 'pos_diff' :
-                rel_mask_logits = rel_logits.detach() * target_mask
-                rel_margin = rel_margin * target_mask
                 # mean - logits
                 rel_diff = rel_margin - rel_mask_logits
                 rel_diff_mask = (rel_diff > 0).float()
                 rel_margin = rel_margin * rel_diff_mask * gamma
             elif r_type is 'delta_pos_diff' :
-                rel_mask_logits = rel_logits.detach() * target_mask
-                rel_margin = rel_margin * target_mask
                 # mean - logits
                 rel_diff = rel_margin - rel_mask_logits
                 rel_diff_mask = (rel_diff > 0).float()
                 rel_margin = rel_diff * rel_diff_mask * gamma
-
+            elif r_type is 'mask_pos_diff' :
+                # mean - logits
+                rel_diff = rel_margin - rel_mask_logits
+                rel_diff = torch.max(rel_diff, torch.zeros_like(rel_diff))
+                rel_margin = rel_diff *target_mask * gamma
 
         # Entropy * scale
         cls_order = batch_freq[self.pred_idx]
