@@ -164,7 +164,7 @@ class RelWeight(nn.Module):
             bg_idx = np.where(rel_labels.cpu() == 0)[0]
 
             target = (rel_labels == torch.transpose(rel_labels[None,:], 0, 1)).float()
-            if False:
+            if True:
                 target = target / torch.sum(target, dim=1, keepdim=True).float()
             else:
                 target = target / torch.sum(target, dim=0, keepdim=True).float()
@@ -186,7 +186,7 @@ class RelWeight(nn.Module):
             rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
             rel_mask_logits = rel_logits.detach() * target_mask
 
-            r_type = 'mask_pos_diff'
+            r_type = 'mask_hinge'
             if r_type is 'sigmoid':
                 rel_margin = 1/torch.sigmoid(rel_margin) * target_mask * gamma
             elif r_type is 'inverse':
@@ -210,6 +210,12 @@ class RelWeight(nn.Module):
                 # mean - logits
                 rel_diff = rel_margin - rel_mask_logits
                 rel_diff = torch.max(rel_diff, torch.zeros_like(rel_diff))
+                rel_margin = rel_diff *target_mask * gamma
+
+            elif r_type is 'mask_hinge' :
+                # mean - logits
+                rel_diff = rel_margin - rel_mask_logits
+                rel_diff = torch.max(rel_diff, torch.ones_like(rel_diff) * -0.01)
                 rel_margin = rel_diff *target_mask * gamma
 
         # Entropy * scale
