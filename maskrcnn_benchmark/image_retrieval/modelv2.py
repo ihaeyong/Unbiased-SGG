@@ -32,6 +32,10 @@ from maskrcnn_benchmark.utils.miscellaneous import mkdir, save_config
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
 from maskrcnn_benchmark.layers import smooth_l1_loss
 
+from maskrcnn_benchmark.utils.checkpoint import layer_init, seq_init
+
+from .utils_image import img_obj_vectors, img_rel_vectors, txt_obj_vectors,txt_rel_vectors
+
 class FCNet(nn.Module):
     def __init__(self, in_size, out_size, activate=None, drop=0.0):
         super(FCNet, self).__init__()
@@ -65,17 +69,18 @@ class ApplyAttention(nn.Module):
             layers.append(ApplySingleAttention(v_features, q_features, mid_features, drop))
         self.glimpse_layers = nn.ModuleList(layers)
 
-    def forward(self, v, q, atten):
+    def forward(self, v_, q_, atten):
         """
-        v = batch, num_obj, dim
-        q = batch, que_len, dim
+        v_ = batch, num_obj, dim
+        q_ = batch, que_len, dim
         atten:  batch x glimpses x v_num x q_num
         """
         for g in range(self.glimpses):
-            atten_h = self.glimpse_layers[g](v, q, atten)
-            q = q + atten_h
-        #q = q * q_mask.unsqueeze(2)
-        return q.sum(1)
+            atten_h = self.glimpse_layers[g](v_, q_, atten)
+            # element-wise addition
+            q_ = q_ + atten_h # (10)
+        #q_ = q_ * q_mask.unsqueeze(2)
+        return q_.sum(1) # (11)
 
 class ApplySingleAttention(nn.Module):
     def __init__(self, v_features, q_features, mid_features, drop=0.0):
@@ -84,23 +89,36 @@ class ApplySingleAttention(nn.Module):
         self.lin_q = FCNet(q_features, mid_features, activate='relu', drop=drop)
         self.lin_atten = FCNet(mid_features, mid_features, drop=drop)
 
-    def forward(self, v, q, atten):
+    def forward(self, v_, q_, atten):
         """
-        v = batch, num_obj, dim
-        q = batch, que_len, dim
-        atten:  batch x v_num x q_num
+        v = batch, num_obj, dim [b, 2, 1536]
+        q = batch, que_len, dim [b, 23, 512]
+        atten:  batch x v_num x q_num [b, 23, 2]
         """
-
         # apply single glimpse attention
-        v_ = self.lin_v(v).transpose(1,2).unsqueeze(2) # batch, dim, 1, num_obj
-        q_ = self.lin_q(q).transpose(1,2).unsqueeze(3) # batch, dim, que_len, 1
-        v_ = torch.matmul(v_, atten.unsqueeze(1)) # batch, dim, 1, que_len
-        h_ = torch.matmul(v_, q_) # batch, dim, 1, 1
-        h_ = h_.squeeze(3).squeeze(2) # batch, dim
+        a_type = 'obj'
+        if a_type is 'obj':
+            v_ = self.lin_v(v_).transpose(1,2).unsqueeze(2) # b, 512, 1, 7
+            q_ = self.lin_q(q_).transpose(1,2).unsqueeze(3) # b, 512, 14, 1
 
-        atten_h = self.lin_atten(h_.unsqueeze(1))
+            atten = atten.squeeze(1) # atten : [1,7,14] (6)
+            v_ = torch.matmul(v_, atten) # batch, dim, 1, que_len [b, 512, 1, 14]
+            h_ = torch.matmul(v_, q_) # batch, dim, 1, 1
+            h_ = h_.squeeze(3).squeeze(2) # batch, dim
 
-        return atten_h
+            atten_h = self.lin_atten(h_)
+        elif a_type is 'rel':
+            v_ = self.lin_v(v_).transpose(1,2).unsqueeze(3) # [b,512,4,1]  (5)
+            q_ = self.lin_q(q_).transpose(1,2).unsqueeze(2) # [b,512,1,10] (4)
+
+            atten = atten.squeeze(1).transpose(1,2) # atten : [1,23,2] (6)
+            q_ = torch.matmul(q_, atten) # [b,512,1,2] (4),(6) --> (7)
+            h_ = torch.matmul(q_, v_) # [b,512,1,1] (7),(5) --> (8)
+            h_ = h_.squeeze(3).squeeze(2) # [b, 512] (8) --> (9)
+
+            atten_h = self.lin_atten(h_)
+
+        return atten_h.unsqueeze(1)
 
 
 class SGEncode(nn.Module):
@@ -116,14 +134,85 @@ class SGEncode(nn.Module):
         self.txt_num_obj = txt_num_obj
         self.txt_num_rel = txt_num_rel
 
+        self.GLOVE_DIR = './datasets/glove'
+
+        if False:
+            img_obj_embed_vecs = img_obj_vectors(self.img_num_obj,
+                                                 wv_dir=self.GLOVE_DIR,
+                                                 wv_dim=self.embed_dim)
+
+            img_rel_embed_vecs = img_rel_vectors(self.img_num_rel,
+                                                 wv_dir=self.GLOVE_DIR,
+                                                 wv_dim=self.embed_dim)
+
+            txt_obj_embed_vecs = txt_obj_vectors(self.txt_num_obj,
+                                                 wv_dir=self.GLOVE_DIR,
+                                                 wv_dim=self.embed_dim)
+
+            txt_rel_embed_vecs = txt_rel_vectors(self.txt_num_rel,
+                                                 wv_dir=self.GLOVE_DIR,
+                                                 wv_dim=self.embed_dim)
+
         self.img_obj_embed = nn.Embedding(self.img_num_obj, self.embed_dim)
         self.img_rel_head_embed = nn.Embedding(self.img_num_obj, self.embed_dim)
         self.img_rel_tail_embed = nn.Embedding(self.img_num_obj, self.embed_dim)
         self.img_rel_pred_embed = nn.Embedding(self.img_num_rel, self.embed_dim)
+
+        init = 'norm'
+        gain = 1.0
+
+        if init is 'uniform':
+            nn.init.uniform_(self.img_obj_embed.weight, -gain, gain)
+            nn.init.uniform_(self.img_rel_head_embed.weight, -gain, gain)
+            nn.init.uniform_(self.img_rel_tail_embed.weight, -gain, gain)
+            nn.init.uniform_(self.img_rel_pred_embed.weight, -gain, gain)
+
+        elif init is 'norm':
+            norm_img_obj_embed = F.normalize(
+                self.img_obj_embed.weight.data, p=2, dim=1)
+            norm_img_rel_head_embed = F.normalize(
+                self.img_rel_head_embed.weight.data, p=2, dim=1)
+            norm_img_rel_tail_embed = F.normalize(
+                self.img_rel_tail_embed.weight.data, p=2, dim=1)
+            norm_img_rel_pred_embed = F.normalize(
+                self.img_rel_pred_embed.weight.data, p=2, dim=1)
+
+            self.img_obj_embed.weight.data = norm_img_obj_embed
+            self.img_rel_head_embed.weight.data = norm_img_rel_head_embed
+            self.img_rel_tail_embed.weight.data = norm_img_rel_tail_embed
+            self.img_rel_pred_embed.weight.data = norm_img_rel_pred_embed
+
+        elif init is 'none':
+            None
+
         self.txt_obj_embed = nn.Embedding(self.txt_num_obj, self.embed_dim)
         self.txt_rel_head_embed = nn.Embedding(self.txt_num_obj, self.embed_dim)
         self.txt_rel_tail_embed = nn.Embedding(self.txt_num_obj, self.embed_dim)
         self.txt_rel_pred_embed = nn.Embedding(self.txt_num_rel, self.embed_dim)
+
+        if init is 'uniform':
+            nn.init.uniform_(self.txt_obj_embed.weight, -gain, gain)
+            nn.init.uniform_(self.txt_rel_head_embed.weight, -gain, gain)
+            nn.init.uniform_(self.txt_rel_tail_embed.weight, -gain, gain)
+            nn.init.uniform_(self.txt_rel_pred_embed.weight, -gain, gain)
+
+        elif init is 'norm':
+            norm_txt_obj_embed = F.normalize(
+                self.txt_obj_embed.weight.data, p=2, dim=1)
+            norm_txt_rel_head_embed = F.normalize(
+                self.txt_rel_head_embed.weight.data, p=2, dim=1)
+            norm_txt_rel_tail_embed = F.normalize(
+                self.txt_rel_tail_embed.weight.data, p=2, dim=1)
+            norm_txt_rel_pred_embed = F.normalize(
+                self.txt_rel_pred_embed.weight.data, p=2, dim=1)
+
+            self.txt_obj_embed.weight.data = norm_txt_obj_embed
+            self.txt_rel_head_embed.weight.data = norm_txt_rel_head_embed
+            self.txt_rel_tail_embed.weight.data = norm_txt_rel_tail_embed
+            self.txt_rel_pred_embed.weight.data = norm_txt_rel_pred_embed
+
+        elif init is 'none':
+            None
 
         self.apply_attention = ApplyAttention(
             v_features=self.embed_dim*3,
@@ -132,17 +221,20 @@ class SGEncode(nn.Module):
             glimpses=self.num_layer,
             drop=0.2,)
 
-        self.final_fc = nn.Sequential(*[nn.Linear(self.hidden_dim, self.hidden_dim), 
-                                            nn.ReLU(inplace=True),
-                                            nn.Linear(self.hidden_dim, self.final_dim),
-                                            nn.ReLU(inplace=True)
-                                        ])
+        self.final_fc = nn.Sequential(*[nn.Linear(self.hidden_dim, self.hidden_dim),
+                                        nn.ReLU(inplace=True),
+                                        nn.Linear(self.hidden_dim, self.final_dim),
+                                        nn.ReLU(inplace=True)
+        ])
+
+        self.final_fc.apply(seq_init)
 
     def encode(self, inp_dict, is_img=False, is_txt=False):
         assert is_img + is_txt
         if len(inp_dict['relations'].shape) == 1:
             inp_dict['relations'] = torch.zeros(1,3).to(inp_dict['entities'].device).long()
-            inp_dict['graph'] = torch.zeros(len(inp_dict['entities']), 1).to(inp_dict['entities'].device).float()
+            #inp_dict['graph'] = torch.zeros(
+            #    len(inp_dict['entities']), 1).to(inp_dict['entities'].device).float()
 
         if is_img:
             obj_encode = self.img_obj_embed(inp_dict['entities'])
@@ -159,10 +251,16 @@ class SGEncode(nn.Module):
 
         rel_encode = torch.cat((rel_head_encode, rel_tail_encode, rel_pred_encode), dim=-1)
 
-        atten = inp_dict['graph'].transpose(0, 1)  # num_rel, num_obj
-        atten = atten / (atten.sum(0).view(1, -1) + 1e-9)
-
-        sg_encode = self.apply_attention(rel_encode.unsqueeze(0), obj_encode.unsqueeze(0), atten.unsqueeze(0))
+        #atten = inp_dict['graph'].transpose(0, 1)  # num_rel, num_obj
+        #atten = atten / (atten.sum(0).view(1, -1) + 1e-9)
+        atten = inp_dict['graph'].transpose(1, 2)  # num_rel, num_obj
+        atten = atten / (atten.sum(1).view(1, -1) + 1e-9)
+        # rel_encode : [b, 2, 1536]
+        # obj_encode : [b, 23, 512]
+        # atten : [b, 23, 1, 2]
+        sg_encode = self.apply_attention(rel_encode.unsqueeze(0),
+                                         obj_encode.unsqueeze(0),
+                                         atten.unsqueeze(0))
 
         return self.final_fc(sg_encode).sum(0).view(1, -1)
 

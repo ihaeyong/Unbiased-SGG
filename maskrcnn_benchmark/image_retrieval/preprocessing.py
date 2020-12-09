@@ -34,7 +34,7 @@ from maskrcnn_benchmark.utils.logger import setup_logger, debug_print
 from maskrcnn_benchmark.utils.miscellaneous import mkdir, save_config
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
 
-test = True
+test = False
 
 if test:
     # where to load detected scene graph
@@ -45,7 +45,7 @@ else:
     # where to load detected scene graph
     detected_path = './checkpoints/obj_spectrum_gcn_sum_v7_0.7-predcls/inference/VG_stanford_filtered_with_attribute_train/'
     # where to save the generated annotation
-    output_path = './datasets/image_retrieval/sg_of_obj_spectrum_gcn_sum_v7_0.7-predcls-train.json'
+    output_path = './datasets/image_retrieval/sg_of_obj_spectrum_gcn_sum_v3_0.7-sgdet-train.json'
 
 cap_graph = json.load(open('./datasets/vg_capgraphs_anno.json'))
 vg_data = h5py.File('./datasets/vg/VG-SGG-with-attri.h5', 'r')
@@ -172,17 +172,64 @@ def generate_txt_img_sg(img_sg, txt_sg):
             txt = txt_sg[coco_id]
             encode_img = {'entities':[], 'relations':[]}
             encode_txt = {'entities':[], 'relations':[]}
+            image_graph = []
+
             for item in img:
                 entities = [sgg_obj2id[e] for e in item['entities']]
                 relations = [[entities[r[0]], entities[r[1]], sgg_rel2id[r[2]]] for r in item['relations']]
                 encode_img['entities'] = encode_img['entities'] + entities
                 encode_img['relations'] = encode_img['relations'] + relations
+
             for item in txt:
                 entities = [txt_obj2id[e] for e in item['entities']]
                 relations = [[entities[r[0]], entities[r[1]], txt_rel2id[r[2]]] for r in item['relations']]
                 encode_txt['entities'] = encode_txt['entities'] + entities
                 encode_txt['relations'] = encode_txt['relations'] + relations
-            txt_img_sg[coco_id] = {'img':encode_img, 'txt':encode_txt}
+
+
+            # === for image_graph ====
+            entities = encode_img['entities']
+            relations = encode_img['relations']
+            if len(relations) == 0:
+                img_graph = np.zeros((len(entities), 1))
+            else:
+                img_graph = np.zeros((len(entities), len(relations)))
+
+            image_graph = []
+            for i, es in enumerate(entities):
+                for j, rs in enumerate(relations):
+                    if es in rs:
+                        img_graph[i,j] = 1
+                    else:
+                        img_graph[i,j] = 0
+
+            image_graph.append(img_graph.tolist())
+
+            # === for text_graph ====
+            entities = encode_txt['entities']
+            relations = encode_txt['relations']
+            if len(relations) == 0:
+                txt_graph = np.zeros((len(entities), 1))
+            else:
+                txt_graph = np.zeros((len(entities), len(relations)))
+
+            text_graph = []
+            for i, es in enumerate(entities):
+                for j, rs in enumerate(relations):
+                    if es in rs:
+                        txt_graph[i,j] = 1
+                    else:
+                        txt_graph[i,j] = 0
+
+            text_graph.append(txt_graph.tolist())
+
+            #txt_img_sg[coco_id] = {'img':encode_img, 'txt':encode_txt}
+            txt_img_sg[coco_id] = {
+                'img':encode_img,
+                'image_graph':image_graph,
+                'txt':encode_txt,
+                'text_graph':text_graph}
+
     return txt_img_sg
 
 

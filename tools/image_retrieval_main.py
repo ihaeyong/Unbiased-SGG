@@ -36,6 +36,8 @@ from maskrcnn_benchmark.utils.logger import setup_logger, debug_print
 from maskrcnn_benchmark.utils.miscellaneous import mkdir, save_config
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
 
+from tensorboardX import SummaryWriter
+
 # See if we can use apex.DistributedDataParallel instead of the torch default,
 # and enable mixed-precision via apex.amp
 try:
@@ -43,15 +45,23 @@ try:
 except ImportError:
     raise ImportError('Use APEX for multi-precision via apex.amp')
 
-sg_model_name = 'obj_spectrum_gcn_sum_v7_0.7-predcls'
+sg_model_name = 'obj_spectrum_gcn_sum_v3_0.7-sgdet'
 sg_fusion_name = 'sum'
 sg_type_name = 'none'
 
-sg_train_path = './datasets/image_retrieval/sg_of_{}-train.json'.format(
-    sg_model_name)
-sg_test_path = './datasets/image_retrieval/sg_of_{}-test.json'.format(
-    sg_model_name)
-output_path = './datasets/image_retrieval_model/sg_of_' + sg_model_name + '_output_%s_%d.pytorch'
+if True:
+    sg_train_path = './datasets/image_retrieval/sg_of_{}-train.json'.format(
+        sg_model_name)
+    sg_test_path = './datasets/image_retrieval/sg_of_{}-test.json'.format(
+        sg_model_name)
+    output_path = './datasets/image_retrieval_model/sg_of_' + sg_model_name + '_output_%s_%d.pytorch'
+else:
+    sg_train_path = './datasets/image_retrieval/sg_of_{}-train.json'.format(
+        sg_model_name)
+    sg_test_path = './datasets/image_retrieval/sg_of_{}-test.json'.format(
+        sg_model_name)
+    output_path = './datasets/image_retrieval_model/sg_of_' + sg_model_name + '_output_%s_%d.pytorch'
+
 
 #sg_train_path = '/data1/image_retrieval/causal_sgdet_rubi_TDE_train.json'
 #sg_test_path = '/data1/image_retrieval/causal_sgdet_rubi_TDE_test.json'
@@ -77,10 +87,14 @@ else:
     train_ids = list(sg_data_train.keys())
     test_ids = list(sg_data_test.keys())
 
-def train(cfg, local_rank, distributed, logger):
+
+def train(cfg, local_rank, distributed, logger, writer):
     model = SGEncode()
     device = torch.device(cfg.MODEL.DEVICE)
     model.to(device)
+
+    arguments = {}
+    arguments["iteration"] = 0
 
     num_gpus = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
     num_batch = cfg.SOLVER.IMS_PER_BATCH
@@ -93,6 +107,19 @@ def train(cfg, local_rank, distributed, logger):
     amp_opt_level = 'O1' if use_mixed_precision else 'O0'
     model, optimizer = amp.initialize(model, optimizer, opt_level=amp_opt_level)
 
+    output_dir = cfg.OUTPUT_DIR
+    save_to_disk = get_rank() == 0
+    checkpointer = DetectronCheckpointer(
+        cfg, model, optimizer, scheduler, output_dir, save_to_disk, custom_scheduler=True
+    )
+    # if there is certain checkpoint in output_dir, load it, else load pretrained detector
+    if checkpointer.has_checkpoint():
+        extra_checkpoint_data = checkpointer.load(
+            cfg.MODEL.PRETRAINED_DETECTOR_CKPT,
+            update_schedule=cfg.SOLVER.UPDATE_SCHEDULE_DURING_LOAD)
+        arguments.update(extra_checkpoint_data)
+    debug_print(logger, 'end load checkpointer')
+
     if distributed:
         model = torch.nn.parallel.DistributedDataParallel(
             model, device_ids=[local_rank], output_device=local_rank,
@@ -103,11 +130,14 @@ def train(cfg, local_rank, distributed, logger):
     debug_print(logger, 'end distributed')
 
     train_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data,
-                                   test_on=False, val_on=False, num_test=5000, num_val=1000)
+                                   test_on=False, val_on=False, num_test=5000,
+                                   num_val=1000)
     val_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data,
-                                 test_on=False, val_on=True, num_test=5000, num_val=1000)
+                                 test_on=False, val_on=True, num_test=5000,
+                                 num_val=1000)
     test_data_loader = get_loader(cfg, train_ids, test_ids, sg_data=sg_data,
-                                  test_on=True, val_on=False, num_test=5000, num_val=1000)
+                                  test_on=True, val_on=False, num_test=5000,
+                                  num_val=1000)
 
     debug_print(logger, 'end dataloader')
     checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
@@ -116,22 +146,31 @@ def train(cfg, local_rank, distributed, logger):
         checkpoint = torch.load(cfg.MODEL.PRETRAINED_DETECTOR_CKPT, map_location=torch.device("cpu"))
         model.load_state_dict(checkpoint)
 
-    if cfg.SOLVER.PRE_VAL:
+    if cfg.SOLVER.PRE_VAL and True:
         logger.info("Validate before training")
-        run_val(cfg, model, val_data_loader, distributed, logger)
+        val_result = run_test(cfg, model, val_data_loader, distributed, logger)
+        val_similarity, result = evaluator(logger, val_result)
+        for key in result:
+            writer.add_scalar('val/{}'.format(key), result[key], arguments['iteration'])
 
     logger.info("Start training")
     max_iter = len(train_data_loader)
     start_training_time = time.time()
     end = time.time()
 
-    test_result = run_test(cfg, model, test_data_loader, distributed, logger)
-    evaluator(logger, test_result)
-    torch.save(test_result, output_path % ('test', 0))
+    if True:
+        test_result = run_test(cfg, model, test_data_loader, distributed, logger)
+        test_similarity, result = evaluator(logger, test_result)
+        torch.save(test_result, output_path % ('test', 0))
+
+        for key in result:
+            writer.add_scalar('test/{}'.format(key), result[key], arguments['iteration'])
 
     print_first_grad = True
     for epoch in range(cfg.SOLVER.MAX_ITER):
         epoch_loss = []
+        arguments["iteration"] = epoch
+
         for iteration, (fg_imgs, fg_txts, bg_imgs, bg_txts) in enumerate(train_data_loader):
             data_time = time.time() - end
             iteration = iteration + 1
@@ -153,48 +192,101 @@ def train(cfg, local_rank, distributed, logger):
 
             loss_list = model(fg_imgs, fg_txts, bg_imgs, bg_txts)
 
-            losses = sum(loss_list) / (len(loss_list) + 1e-9)
+            losses = torch.stack(loss_list)
+            isnan = torch.isnan(losses)
+            losses[isnan] = 0
+            losses = losses.mean()
+            #losses = losses.sum() / (len(loss_list) + 1e-9)
             epoch_loss.append(float(losses))
 
             optimizer.zero_grad()
+            # L1 Reg
+            #L1_reg = torch.tensor(0., requires_grad=True)
+            L1_reg = 0
+            for name, param in model.named_parameters():
+                if 'weight' in name:
+                    L1_reg = L1_reg + torch.norm(param, 2)
+
+            losses = losses + 1e-7 * L1_reg
+
             # Note: If mixed precision is not used, this ends up doing nothing
             # Otherwise apply loss scaling for mixed-precision recipe
             with amp.scale_loss(losses, optimizer) as scaled_losses:
                 scaled_losses.backward()
 
             # add clip_grad_norm from MOTIFS, used for debug
-            #verbose = (iteration % cfg.SOLVER.PRINT_GRAD_FREQ) == 0 or print_first_grad # print grad or not
-            #print_first_grad = False
-            #clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.requires_grad],
-            #max_norm=cfg.SOLVER.GRAD_NORM_CLIP, logger=logger, verbose=verbose, clip=True)
+            verbose = (iteration % cfg.SOLVER.PRINT_GRAD_FREQ) == 0
+            if True:
+                clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.requires_grad],
+                               max_norm=cfg.SOLVER.GRAD_NORM_CLIP, logger=logger,
+                               verbose=verbose, clip=True)
 
             optimizer.step()
 
             batch_time = time.time() - end
             end = time.time()
 
+            if verbose:
+                logger.info(
+                    "epoch: {epoch}: iter:{tr_len:}/{iter:} loss: {loss:.6f} lr: {lr:.6f}".format(
+                        epoch=epoch,
+                        tr_len=len(train_data_loader),
+                        iter=iteration,
+                        loss=float(losses),
+                        lr=optimizer.param_groups[-1]["lr"]))
+
+                writer.add_scalar('train/lr',optimizer.param_groups[-1]["lr"],iteration)
+                writer.add_scalar('train/loss', float(losses), iteration)
+
         logger.info("epoch: {epoch} loss: {loss:.6f} lr: {lr:.6f}".format(
             epoch=epoch, loss=float(sum(epoch_loss) / len(epoch_loss)), lr=optimizer.param_groups[-1]["lr"]))
 
         if epoch % checkpoint_period == 0:
-            torch.save(model.state_dict(), os.path.join(cfg.OUTPUT_DIR, "model_{}.pytorch".format(str(epoch))))
+            #torch.save(model.state_dict(),
+            #           os.path.join(cfg.OUTPUT_DIR,"model_{}.pytorch".format(str(epoch))))
+            checkpointer.save("model_{:03d}".format(epoch), **arguments)
+
         if epoch == max_iter:
-            torch.save(model.state_dict(), os.path.join(cfg.OUTPUT_DIR, "model_final.pytorch"))
+            #torch.save(model.state_dict(),
+            #           os.path.join(cfg.OUTPUT_DIR, "model_final.pytorch"))
+            checkpointer.save("model_final", **arguments)
 
         val_result = None # used for scheduler updating
         if cfg.SOLVER.TO_VAL and epoch % cfg.SOLVER.VAL_PERIOD == 0:
             logger.info("Start testing")
             test_result = run_test(cfg, model, test_data_loader, distributed, logger)
-            test_similarity = evaluator(logger, test_result)
+            test_similarity, result = evaluator(logger, test_result)
             torch.save({'result' : test_result, 'similarity' : test_similarity}, output_path % ('test', epoch))
+
+            for key in result:
+                writer.add_scalar('test/{}'.format(key), result[key], iteration)
+
             logger.info("Start validating")
-            val_result = run_test(cfg, model, val_data_loader, distributed, logger)
-            val_similarity = evaluator(logger, val_result)
-            torch.save({'result' : val_result, 'similarity' : val_similarity}, output_path % ('val', epoch))
+
+            if False:
+                val_result = run_val(cfg, model, val_data_loader, distributed, logger)
+            else:
+                val_result = run_test(cfg, model, val_data_loader, distributed, logger)
+                val_similarity, result = evaluator(logger, val_result)
+                torch.save({'result' : val_result, 'similarity' : val_similarity},
+                           output_path % ('val', epoch))
+                R100 = result['R100']
+
+                for key in result:
+                    writer.add_scalar('val/{}'.format(key), result[key], iteration)
 
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
-        assert cfg.SOLVER.SCHEDULE.TYPE != "WarmupReduceLROnPlateau"
-        scheduler.step()
+        #assert cfg.SOLVER.SCHEDULE.TYPE != "WarmupReduceLROnPlateau"
+        #scheduler.step()
+        # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+        if cfg.SOLVER.SCHEDULE.TYPE == "WarmupReduceLROnPlateau":
+            scheduler.step(R100, iteration)
+            if scheduler.stage_count >= cfg.SOLVER.SCHEDULE.MAX_DECAY_STEP:
+                logger.info("Trigger MAX_DECAY_STEP at iteration {}.".format(iteration))
+                break
+        else:
+            None
+            scheduler.step()
 
     total_training_time = time.time() - start_training_time
     total_time_str = str(datetime.timedelta(seconds=total_training_time))
@@ -215,6 +307,7 @@ def run_val(cfg, model, val_data_loader, distributed, logger):
 
     val_result = []
     logger.info('START VALIDATION with size: ' + str(len(val_data_loader)))
+
     for iteration, (fg_imgs, fg_txts, bg_imgs, bg_txts) in enumerate(tqdm(val_data_loader)):
         for fg_img, fg_txt, bg_img, bg_txt in zip(fg_imgs, fg_txts, bg_imgs, bg_txts):
             fg_img['entities'] = fg_img['entities'].to(device)
@@ -319,6 +412,12 @@ def main():
     if output_dir:
         mkdir(output_dir)
 
+    logs_dir = './logs/' + output_dir.split('/')[2]
+    if logs_dir:
+        mkdir(logs_dir)
+
+    writer = SummaryWriter(logs_dir)
+
     logger = setup_logger("image_retrieval_using_sg", output_dir, get_rank())
     logger.info("Using {} GPUs".format(num_gpus))
     logger.info(args)
@@ -337,8 +436,9 @@ def main():
     # save overloaded model config in the output directory
     save_config(cfg, output_config_path)
 
-    model, test_result = train(cfg, args.local_rank, args.distributed, logger)
+    model, test_result = train(cfg, args.local_rank, args.distributed, logger, writer)
     evaluator(logger, test_result)
+    print(output_config_path)
 
 if __name__ == "__main__":
     main()

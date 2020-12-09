@@ -35,7 +35,7 @@ def evaluator(logger, input_lists):
     cat_data = []
     for item in input_lists:
         cat_data.append(item[0])
-    # shape [num_image, 2, hidden_dim]
+    # shape [num_image, 2, hidden_dim] : [5000, 2, 1024]
     cat_data = torch.cat(cat_data, dim=0).squeeze(2)
 
     similarity = cat_data[:, 0, :] @ (cat_data[:, 1, :].transpose(0,1))   # img to txt
@@ -45,7 +45,9 @@ def evaluator(logger, input_lists):
 
     num_sample = pred_rank.shape[0]
     thres = [1, 5, 10, 20, 50, 100]
+    result = {}
     for k in thres:
         logger.info('Recall @ %d: %.4f; ' % (k, float((pred_rank<k).sum()) / num_sample))
+        result['R{}'.format(str(k))] = float((pred_rank<k).sum()) / num_sample
 
-    return similarity
+    return similarity, result

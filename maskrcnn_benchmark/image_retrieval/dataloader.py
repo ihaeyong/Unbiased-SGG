@@ -69,9 +69,11 @@ class SGEncoding(data.Dataset):
 
     def _generate_tensor_by_idx(self, idx):
         img = self._to_tensor(self.img_txt_sg[self.key_list[idx]]['img'])
-        img_graph = torch.FloatTensor(self.img_txt_sg[self.key_list[idx]]['image_graph'])
+        img_graph = torch.FloatTensor(
+            self.img_txt_sg[self.key_list[idx]]['image_graph'])
         txt = self._to_tensor(self.img_txt_sg[self.key_list[idx]]['txt'])
-        txt_graph = torch.FloatTensor(self.img_txt_sg[self.key_list[idx]]['text_graph'])
+        txt_graph = torch.FloatTensor(
+            self.img_txt_sg[self.key_list[idx]]['text_graph'])
         img['graph'] = img_graph
         txt['graph'] = txt_graph
         return img, txt

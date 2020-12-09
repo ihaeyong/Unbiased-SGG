@@ -3,6 +3,8 @@ import logging
 import os
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 from maskrcnn_benchmark.utils.model_serialization import load_state_dict
 from maskrcnn_benchmark.utils.c2_model_loading import load_c2_format
@@ -186,3 +188,42 @@ def clip_grad_norm(named_parameters, max_norm, logger, clip=False, verbose=False
         logger.info('-------------------------------')
 
     return total_norm
+
+
+def layer_init(layer, init_para=0.1, normal=False, xavier=True):
+    xavier = False if normal == True else True
+    if normal:
+        torch.nn.init.normal_(layer.weight, mean=0, std=init_para)
+        torch.nn.init.constant_(layer.bias, 0)
+        return
+    elif xavier:
+        torch.nn.init.xavier_normal_(layer.weight, gain=1.0)
+        torch.nn.init.constant_(layer.bias, 0)
+        return
+
+def seq_init(m):
+
+    if type(m) == nn.Linear:
+        torch.nn.init.xavier_normal_(m.weight, gain=0.1)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0)
+
+    elif type(m) == nn.Conv2d :
+        torch.nn.init.xavier_normal_(m.weight, gain=0.1)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0)
+
+    elif type(m) == nn.ConvTranspose2d :
+        torch.nn.init.xavier_normal_(m.weight, gain=0.1)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0)
+
+    elif type(m) == nn.BatchNorm1d :
+        torch.nn.init.normal_(m.weight, mean=0, std=0.1)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0)
+
+    elif type(m) == nn.BatchNorm2d :
+        torch.nn.init.normal_(m.weight, mean=0, std=0.1)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0)
