@@ -178,11 +178,11 @@ class RelWeight(nn.Module):
                 target[fg_idx, :] = fg_w * target[fg_idx,:]
             elif l_type is 'none':
                 None
-                
+
             rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
             rel_mask_logits = rel_logits.detach() * target_mask
 
-            r_type = 'none'
+            r_type = 'mask_hinge'
             if r_type is 'diff' :
                 # mean - logits
                 rel_diff = rel_margin - rel_mask_logits
@@ -206,7 +206,7 @@ class RelWeight(nn.Module):
             elif r_type is 'mask_hinge' :
                 # mean - logits
                 rel_diff = rel_margin - rel_mask_logits
-                rel_diff = torch.max(rel_diff, torch.ones_like(rel_diff) * -0.01)
+                rel_diff = torch.max(rel_diff, torch.ones_like(rel_diff) * -0.02)
                 rel_margin = rel_diff *target_mask * gamma
             elif r_type is 'none':
                 rel_margin = rel_margin * target_mask * gamma
