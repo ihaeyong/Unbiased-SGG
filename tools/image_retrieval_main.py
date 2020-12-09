@@ -98,7 +98,7 @@ def train(cfg, local_rank, distributed, logger, writer):
 
     num_gpus = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
     num_batch = cfg.SOLVER.IMS_PER_BATCH
-    optimizer = make_optimizer(cfg, model, logger, rl_factor=float(num_batch))
+    optimizer = make_optimizer(cfg, model, logger)
     scheduler = make_lr_scheduler(cfg, optimizer, logger)
     debug_print(logger, 'end optimizer and shcedule')
 
@@ -226,17 +226,19 @@ def train(cfg, local_rank, distributed, logger, writer):
             batch_time = time.time() - end
             end = time.time()
 
+            iters = max_iter * epoch + iteration
+
             if verbose:
                 logger.info(
                     "epoch: {epoch}: iter:{tr_len:}/{iter:} loss: {loss:.6f} lr: {lr:.6f}".format(
                         epoch=epoch,
-                        tr_len=len(train_data_loader),
-                        iter=iteration,
+                        tr_len=max_iter * (epoch + 1),
+                        iter=iters,
                         loss=float(losses),
                         lr=optimizer.param_groups[-1]["lr"]))
 
-                writer.add_scalar('train/lr',optimizer.param_groups[-1]["lr"],iteration)
-                writer.add_scalar('train/loss', float(losses), iteration)
+                writer.add_scalar('train/lr',optimizer.param_groups[-1]["lr"],iters)
+                writer.add_scalar('train/loss', float(losses), iters)
 
         logger.info("epoch: {epoch} loss: {loss:.6f} lr: {lr:.6f}".format(
             epoch=epoch, loss=float(sum(epoch_loss) / len(epoch_loss)), lr=optimizer.param_groups[-1]["lr"]))
@@ -259,7 +261,7 @@ def train(cfg, local_rank, distributed, logger, writer):
             torch.save({'result' : test_result, 'similarity' : test_similarity}, output_path % ('test', epoch))
 
             for key in result:
-                writer.add_scalar('test/{}'.format(key), result[key], iteration)
+                writer.add_scalar('test/{}'.format(key), result[key], iters)
 
             logger.info("Start validating")
 
@@ -273,20 +275,20 @@ def train(cfg, local_rank, distributed, logger, writer):
                 R100 = result['R100']
 
                 for key in result:
-                    writer.add_scalar('val/{}'.format(key), result[key], iteration)
+                    writer.add_scalar('val/{}'.format(key), result[key], iters)
 
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
         #assert cfg.SOLVER.SCHEDULE.TYPE != "WarmupReduceLROnPlateau"
         #scheduler.step()
         # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
         if cfg.SOLVER.SCHEDULE.TYPE == "WarmupReduceLROnPlateau":
-            scheduler.step(R100, iteration)
+            scheduler.step(R100, iters)
             if scheduler.stage_count >= cfg.SOLVER.SCHEDULE.MAX_DECAY_STEP:
-                logger.info("Trigger MAX_DECAY_STEP at iteration {}.".format(iteration))
+                logger.info("Trigger MAX_DECAY_STEP at iteration {}.".format(iters))
                 break
         else:
             None
-            scheduler.step()
+            scheduler.step(R100, iters)
 
     total_training_time = time.time() - start_training_time
     total_time_str = str(datetime.timedelta(seconds=total_training_time))

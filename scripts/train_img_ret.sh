@@ -15,13 +15,15 @@ if [ $2 == "imgret" ]; then
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
            SOLVER.MAX_ITER 20000 \
-           SOLVER.BASE_LR 0.012 \
+           SOLVER.BASE_LR 0.12 \
            SOLVER.PRINT_GRAD_FREQ 30 \
            SOLVER.VAL_PERIOD 1 \
            SOLVER.CHECKPOINT_PERIOD 1 \
            SOLVER.GRAD_NORM_CLIP 5.0 \
-           SOLVER.SCHEDULE.MAX_DECAY_STEP 5 \
            SOLVER.SCHEDULE.TYPE "WarmupReduceLROnPlateau" \
+           SOLVER.SCHEDULE.MAX_DECAY_STEP 5 \
+           SOLVER.SCHEDULE.PATIENCE 3 \
+           SOLVER.SCHEDULE.FACTOR 0.1 \
            GLOVE_DIR ./datasets/glove \
-           OUTPUT_DIR ./checkpoints/img_retrieval_obj_norm_lr12e-3_clip5.0_b12
+           OUTPUT_DIR ./checkpoints/img_retrieval_obj_warmup_lr12e-2_clip5.0_b12
 fi

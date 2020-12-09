@@ -2,7 +2,7 @@
 import torch
 
 from .lr_scheduler import WarmupMultiStepLR, WarmupReduceLROnPlateau
-
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 def make_optimizer(cfg, model, logger, slow_heads=None, slow_ratio=5.0, rl_factor=1.0):
     params = []
@@ -21,7 +21,6 @@ def make_optimizer(cfg, model, logger, slow_heads=None, slow_ratio=5.0, rl_facto
                     lr = lr / slow_ratio
                     break
         params += [{"params": [value], "lr": lr * rl_factor, "weight_decay": weight_decay}]
-
     optimizer = torch.optim.SGD(params, lr=cfg.SOLVER.BASE_LR, momentum=cfg.SOLVER.MOMENTUM)
     return optimizer
 
@@ -49,6 +48,15 @@ def make_lr_scheduler(cfg, optimizer, logger=None):
             cooldown=cfg.SOLVER.SCHEDULE.COOLDOWN,
             logger=logger,
         )
-    
+
+    elif cfg.SOLVER.SCHEDULE.TYPE == "ReduceLROnPlateau":
+        return ReduceLROnPlateau(optimizer,
+                                 'max',
+                                 patience=cfg.SOLVER.SCHEDULE.PATIENCE,
+                                 factor=cfg.SOLVER.SCHEDULE.FACTOR,
+                                 verbose=True,
+                                 threshold=cfg.SOLVER.SCHEDULE.THRESHOLD,
+                                 threshold_mode='abs',
+                                 cooldown=cfg.SOLVER.SCHEDULE.COOLDOWN)
     else:
         raise ValueError("Invalid Schedule Type")

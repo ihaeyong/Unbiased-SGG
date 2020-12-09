@@ -235,6 +235,7 @@ class SGEncode(nn.Module):
             inp_dict['relations'] = torch.zeros(1,3).to(inp_dict['entities'].device).long()
             #inp_dict['graph'] = torch.zeros(
             #    len(inp_dict['entities']), 1).to(inp_dict['entities'].device).float()
+            inp_dict['graph'] = inp_dict['graph'] + 1e-10
 
         if is_img:
             obj_encode = self.img_obj_embed(inp_dict['entities'])
