@@ -14,9 +14,9 @@ if [ $2 == "imgret" ]; then
            SOLVER.IMS_PER_BATCH 12 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
-           SOLVER.MAX_ITER 20000 \
+           SOLVER.MAX_ITER 408900 \
            SOLVER.BASE_LR 0.12 \
-           SOLVER.PRINT_GRAD_FREQ 30 \
+           SOLVER.PRINT_GRAD_FREQ 5 \
            SOLVER.VAL_PERIOD 1 \
            SOLVER.CHECKPOINT_PERIOD 1 \
            SOLVER.GRAD_NORM_CLIP 5.0 \
@@ -25,5 +25,5 @@ if [ $2 == "imgret" ]; then
            SOLVER.SCHEDULE.PATIENCE 3 \
            SOLVER.SCHEDULE.FACTOR 0.1 \
            GLOVE_DIR ./datasets/glove \
-           OUTPUT_DIR ./checkpoints/img_retrieval_obj_warmup_lr12e-2_clip5.0_b12
+           OUTPUT_DIR ./checkpoints/img_retrieval_obj_l2_9e-8_warmup_lr12e-2_b12
 fi

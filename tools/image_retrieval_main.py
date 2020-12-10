@@ -146,7 +146,7 @@ def train(cfg, local_rank, distributed, logger, writer):
         checkpoint = torch.load(cfg.MODEL.PRETRAINED_DETECTOR_CKPT, map_location=torch.device("cpu"))
         model.load_state_dict(checkpoint)
 
-    if cfg.SOLVER.PRE_VAL and True:
+    if cfg.SOLVER.PRE_VAL and False:
         logger.info("Validate before training")
         val_result = run_test(cfg, model, val_data_loader, distributed, logger)
         val_similarity, result = evaluator(logger, val_result)
@@ -158,7 +158,7 @@ def train(cfg, local_rank, distributed, logger, writer):
     start_training_time = time.time()
     end = time.time()
 
-    if True:
+    if False:
         test_result = run_test(cfg, model, test_data_loader, distributed, logger)
         test_similarity, result = evaluator(logger, test_result)
         torch.save(test_result, output_path % ('test', 0))
@@ -201,13 +201,13 @@ def train(cfg, local_rank, distributed, logger, writer):
 
             optimizer.zero_grad()
             # L1 Reg
-            #L1_reg = torch.tensor(0., requires_grad=True)
-            L1_reg = 0
-            for name, param in model.named_parameters():
-                if 'weight' in name:
-                    L1_reg = L1_reg + torch.norm(param, 2)
+            if True:
+                L1_reg = 0
+                for name, param in model.named_parameters():
+                    if 'weight' in name:
+                        L1_reg = L1_reg + torch.norm(param, 2)
 
-            losses = losses + 1e-7 * L1_reg
+                losses = losses + 1e-7 * L1_reg
 
             # Note: If mixed precision is not used, this ends up doing nothing
             # Otherwise apply loss scaling for mixed-precision recipe
@@ -216,7 +216,7 @@ def train(cfg, local_rank, distributed, logger, writer):
 
             # add clip_grad_norm from MOTIFS, used for debug
             verbose = (iteration % cfg.SOLVER.PRINT_GRAD_FREQ) == 0
-            if True:
+            if False:
                 clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.requires_grad],
                                max_norm=cfg.SOLVER.GRAD_NORM_CLIP, logger=logger,
                                verbose=verbose, clip=True)
@@ -261,7 +261,7 @@ def train(cfg, local_rank, distributed, logger, writer):
             torch.save({'result' : test_result, 'similarity' : test_similarity}, output_path % ('test', epoch))
 
             for key in result:
-                writer.add_scalar('test/{}'.format(key), result[key], iters)
+                writer.add_scalar('test/{}'.format(key), result[key], epoch)
 
             logger.info("Start validating")
 
@@ -275,7 +275,7 @@ def train(cfg, local_rank, distributed, logger, writer):
                 R100 = result['R100']
 
                 for key in result:
-                    writer.add_scalar('val/{}'.format(key), result[key], iters)
+                    writer.add_scalar('val/{}'.format(key), result[key], epoch)
 
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
         #assert cfg.SOLVER.SCHEDULE.TYPE != "WarmupReduceLROnPlateau"
