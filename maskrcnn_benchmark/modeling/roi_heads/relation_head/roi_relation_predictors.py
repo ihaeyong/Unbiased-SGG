@@ -102,7 +102,7 @@ class SGraphPredictor(nn.Module):
             self.union_single_not_match = False
 
         # constrastive loss
-        self.rel_const = False
+        self.rel_const = True
         if self.rel_const:
             self.rel_cl_loss = NpairLoss(l2_reg=0.02)
 
@@ -186,18 +186,48 @@ class SGraphPredictor(nn.Module):
 
         # sum of non-vis/visual dists
         #rel_dists = non_vis_dists + vis_dists
-        rel_dists, freq_bias = self.rel_logits(union_features,
-                                               prod_rep,
-                                               geo_embed,
-                                               embed_bias,
-                                               freq_bias)
+        rel_dists, vis_dists, ctx_dists, freq_bias = self.rel_logits(union_features,
+                                                                     prod_rep,
+                                                                     geo_embed,
+                                                                     embed_bias,
+                                                                     freq_bias)
         #obj_freq_bias = torch.sigmoid(obj_emb)
 
         # rel constrastive learning
         rel_cl_loss = None
         if self.rel_const and self.training:
-            anchors = visual
-            positives = visual
+            c_type = 'rel_dists'
+            if c_type is 'vis_dists':
+                anchors = vis_dists
+                positives = vis_dists
+            elif c_type is 'rel_dists' :
+                anchors = rel_dists
+                positives = rel_dists
+            elif c_type is 'ctx_dists' :
+                anchors = ctx_dists
+                positives = ctx_dists
+            #--------------------------------
+            elif c_type is 'vis_rel_dists' :
+                anchors = vis_dists
+                positives = rel_dists
+            elif c_type is 'rel_vis_dists' :
+                anchors = rel_dists
+                positives = vis_dists
+            #--------------------------------
+            elif c_type is 'rel_ctx_dists' :
+                anchors = rel_dists
+                positives = ctx_dists
+            elif c_type is 'ctx_rel_dists' :
+                anchors = ctx_dists
+                positives = rel_dists
+            #-------------------------------
+            elif c_type is 'vis_ctx_dists' :
+                anchors = vis_dists
+                positives = ctx_dists
+            elif c_type is 'ctx_vis_dists' :
+                anchors = ctx_dists
+                positives = vis_dists
+
             rel_labels = torch.cat(rel_labels)
             rel_cl_loss = self.rel_cl_loss(anchors, positives, rel_labels)
 
@@ -395,7 +425,7 @@ class SGraphPredictor(nn.Module):
         else:
             print('invalid fusion type')
 
-        return union_dists, freq_bias
+        return union_dists, vis_dists, ctx_dists, freq_bias
 
 
 @registry.ROI_RELATION_PREDICTOR.register("TransformerPredictor")
@@ -430,7 +460,7 @@ class TransformerPredictor(nn.Module):
         self.rel_compress = nn.Linear(self.pooling_dim, self.num_rel_cls)
         self.ctx_compress = nn.Linear(self.hidden_dim * 2, self.num_rel_cls)
 
-        # initialize layer parameters 
+        # initialize layer parameters
         layer_init(self.post_emb, 10.0 * (1.0 / self.hidden_dim) ** 0.5, normal=True)
         layer_init(self.rel_compress, xavier=True)
         layer_init(self.ctx_compress, xavier=True)

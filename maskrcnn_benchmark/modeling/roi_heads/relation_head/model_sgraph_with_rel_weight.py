@@ -182,7 +182,7 @@ class RelWeight(nn.Module):
             rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
             rel_mask_logits = rel_logits.detach() * target_mask
 
-            r_type = 'mask_hinge'
+            r_type = 'none'
             if r_type is 'diff' :
                 # mean - logits
                 rel_diff = rel_margin - rel_mask_logits
