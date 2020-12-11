@@ -42,7 +42,7 @@ class NpairLoss(nn.Module):
             # only foreground contribution to contrastive loss
             # 1.larger variance of background
             # 2.unlabeled labels possible leads to increasing the number of negative samples
-            loss_ce = cross_entropy(logit, target, False) * (label > 1).float()
+            loss_ce = cross_entropy(logit, target, False) * (label > 0).float()
             loss_ce = loss_ce.mean()
         else:
             loss_ce = cross_entropy(logit, target)

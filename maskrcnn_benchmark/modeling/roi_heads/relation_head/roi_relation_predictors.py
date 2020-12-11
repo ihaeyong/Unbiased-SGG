@@ -196,7 +196,7 @@ class SGraphPredictor(nn.Module):
         # rel constrastive learning
         rel_cl_loss = None
         if self.rel_const and self.training:
-            c_type = 'rel_dists'
+            c_type = 'ctx_vis_dists'
             if c_type is 'vis_dists':
                 anchors = vis_dists
                 positives = vis_dists
