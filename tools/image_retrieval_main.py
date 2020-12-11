@@ -50,11 +50,11 @@ sg_fusion_name = 'sum'
 sg_type_name = 'none'
 
 if True:
-    sg_train_path = './datasets/image_retrieval/sg_of_{}-train.json'.format(
+    sg_train_path = './datasets/image_retrieval/resg_of_{}-train.json'.format(
         sg_model_name)
-    sg_test_path = './datasets/image_retrieval/sg_of_{}-test.json'.format(
+    sg_test_path = './datasets/image_retrieval/resg_of_{}-test.json'.format(
         sg_model_name)
-    output_path = './datasets/image_retrieval_model/sg_of_' + sg_model_name + '_output_%s_%d.pytorch'
+    output_path = './datasets/image_retrieval_model/resg_of_' + sg_model_name + '_output_%s_%d.pytorch'
 else:
     sg_train_path = './datasets/image_retrieval/sg_of_{}-train.json'.format(
         sg_model_name)
@@ -207,7 +207,7 @@ def train(cfg, local_rank, distributed, logger, writer):
                     if 'weight' in name:
                         L1_reg = L1_reg + torch.norm(param, 2)
 
-                losses = losses + 1e-7 * L1_reg
+                losses = losses + 5e-7 * L1_reg
 
             # Note: If mixed precision is not used, this ends up doing nothing
             # Otherwise apply loss scaling for mixed-precision recipe

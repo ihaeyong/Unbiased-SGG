@@ -25,5 +25,5 @@ if [ $2 == "imgret" ]; then
            SOLVER.SCHEDULE.PATIENCE 3 \
            SOLVER.SCHEDULE.FACTOR 0.1 \
            GLOVE_DIR ./datasets/glove \
-           OUTPUT_DIR ./checkpoints/img_retrieval_obj_l2_9e-8_warmup_lr12e-2_b12
+           OUTPUT_DIR ./checkpoints/debug_re_img_retrieval_obj_l2_5e-7_warmup_lr12e-2_b12
 fi

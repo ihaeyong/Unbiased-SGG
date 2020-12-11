@@ -85,7 +85,7 @@ def main():
     if cfg.MODEL.ATTRIBUTE_ON:
         iou_types = iou_types + ("attributes", )
 
-    if False:
+    if True:
         output_folders = [None] * len(cfg.DATASETS.TEST)
         dataset_names = cfg.DATASETS.TEST
     else:
@@ -98,7 +98,7 @@ def main():
             mkdir(output_folder)
             output_folders[idx] = output_folder
 
-    if False:
+    if True:
         data_loaders_val = make_data_loader(cfg,
                                             mode='test',
                                             is_distributed=distributed)

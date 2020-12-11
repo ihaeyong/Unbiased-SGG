@@ -42,6 +42,7 @@ class SGEncoding(data.Dataset):
         self.key_list.sort()
         self.train_ids = train_ids
         self.test_ids = test_ids
+        import ipdb; ipdb.set_trace()
         if test_on:
             self.key_list = self.test_ids[:num_test]
         elif val_on:

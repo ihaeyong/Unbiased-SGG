@@ -34,18 +34,18 @@ from maskrcnn_benchmark.utils.logger import setup_logger, debug_print
 from maskrcnn_benchmark.utils.miscellaneous import mkdir, save_config
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
 
-test = False
+test = True
 
 if test:
     # where to load detected scene graph
     detected_path = './checkpoints/obj_spectrum_gcn_sum_v3_0.7-sgdet/inference/VG_stanford_filtered_with_attribute_test/'
     # where to save the generated annotation
-    output_path = './datasets/image_retrieval/sg_of_obj_spectrum_gcn_sum_v3_0.7-sgdet-test.json'
+    output_path = './datasets/image_retrieval/resg_of_obj_spectrum_gcn_sum_v3_0.7-sgdet-test.json'
 else:
     # where to load detected scene graph
-    detected_path = './checkpoints/obj_spectrum_gcn_sum_v7_0.7-predcls/inference/VG_stanford_filtered_with_attribute_train/'
+    detected_path = './checkpoints/obj_spectrum_gcn_sum_v3_0.7-sgdet/inference/VG_stanford_filtered_with_attribute_train/'
     # where to save the generated annotation
-    output_path = './datasets/image_retrieval/sg_of_obj_spectrum_gcn_sum_v3_0.7-sgdet-train.json'
+    output_path = './datasets/image_retrieval/resg_of_obj_spectrum_gcn_sum_v3_0.7-sgdet-train.json'
 
 cap_graph = json.load(open('./datasets/vg_capgraphs_anno.json'))
 vg_data = h5py.File('./datasets/vg/VG-SGG-with-attri.h5', 'r')
