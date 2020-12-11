@@ -28,6 +28,7 @@ class NpairLoss(nn.Module):
         label = target
 
         fg_idx = np.where(target.cpu() != 0)[0]
+        bg_idx = np.where(target.cpu() == 0)[0]
 
         # target [batch_size, 1]
         target = target[:,None]
@@ -37,14 +38,21 @@ class NpairLoss(nn.Module):
         target = target / torch.sum(target, dim=1, keepdim=True).float()
 
         logit = torch.matmul(anchor, torch.transpose(positive, 0, 1))
-        if True:
+        c_type = 'full'
+        if c_type is 'fc':
             # modified by haeyong.k
             # only foreground contribution to contrastive loss
             # 1.larger variance of background
             # 2.unlabeled labels possible leads to increasing the number of negative samples
             loss_ce = cross_entropy(logit, target, False) * (label > 0).float()
             loss_ce = loss_ce.mean()
-        else:
+        elif c_type is 'wavg':
+            loss_ce_fg = cross_entropy(logit, target, False) * (label > 0).float()
+            loss_ce_bg = cross_entropy(logit, target, False) * (label == 0).float()
+
+            loss_ce = (1-len(fg_idx)) * loss_ce_fg.mean() + loss_ce_bg.mean() * len(fg_idx)
+
+        elif c_type is 'full':
             loss_ce = cross_entropy(logit, target)
         l2_loss = torch.sum(anchor**2) / batch_size + torch.sum(positive**2) / batch_size
 
