@@ -77,25 +77,48 @@ class ObjWeight(nn.Module):
         batch_freq = freq_bias.sum(0).data.cpu().numpy()
         cls_num_list = batch_freq
 
+        fg_idx = np.where(obj_labels.cpu() > 0)[0]
+        bg_idx = np.where(obj_labels.cpu() == 0)[0]
+
         # target [batch_size, batch_size] in {0, 1} and normalize in (0,1)
         target = (obj_labels == torch.transpose(obj_labels[None,:], 0, 1)).float()
         target = target / torch.sum(target, dim=1, keepdim=True).float()
 
         target_mask = (to_onehot(obj_labels, 151,1) > 0.0).float()
-        obj_margin = torch.matmul(target, obj_logits.detach())
 
-        r_type = 'diff'
+        l_type = 'target'
+        bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
+        fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
+        if l_type is 'target_mask' :
+            target_mask[bg_idx, :] = bg_w * target_mask[bg_idx, :]
+            target_mask[fg_idx, :] = fg_w * target_mask[fg_idx, :]
+        elif l_type is 'target':
+            target[bg_idx, :] = bg_w * target[bg_idx,:]
+            target[fg_idx, :] = fg_w * target[fg_idx,:]
+        elif l_type is 'none':
+            None
+
+        obj_margin = torch.matmul(target, obj_logits.detach()) * target_mask
+        obj_mask_logits = obj_logits.detach() * target_mask
+
+        r_type = 'hinge'
         if r_type is 'sigmoid':
             rel_margin = 1/torch.sigmoid(rel_margin) * target_mask * gamma
         elif r_type is 'inverse':
             rel_margin = 1/(torch.abs(rel_margin)+1) * target_mask * gamma
         elif r_type is 'diff' :
-            obj_mask_logits = obj_logits.detach() * target_mask
-            obj_margin = obj_margin * target_mask
             # mean - logits
             obj_diff = obj_margin - obj_mask_logits
             obj_diff_mask = (obj_diff < 0).float()
             obj_margin = obj_margin * obj_diff_mask * gamma
+        elif r_type is 'hinge' :
+            # mean - logits
+            obj_diff = obj_margin - obj_mask_logits
+            obj_hinge = torch.ones_like(obj_margin) - obj_diff
+            obj_hinge = torch.max(obj_hinge, torch.zeros_like(obj_diff))
+            obj_margin = obj_hinge * target_mask * gamma
+        elif r_type is 'none':
+            obj_margin = obj_margin * target_mask * gamma
 
         # Entropy * scale
         cls_order = batch_freq[self.obj_idx]
@@ -105,7 +128,7 @@ class ObjWeight(nn.Module):
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
         if skew_v > 1.0 :
-            beta = 1.0 - ent_v * 0.7
+            beta = 1.0 - ent_v * 1.0
         else:
             beta = 0.0
 
@@ -182,7 +205,7 @@ class RelWeight(nn.Module):
             rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
             rel_mask_logits = rel_logits.detach() * target_mask
 
-            r_type = 'mask_hinge'
+            r_type = 'hinge'
             if r_type is 'diff' :
                 # mean - logits
                 rel_diff = rel_margin - rel_mask_logits
@@ -203,11 +226,12 @@ class RelWeight(nn.Module):
                 rel_diff = rel_margin - rel_mask_logits
                 rel_diff = torch.max(rel_diff, torch.zeros_like(rel_diff))
                 rel_margin = rel_diff *target_mask * gamma
-            elif r_type is 'mask_hinge' :
+            elif r_type is 'hinge' :
                 # mean - logits
                 rel_diff = rel_margin - rel_mask_logits
-                rel_diff = torch.max(rel_diff, torch.ones_like(rel_diff) * -0.02)
-                rel_margin = rel_diff *target_mask * gamma
+                rel_hinge = torch.ones_like(rel_margin) - rel_diff
+                rel_hinge = torch.max(rel_hinge, torch.zeros_like(rel_diff))
+                rel_margin = rel_hinge * target_mask * gamma
             elif r_type is 'none':
                 rel_margin = rel_margin * target_mask * gamma
 
