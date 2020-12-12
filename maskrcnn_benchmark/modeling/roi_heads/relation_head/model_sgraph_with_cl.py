@@ -30,6 +30,8 @@ class NpairLoss(nn.Module):
         fg_idx = np.where(target.cpu() != 0)[0]
         bg_idx = np.where(target.cpu() == 0)[0]
 
+        alpha = len(fg_idx) / (len(fg_idx) + len(bg_idx))
+
         # target [batch_size, 1]
         target = target[:,None]
 
@@ -38,8 +40,8 @@ class NpairLoss(nn.Module):
         target = target / torch.sum(target, dim=1, keepdim=True).float()
 
         logit = torch.matmul(anchor, torch.transpose(positive, 0, 1))
-        c_type = 'full'
-        if c_type is 'fc':
+        c_type = 'wavg'
+        if c_type is 'fg':
             # modified by haeyong.k
             # only foreground contribution to contrastive loss
             # 1.larger variance of background
@@ -49,14 +51,13 @@ class NpairLoss(nn.Module):
         elif c_type is 'wavg':
             loss_ce_fg = cross_entropy(logit, target, False) * (label > 0).float()
             loss_ce_bg = cross_entropy(logit, target, False) * (label == 0).float()
-
-            loss_ce = (1-len(fg_idx)) * loss_ce_fg.mean() + loss_ce_bg.mean() * len(fg_idx)
+            loss_ce = (1-alpha) * loss_ce_fg.mean() + loss_ce_bg.mean() * alpha
 
         elif c_type is 'full':
             loss_ce = cross_entropy(logit, target)
         l2_loss = torch.sum(anchor**2) / batch_size + torch.sum(positive**2) / batch_size
 
-        loss = loss_ce + self.l2_reg*l2_loss*0.25
+        loss = loss_ce * 0.1 + self.l2_reg*l2_loss*0.25
         return loss
 
 
