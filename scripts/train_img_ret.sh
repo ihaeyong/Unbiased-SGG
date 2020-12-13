@@ -22,8 +22,8 @@ if [ $2 == "imgret" ]; then
            SOLVER.GRAD_NORM_CLIP 5.0 \
            SOLVER.SCHEDULE.TYPE "WarmupReduceLROnPlateau" \
            SOLVER.SCHEDULE.MAX_DECAY_STEP 5 \
-           SOLVER.SCHEDULE.PATIENCE 3 \
+           SOLVER.SCHEDULE.PATIENCE 5 \
            SOLVER.SCHEDULE.FACTOR 0.1 \
            GLOVE_DIR ./datasets/glove \
-           OUTPUT_DIR ./checkpoints/debug_re_img_retrieval_obj_l2_5e-7_warmup_lr12e-2_b12
+           OUTPUT_DIR ./checkpoints/motifs-causal_l2_5e-7_warmup_embed512_lr12e-2_b12_patience5
 fi

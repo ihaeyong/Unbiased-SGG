@@ -45,16 +45,17 @@ try:
 except ImportError:
     raise ImportError('Use APEX for multi-precision via apex.amp')
 
-sg_model_name = 'obj_spectrum_gcn_sum_v3_0.7-sgdet'
+#sg_model_name = 'obj_spectrum_gcn_sum_v3_0.7-sgdet'
+sg_model_name = 'motifs-casual-sgdet'
 sg_fusion_name = 'sum'
 sg_type_name = 'none'
 
 if True:
-    sg_train_path = './datasets/image_retrieval/resg_of_{}-train.json'.format(
+    sg_train_path = './datasets/image_retrieval/sg_of_{}-train.json'.format(
         sg_model_name)
-    sg_test_path = './datasets/image_retrieval/resg_of_{}-test.json'.format(
+    sg_test_path = './datasets/image_retrieval/sg_of_{}-test.json'.format(
         sg_model_name)
-    output_path = './datasets/image_retrieval_model/resg_of_' + sg_model_name + '_output_%s_%d.pytorch'
+    output_path = './datasets/image_retrieval_model/sg_of_' + sg_model_name + '_output_%s_%d.pytorch'
 else:
     sg_train_path = './datasets/image_retrieval/sg_of_{}-train.json'.format(
         sg_model_name)
@@ -86,7 +87,6 @@ else:
 
     train_ids = list(sg_data_train.keys())
     test_ids = list(sg_data_test.keys())
-
 
 def train(cfg, local_rank, distributed, logger, writer):
     model = SGEncode()

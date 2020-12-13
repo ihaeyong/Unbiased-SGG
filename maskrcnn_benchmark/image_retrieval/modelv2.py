@@ -124,7 +124,7 @@ class ApplySingleAttention(nn.Module):
 class SGEncode(nn.Module):
     def __init__(self, img_num_obj=151, img_num_rel=51, txt_num_obj=4460, txt_num_rel=646):
         super(SGEncode, self).__init__()
-        self.embed_dim = 512
+        self.embed_dim = 300
         self.hidden_dim = 512
         self.final_dim = 1024
         self.num_layer = 2
@@ -136,20 +136,37 @@ class SGEncode(nn.Module):
 
         self.GLOVE_DIR = './datasets/glove'
 
-        if False:
-            img_obj_embed_vecs = img_obj_vectors(self.img_num_obj,
+        cap_graph = json.load(open('./datasets/vg_capgraphs_anno.json'))
+        vg_dict = json.load(open('./datasets/vg/VG-SGG-dicts-with-attri.json'))
+
+        img_obj = ['backgrounds']
+        img_rel = ['backgrounds']
+        txt_obj = ['backgrounds']
+        txt_rel = ['backgrounds']
+
+        for rel in vg_dict['idx_to_predicate'].values() :
+            img_rel.append(rel)
+        for obj in vg_dict['idx_to_label'].values() :
+            img_obj.append(obj)
+        for rel in cap_graph['cap_predicate'].keys():
+            txt_rel.append(rel)
+        for obj in cap_graph['cap_category'].keys():
+            txt_obj.append(obj)
+
+        if True:
+            img_obj_embed_vecs = img_obj_vectors(img_obj,
                                                  wv_dir=self.GLOVE_DIR,
                                                  wv_dim=self.embed_dim)
 
-            img_rel_embed_vecs = img_rel_vectors(self.img_num_rel,
+            img_rel_embed_vecs = img_rel_vectors(img_rel,
                                                  wv_dir=self.GLOVE_DIR,
                                                  wv_dim=self.embed_dim)
 
-            txt_obj_embed_vecs = txt_obj_vectors(self.txt_num_obj,
+            txt_obj_embed_vecs = img_obj_vectors(txt_obj,
                                                  wv_dir=self.GLOVE_DIR,
                                                  wv_dim=self.embed_dim)
 
-            txt_rel_embed_vecs = txt_rel_vectors(self.txt_num_rel,
+            txt_rel_embed_vecs = img_rel_vectors(txt_rel,
                                                  wv_dir=self.GLOVE_DIR,
                                                  wv_dim=self.embed_dim)
 
@@ -158,16 +175,16 @@ class SGEncode(nn.Module):
         self.img_rel_tail_embed = nn.Embedding(self.img_num_obj, self.embed_dim)
         self.img_rel_pred_embed = nn.Embedding(self.img_num_rel, self.embed_dim)
 
-        init = 'norm'
-        gain = 1.0
+        self.init = 'embed'
+        gain = 0.1
 
-        if init is 'uniform':
+        if self.init is 'uniform':
             nn.init.uniform_(self.img_obj_embed.weight, -gain, gain)
             nn.init.uniform_(self.img_rel_head_embed.weight, -gain, gain)
             nn.init.uniform_(self.img_rel_tail_embed.weight, -gain, gain)
             nn.init.uniform_(self.img_rel_pred_embed.weight, -gain, gain)
 
-        elif init is 'norm':
+        elif self.init is 'norm':
             norm_img_obj_embed = F.normalize(
                 self.img_obj_embed.weight.data, p=2, dim=1)
             norm_img_rel_head_embed = F.normalize(
@@ -182,21 +199,35 @@ class SGEncode(nn.Module):
             self.img_rel_tail_embed.weight.data = norm_img_rel_tail_embed
             self.img_rel_pred_embed.weight.data = norm_img_rel_pred_embed
 
-        elif init is 'none':
+        elif self.init is 'none':
             None
+
+        elif self.init is 'embed':
+            with torch.no_grad():
+                self.img_obj_embed.weight.copy_(img_obj_embed_vecs,
+                                                non_blocking=True)
+
+                self.img_rel_head_embed.weight.copy_(img_obj_embed_vecs,
+                                                     non_blocking=True)
+
+                self.img_rel_tail_embed.weight.copy_(img_obj_embed_vecs,
+                                                     non_blocking=True)
+
+                self.img_rel_pred_embed.weight.copy_(img_rel_embed_vecs,
+                                                     non_blocking=True)
 
         self.txt_obj_embed = nn.Embedding(self.txt_num_obj, self.embed_dim)
         self.txt_rel_head_embed = nn.Embedding(self.txt_num_obj, self.embed_dim)
         self.txt_rel_tail_embed = nn.Embedding(self.txt_num_obj, self.embed_dim)
         self.txt_rel_pred_embed = nn.Embedding(self.txt_num_rel, self.embed_dim)
 
-        if init is 'uniform':
+        if self.init is 'uniform':
             nn.init.uniform_(self.txt_obj_embed.weight, -gain, gain)
             nn.init.uniform_(self.txt_rel_head_embed.weight, -gain, gain)
             nn.init.uniform_(self.txt_rel_tail_embed.weight, -gain, gain)
             nn.init.uniform_(self.txt_rel_pred_embed.weight, -gain, gain)
 
-        elif init is 'norm':
+        elif self.init is 'norm':
             norm_txt_obj_embed = F.normalize(
                 self.txt_obj_embed.weight.data, p=2, dim=1)
             norm_txt_rel_head_embed = F.normalize(
@@ -211,12 +242,28 @@ class SGEncode(nn.Module):
             self.txt_rel_tail_embed.weight.data = norm_txt_rel_tail_embed
             self.txt_rel_pred_embed.weight.data = norm_txt_rel_pred_embed
 
-        elif init is 'none':
+        elif self.init is 'none':
             None
+
+        elif self.init is 'embed':
+            with torch.no_grad():
+                self.txt_obj_embed.weight.copy_(txt_obj_embed_vecs,
+                                                non_blocking=True)
+
+                self.txt_rel_head_embed.weight.copy_(txt_obj_embed_vecs,
+                                                     non_blocking=True)
+
+                self.txt_rel_tail_embed.weight.copy_(txt_obj_embed_vecs,
+                                                     non_blocking=True)
+
+                self.txt_rel_pred_embed.weight.copy_(txt_rel_embed_vecs,
+                                                     non_blocking=True)
+
+                self.q_fc = nn.Linear(self.embed_dim, self.hidden_dim)
 
         self.apply_attention = ApplyAttention(
             v_features=self.embed_dim*3,
-            q_features=self.embed_dim,
+            q_features=self.embed_dim if not self.init is 'embed' else 512,
             mid_features=self.hidden_dim,
             glimpses=self.num_layer,
             drop=0.2,)
@@ -259,6 +306,8 @@ class SGEncode(nn.Module):
         # rel_encode : [b, 2, 1536]
         # obj_encode : [b, 23, 512]
         # atten : [b, 23, 1, 2]
+        if self.init is 'embed':
+            obj_encode = self.q_fc(obj_encode)
         sg_encode = self.apply_attention(rel_encode.unsqueeze(0),
                                          obj_encode.unsqueeze(0),
                                          atten.unsqueeze(0))

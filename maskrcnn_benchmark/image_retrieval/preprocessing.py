@@ -38,14 +38,14 @@ test = True
 
 if test:
     # where to load detected scene graph
-    detected_path = './checkpoints/obj_spectrum_gcn_sum_v3_0.7-sgdet/inference/VG_stanford_filtered_with_attribute_test/'
+    detected_path = './checkpoints/motifs-causal-sgdet/inference/VG_stanford_filtered_with_attribute_test/'
     # where to save the generated annotation
-    output_path = './datasets/image_retrieval/resg_of_obj_spectrum_gcn_sum_v3_0.7-sgdet-test.json'
+    output_path = './datasets/image_retrieval/sg_of_motifs-casual-sgdet-test.json'
 else:
     # where to load detected scene graph
-    detected_path = './checkpoints/obj_spectrum_gcn_sum_v3_0.7-sgdet/inference/VG_stanford_filtered_with_attribute_train/'
+    detected_path = './checkpoints/motifs-causal-sgdet/inference/VG_stanford_filtered_with_attribute_train/'
     # where to save the generated annotation
-    output_path = './datasets/image_retrieval/resg_of_obj_spectrum_gcn_sum_v3_0.7-sgdet-train.json'
+    output_path = './datasets/image_retrieval/sg_of_motifs-casual-sgdet-train.json'
 
 cap_graph = json.load(open('./datasets/vg_capgraphs_anno.json'))
 vg_data = h5py.File('./datasets/vg/VG-SGG-with-attri.h5', 'r')
@@ -54,8 +54,10 @@ vg_info = json.load(open('./datasets/vg/image_data.json'))
 
 # generate union predicate vocabulary
 sgg_rel_vocab = list(set(cap_graph['idx_to_meta_predicate'].values()))
-txt_rel_vocab = list(set(cap_graph['cap_predicate'].keys()))
+#sgg_rel_vocab = list(set(vg_dict['idx_to_predicate'].values()))
+txt_rel_vocab = list(set(cap_graph['cap_predicate'].keys())) # no wear
 uni_rel_vocab = list(set(list(cap_graph['cap_predicate'].keys()) + list(cap_graph['idx_to_meta_predicate'].values())))
+#uni_rel_vocab = list(set(list(cap_graph['cap_predicate'].keys()) + list(set(vg_dict['idx_to_predicate'].values()))))
 
 sgg_rel2id = {key: i+1 for i, key in enumerate(sgg_rel_vocab)}
 txt_rel2id = {key: i+1 for i, key in enumerate(txt_rel_vocab)}
