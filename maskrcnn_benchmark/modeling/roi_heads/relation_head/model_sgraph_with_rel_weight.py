@@ -101,21 +101,12 @@ class ObjWeight(nn.Module):
         obj_margin = torch.matmul(target, obj_logits.detach()) * target_mask
         obj_mask_logits = obj_logits.detach() * target_mask
 
-        r_type = 'hinge'
-        if r_type is 'sigmoid':
-            rel_margin = 1/torch.sigmoid(rel_margin) * target_mask * gamma
-        elif r_type is 'inverse':
-            rel_margin = 1/(torch.abs(rel_margin)+1) * target_mask * gamma
-        elif r_type is 'diff' :
+        r_type = 'none'
+        if r_type is 'hinge' :
             # mean - logits
             obj_diff = obj_margin - obj_mask_logits
-            obj_diff_mask = (obj_diff < 0).float()
-            obj_margin = obj_margin * obj_diff_mask * gamma
-        elif r_type is 'hinge' :
-            # mean - logits
-            obj_diff = obj_margin - obj_mask_logits
-            obj_hinge = torch.ones_like(obj_margin) - obj_diff
-            obj_hinge = torch.max(obj_hinge, torch.zeros_like(obj_diff))
+            obj_hinge = torch.max(obj_diff,
+                                  torch.ones_like(obj_diff) * -1.0)
             obj_margin = obj_hinge * target_mask * gamma
         elif r_type is 'none':
             obj_margin = obj_margin * target_mask * gamma
@@ -170,70 +161,38 @@ class RelWeight(nn.Module):
         batch_freq = freq_bias.sum(0).data.cpu().numpy()
         cls_num_list = batch_freq
 
-        if False:
-            rel_margin = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
-            #batch_label_freq = batch_label.sum(0).data.cpu().numpy()
-            #log_batch_label_freq = np.log(1.0 + batch_label_freq)
-            #cls_num_list = self.softmax_with_temp(log_batch_label_freq, self.temp)
-            fg_idx = np.where(rel_labels.cpu() > 0)[0]
-            bg_idx = np.where(rel_labels.cpu() == 0)[0]
+        # target [batch_size, batch_size] in {0, 1} and normalize in (0,1)
+        fg_idx = np.where(rel_labels.cpu() > 0)[0]
+        bg_idx = np.where(rel_labels.cpu() == 0)[0]
 
-            rel_margin[fg_idx, :] = rel_margin[fg_idx, :] * gamma
-            rel_margin[bg_idx, :] = rel_margin[bg_idx, :] * gamma
+        target = (rel_labels == torch.transpose(rel_labels[None,:], 0, 1)).float()
+        target = target / torch.sum(target, dim=1, keepdim=True).float()
+        target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
 
-        else:
-            # target [batch_size, batch_size] in {0, 1} and normalize in (0,1)
-            fg_idx = np.where(rel_labels.cpu() > 0)[0]
-            bg_idx = np.where(rel_labels.cpu() == 0)[0]
+        l_type = 'target'
+        bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
+        fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
+        if l_type is 'target_mask' :
+            target_mask[bg_idx, :] = bg_w * target_mask[bg_idx, :]
+            target_mask[fg_idx, :] = fg_w * target_mask[fg_idx, :]
+        elif l_type is 'target':
+            target[bg_idx, :] = bg_w * target[bg_idx,:]
+            target[fg_idx, :] = fg_w * target[fg_idx,:]
+        elif l_type is 'none':
+            None
 
-            target = (rel_labels == torch.transpose(rel_labels[None,:], 0, 1)).float()
-            target = target / torch.sum(target, dim=1, keepdim=True).float()
-            target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
+        rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
+        rel_mask_logits = rel_logits.detach() * target_mask
 
-            l_type = 'target'
-            bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
-            fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
-            if l_type is 'target_mask' :
-                target_mask[bg_idx, :] = bg_w * target_mask[bg_idx, :]
-                target_mask[fg_idx, :] = fg_w * target_mask[fg_idx, :]
-            elif l_type is 'target':
-                target[bg_idx, :] = bg_w * target[bg_idx,:]
-                target[fg_idx, :] = fg_w * target[fg_idx,:]
-            elif l_type is 'none':
-                None
-
-            rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
-            rel_mask_logits = rel_logits.detach() * target_mask
-
-            r_type = 'hinge'
-            if r_type is 'diff' :
-                # mean - logits
-                rel_diff = rel_margin - rel_mask_logits
-                rel_diff_mask = (rel_diff < 0).float()
-                rel_margin = rel_margin * rel_diff_mask * gamma
-            elif r_type is 'pos_diff' :
-                # mean - logits
-                rel_diff = rel_margin - rel_mask_logits
-                rel_diff_mask = (rel_diff > 0).float()
-                rel_margin = rel_margin * rel_diff_mask * gamma
-            elif r_type is 'delta_pos_diff' :
-                # mean - logits
-                rel_diff = rel_margin - rel_mask_logits
-                rel_diff_mask = (rel_diff > 0).float()
-                rel_margin = rel_diff * rel_diff_mask * gamma
-            elif r_type is 'mask_pos_diff' :
-                # mean - logits
-                rel_diff = rel_margin - rel_mask_logits
-                rel_diff = torch.max(rel_diff, torch.zeros_like(rel_diff))
-                rel_margin = rel_diff *target_mask * gamma
-            elif r_type is 'hinge' :
-                # mean - logits
-                rel_diff = rel_margin - rel_mask_logits
-                rel_hinge = torch.ones_like(rel_margin) - rel_diff
-                rel_hinge = torch.max(rel_hinge, torch.zeros_like(rel_diff))
-                rel_margin = rel_hinge * target_mask * gamma
-            elif r_type is 'none':
-                rel_margin = rel_margin * target_mask * gamma
+        r_type = 'none'
+        if r_type is 'hinge' :
+            # mean - logits
+            rel_diff = rel_margin - rel_mask_logits
+            rel_hinge = torch.max(rel_diff,
+                                  torch.ones_like(rel_diff) * -1.0)
+            rel_margin = rel_hinge * target_mask * gamma
+        elif r_type is 'none':
+            rel_margin = rel_margin * target_mask * gamma
 
         # Entropy * scale
         cls_order = batch_freq[self.pred_idx]
@@ -243,7 +202,7 @@ class RelWeight(nn.Module):
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
         if skew_v > 1.0 :
-            beta = 1.0 - ent_v * 0.7
+            beta = 1.0 - ent_v * 0.6
         else:
             beta = 0.0
 
