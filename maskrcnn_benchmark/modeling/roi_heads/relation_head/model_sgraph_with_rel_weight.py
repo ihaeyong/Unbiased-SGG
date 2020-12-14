@@ -8,6 +8,8 @@ from .utils_motifs import to_onehot
 
 from scipy.stats import entropy, skew
 
+torch.cuda.manual_seed(2021)
+
 class ObjWeight(nn.Module):
     """
     None dim means that not to use that sub module.
@@ -181,8 +183,19 @@ class RelWeight(nn.Module):
         elif l_type is 'none':
             None
 
+        # scaled mean of logits
         rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
         rel_mask_logits = rel_logits.detach() * target_mask
+
+        n_type = 'noise'
+        if n_type is 'noise':
+            beta = 0.01
+            rel_margin[bg_idx, :] = rel_margin[bg_idx,:] + torch.rand_like(rel_margin[bg_idx,:]) * beta
+            rel_margin[fg_idx, :] = rel_margin[fg_idx,:] + torch.rand_like(rel_margin[fg_idx,:]) * beta
+
+            rel_margin = rel_margin * target_mask
+        else:
+            None
 
         r_type = 'none'
         if r_type is 'hinge' :
@@ -202,7 +215,7 @@ class RelWeight(nn.Module):
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
         if skew_v > 1.0 :
-            beta = 1.0 - ent_v * 0.6
+            beta = 1.0 - ent_v * 0.7
         else:
             beta = 0.0
 
@@ -211,6 +224,5 @@ class RelWeight(nn.Module):
         per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
         rel_weight = torch.FloatTensor(per_cls_weights).cuda()
 
-        return  rel_weight, rel_margin
-
+        return  rel_weight, rel_margin  
 
