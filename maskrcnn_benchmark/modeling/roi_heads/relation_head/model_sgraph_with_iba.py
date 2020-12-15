@@ -128,7 +128,7 @@ class PerSampleBottleneck(AttributionBottleneck):
         self.beta = 10.0 / (channel * fmap_size * fmap_size) # 1/k
 
 
-    def forward(self, lamb, r_):
+    def forward(self, lamb, r_, rel_labels=None):
         """ Remove information from r by performing a sampling step,
         parametrized by the mask alpha """
         # Smoothen and expand a on batch dimension
@@ -145,7 +145,20 @@ class PerSampleBottleneck(AttributionBottleneck):
             r_norm = r_p.sample()
 
         # Get sampling parameters
-        eps = 1e-8
+        if self.training:
+            batch_size = rel_labels.size(0)
+            bg_idx = np.where(rel_labels.cpu() == 0)[0]
+            fg_idx = np.where(rel_labels.cpu() > 0)[0]
+
+            bg_w = len(bg_idx) / batch_size
+            fg_w = len(fg_idx) / batch_size
+
+            eps = torch.rand_like(lamb)
+            eps[bg_idx, ] = eps[bg_idx] * 1e-2 * bg_w # 1e-8
+            eps[fg_idx, ] = eps[fg_idx] * 1e-2 * fg_w
+        else:
+            eps = 0.0
+
         noise_var = (1-lamb + eps)**2
         scaled_signal = r_norm * lamb
         noise_log_var = torch.log(noise_var)

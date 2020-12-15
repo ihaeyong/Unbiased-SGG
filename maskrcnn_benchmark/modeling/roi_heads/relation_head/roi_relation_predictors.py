@@ -102,7 +102,7 @@ class SGraphPredictor(nn.Module):
             self.union_single_not_match = False
 
         # constrastive loss
-        self.rel_const = True
+        self.rel_const = False
         if self.rel_const:
             self.rel_cl_loss = NpairLoss(l2_reg=0.02)
 
@@ -170,8 +170,13 @@ class SGraphPredictor(nn.Module):
 
         # relational message passing
         if self.rel_ctx_layer > 0:
+            if self.training :
+                rel_labels = torch.cat(rel_labels)
+            else:
+                rel_labels = None
+                
             union_features = self.rel_sg_msg(
-                union_features, prod_rep, prod_emb, geo_embed)
+                union_features, prod_rep, prod_emb, geo_embed, rel_labels)
 
             # information bottlenecks
             iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 1e-2
@@ -196,7 +201,7 @@ class SGraphPredictor(nn.Module):
         # rel constrastive learning
         rel_cl_loss = None
         if self.rel_const and self.training:
-            c_type = 'rel_vis_dists'
+            c_type = 'ctx_vis_dists'
             if c_type is 'vis_dists':
                 anchors = vis_dists
                 positives = vis_dists

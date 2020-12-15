@@ -174,7 +174,8 @@ class UnionRegionAttention(nn.Module):
         #x = F.max_pool2d(x, 4)
         return x
 
-    def forward(self, union_fmap, subjobj_fmap, subjobj_embed, geo_embed):
+    def forward(self, union_fmap, subjobj_fmap, subjobj_embed, geo_embed,
+                rel_labels=None):
         """
         Input:
         union_fmap: batch x 256 x 7 x 7
@@ -214,7 +215,7 @@ class UnionRegionAttention(nn.Module):
             union_fmap = mask * union_fmap
 
         elif self.g_type is 'iba':
-            union_fmap = self.iba(mask, union_fmap)
+            union_fmap = self.iba(mask, union_fmap, rel_labels)
 
         elif self.g_type is 'gcn_iba':
             mask = self.normalized_adj(batch, mask)
