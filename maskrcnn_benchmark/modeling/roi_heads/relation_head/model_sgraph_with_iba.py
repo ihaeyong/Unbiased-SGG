@@ -154,10 +154,10 @@ class PerSampleBottleneck(AttributionBottleneck):
             fg_w = len(fg_idx) / batch_size
 
             eps = torch.rand_like(lamb)
-            eps[bg_idx, ] = eps[bg_idx] * 1e-2 * bg_w # 1e-8
-            eps[fg_idx, ] = eps[fg_idx] * 1e-2 * fg_w
+            eps[bg_idx, ] = eps[bg_idx] * 1e-1 * bg_w # 1e-8
+            eps[fg_idx, ] = eps[fg_idx] * 1e-1 * fg_w
         else:
-            eps = 0.0
+            eps = torch.rand_like(lamb) * 1e-1
 
         noise_var = (1-lamb + eps)**2
         scaled_signal = r_norm * lamb
