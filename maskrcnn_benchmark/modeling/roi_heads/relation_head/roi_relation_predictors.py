@@ -174,7 +174,7 @@ class SGraphPredictor(nn.Module):
                 rel_labels = torch.cat(rel_labels)
             else:
                 rel_labels = None
-                
+
             union_features = self.rel_sg_msg(
                 union_features, prod_rep, prod_emb, geo_embed, rel_labels)
 

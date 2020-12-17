@@ -47,7 +47,7 @@ class RelationLossComputation(object):
         self.l_type = 'margin'
         self.gamma = 0.9
 
-        self.weight = 'batchweight' #'batchweight'
+        self.weight = 'batchweight'
         if self.weight == 'batchweight':
             if self.mode is not 'predcls':
                 self.obj_weight = ObjWeight(temp=1e0)

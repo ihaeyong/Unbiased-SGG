@@ -127,6 +127,20 @@ class PerSampleBottleneck(AttributionBottleneck):
 
         self.beta = 10.0 / (channel * fmap_size * fmap_size) # 1/k
 
+    def gaussian(self, ins, rel_labels, scale):
+        batch_size = ins.size(0)
+        bg_idx = np.where(rel_labels.cpu() == 0)[0]
+        fg_idx = np.where(rel_labels.cpu() > 0)[0]
+
+        randn = torch.randn_like(ins)
+        bg_stddev = len(bg_idx) / batch_size * randn[bg_idx, ]
+        fg_stddev = len(fg_idx) / batch_size * randn[fg_idx, ]
+
+        ins[bg_idx, ] = ins[bg_idx,] + bg_stddev * scale
+        ins[fg_idx, ] = ins[fg_idx,] + fg_stddev * scale
+
+        return ins
+
 
     def forward(self, lamb, r_, rel_labels=None):
         """ Remove information from r by performing a sampling step,
@@ -146,18 +160,10 @@ class PerSampleBottleneck(AttributionBottleneck):
 
         # Get sampling parameters
         if self.training:
-            batch_size = rel_labels.size(0)
-            bg_idx = np.where(rel_labels.cpu() == 0)[0]
-            fg_idx = np.where(rel_labels.cpu() > 0)[0]
-
-            bg_w = len(bg_idx) / batch_size
-            fg_w = len(fg_idx) / batch_size
-
-            eps = torch.rand_like(lamb)
-            eps[bg_idx, ] = eps[bg_idx] * 1e-1 * bg_w # 1e-8
-            eps[fg_idx, ] = eps[fg_idx] * 1e-1 * fg_w
+            eps = self.gaussian(lamb, rel_labels, 1e-4)
         else:
-            eps = torch.rand_like(lamb) * 1e-1
+            #eps = torch.rand_like(lamb) * 1e-7
+            eps = 0.0
 
         noise_var = (1-lamb + eps)**2
         scaled_signal = r_norm * lamb

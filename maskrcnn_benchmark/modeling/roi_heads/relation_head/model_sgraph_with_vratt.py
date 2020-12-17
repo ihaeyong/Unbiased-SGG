@@ -185,6 +185,7 @@ class UnionRegionAttention(nn.Module):
         union_fmap: batch x 256 x 7 x 7
         """
         batch = union_fmap.size(0)
+
         subjobj_upconv = self.subjobj_upconv(subjobj_fmap[:,:,None,None])
         subjobj_emb_upconv = self.subjobj_emb_upconv(subjobj_embed[:,:,None,None])
         subjobj_geo_upconv = self.subjobj_geo_upconv(geo_embed[:,:,None,None])
