@@ -143,6 +143,7 @@ class RelWeight(nn.Module):
 
         self.pred_prop = np.array(predicate_proportion)
         self.pred_prop = np.concatenate(([1], self.pred_prop), 0)
+        self.pred_prop[0] = 1.0 - self.pred_prop[1:-1].sum()
         self.pred_idx = self.pred_prop.argsort()[::-1]
 
         self.temp = temp
@@ -215,9 +216,9 @@ class RelWeight(nn.Module):
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
         if skew_v > 1.0 :
-            beta = 1.0 - ent_v * 0.7
-        elif skew_v < -0.5:
-            beta = 1.0 - ent_v * 0.7
+            beta = 1.0 - np.sqrt(ent_v) * 0.6
+        elif skew_v < -1.0:
+            beta = 1.0 - np.sqrt(ent_v) * 0.6
         else:
             beta = 0.0
 
