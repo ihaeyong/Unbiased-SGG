@@ -212,28 +212,30 @@ class RelWeight(nn.Module):
         # topk logits
         topk_prob, topk_idx = F.softmax(rel_logits,1).topk(1)
         #topk_prob, topk_idx = torch.sigmoid(rel_logits).topk(1)
-        topk_true_mask = (topk_idx[:,0] == rel_labels).float()[:,None]
-        topk_false_mask = (topk_idx[:,0] != rel_labels).float()[:,None]
+        topk_true_mask = (topk_idx[:,0] == rel_labels).float().data.cpu().numpy()
+        topk_false_mask = (topk_idx[:,0] != rel_labels).float().data.cpu().numpy()
 
         if True:
-            true_freq = freq_bias * topk_true_mask * (1-topk_prob)
-            false_freq = freq_bias * topk_false_mask * topk_prob
-            batch_freq = true_freq + false_freq
-            batch_freq = batch_freq.sum(0).data.cpu().numpy()
+            batch_freq = freq_bias.data.cpu().numpy()
+            cls_num_list = batch_freq.sum(0)
+            cls_order = batch_freq[:, self.pred_idx]
+            ent_v = entropy(cls_order, base=51, axis=1).mean()
+            skew_v = skew(cls_order, axis=1).mean()
         else:
             batch_freq = freq_bias.sum(0).data.cpu().numpy()
 
-        cls_num_list = batch_freq
-        cls_order = batch_freq[self.pred_idx]
-        ent_v = entropy(cls_order, base=51)
+            cls_num_list = batch_freq
+            cls_order = batch_freq[self.pred_idx]
+            ent_v = entropy(cls_order, base=51)
 
-        # skew_v > 0 : more weight in the left tail
-        # skew_v < 0 : more weight in the right tail
-        skew_v = skew(cls_order)
+            # skew_v > 0 : more weight in the left tail
+            # skew_v < 0 : more weight in the right tail
+            skew_v = skew(cls_order)
+
         if skew_v > 1.0 :
-            beta = 1.0 - ent_v * 1.0
+            beta = 1.0 - ent_v * 0.9
         elif skew_v < -1.0:
-            beta = 1.0 - ent_v * 1.0
+            beta = 1.0 - ent_v * 0.9
         else:
             beta = 0.0
 
