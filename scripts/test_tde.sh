@@ -42,7 +42,7 @@ elif [ $2 == "predcls" ]; then
            DTYPE "float16" \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/obj_spectrum_gcn_sum_v3_0.7-predcls \
-           OUTPUT_DIR ./checkpoints/obj_spectrum_gcn_sum_v7_0.7-predcls
+           OUTPUT_DIR ./checkpoints/rel_cl_batch_skew0.9_mask_1.0_false_sum_v3-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \

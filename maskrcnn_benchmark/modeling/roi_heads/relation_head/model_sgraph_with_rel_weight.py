@@ -215,7 +215,9 @@ class RelWeight(nn.Module):
         topk_true_mask = (topk_idx[:,0] == rel_labels).float().data.cpu().numpy()
         topk_false_mask = (topk_idx[:,0] != rel_labels).float().data.cpu().numpy()
 
-        if True:
+        w_type = 'false'
+
+        if w_type is 'full':
             batch_freq = freq_bias.data.cpu().numpy()
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
@@ -226,6 +228,17 @@ class RelWeight(nn.Module):
             else:
                 ent_v = entropy(cls_order, base=51, axis=1).mean()
             skew_v = skew(cls_order, axis=1).mean()
+        elif w_type is 'false':
+            batch_freq = freq_bias.data.cpu().numpy()
+            cls_num_list = batch_freq.sum(0)
+            cls_order = batch_freq[:, self.pred_idx]
+
+            if True:
+                ent_v = entropy(cls_order, base=51, axis=1) * topk_false_mask
+                skew_v = skew(cls_order, axis=1) * topk_false_mask
+
+            ent_v = ent_v.mean()
+            skew_v = skew_v.mean()
         else:
             batch_freq = freq_bias.sum(0).data.cpu().numpy()
 
@@ -238,9 +251,9 @@ class RelWeight(nn.Module):
             skew_v = skew(cls_order)
 
         if skew_v > 0.9 :
-            beta = 1.0 - ent_v * 0.8
+            beta = 1.0 - ent_v * 1.0
         elif skew_v < -0.9:
-            beta = 1.0 - ent_v * 0.8
+            beta = 1.0 - ent_v * 1.0
         else:
             beta = 0.0
 
