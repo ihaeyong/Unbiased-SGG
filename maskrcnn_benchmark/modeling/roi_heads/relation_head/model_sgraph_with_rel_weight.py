@@ -212,6 +212,7 @@ class RelWeight(nn.Module):
         # topk logits
         topk_prob, topk_idx = F.softmax(rel_logits,1).topk(1)
         #topk_prob, topk_idx = torch.sigmoid(rel_logits).topk(1)
+        topk_prob = topk_prob.data.cpu().numpy()
         topk_true_mask = (topk_idx[:,0] == rel_labels).float().data.cpu().numpy()
         topk_false_mask = (topk_idx[:,0] != rel_labels).float().data.cpu().numpy()
 
@@ -233,12 +234,48 @@ class RelWeight(nn.Module):
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
 
-            if True:
+            m_type = 'avg'
+            if m_type is 'mean':
                 ent_v = entropy(cls_order, base=51, axis=1) * topk_false_mask
                 skew_v = skew(cls_order, axis=1) * topk_false_mask
+                ent_v = ent_v.mean()
+                skew_v = skew_v.mean()
+            elif m_type is 'wavg':
+                ent_v = entropy(cls_order, base=51, axis=1)
+                skew_v = skew(cls_order, axis=1)
 
-            ent_v = ent_v.mean()
-            skew_v = skew_v.mean()
+                ent_false_v = ent_v * topk_false_mask
+                ent_true_v = ent_v * topk_true_mask
+
+                ent_v = ent_false_v.sum()/topk_false_mask.sum()
+                ent_v += ent_true_v.sum()/topk_true_mask.sum()
+                ent_v = ent_v / 2.0
+
+                skew_false_v = skew_v * topk_false_mask
+                skew_true_v = skew_v * topk_true_mask
+
+                skew_v = skew_false_v.sum()/topk_false_mask.sum()
+                skew_v += skew_true_v.sum()/topk_true_mask.sum()
+                skew_v = skew_v / 2.0
+
+            elif m_type is 'avg':
+                ent_v = entropy(cls_order, base=51, axis=1)
+                skew_v = skew(cls_order, axis=1)
+
+                ent_false_v = ent_v * topk_false_mask
+                ent_true_v = ent_v * topk_true_mask
+
+                alpha = topk_false_mask.sum() / freq_bias.size(0)
+
+                ent_v = ent_false_v.sum()/topk_false_mask.sum() * alpha
+                ent_v += ent_true_v.sum()/topk_true_mask.sum() * (1-alpha)
+
+                skew_false_v = skew_v * topk_false_mask
+                skew_true_v = skew_v * topk_true_mask
+
+                skew_v = skew_false_v.sum()/topk_false_mask.sum() * alpha
+                skew_v += skew_true_v.sum()/topk_true_mask.sum() * (1-alpha)
+
         else:
             batch_freq = freq_bias.sum(0).data.cpu().numpy()
 
