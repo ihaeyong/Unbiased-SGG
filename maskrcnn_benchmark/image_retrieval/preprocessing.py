@@ -34,18 +34,25 @@ from maskrcnn_benchmark.utils.logger import setup_logger, debug_print
 from maskrcnn_benchmark.utils.miscellaneous import mkdir, save_config
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
 
-test = True
+test = False
+gt = False
+sg_model_name = 'obj_spectrum_gcn_sum_v3_0.7'
 
 if test:
     # where to load detected scene graph
-    detected_path = './checkpoints/motifs-causal-sgdet/inference/VG_stanford_filtered_with_attribute_test/'
+    detected_path = './checkpoints/{}-sgdet/inference/VG_stanford_filtered_with_attribute_test/'.format(sg_model_name)
     # where to save the generated annotation
-    output_path = './datasets/image_retrieval/sg_of_motifs-casual-sgdet-test.json'
+    output_path = './datasets/image_retrieval/grad_sg_of_{}-sgdet-test.json'.format(sg_model_name)
 else:
     # where to load detected scene graph
-    detected_path = './checkpoints/motifs-causal-sgdet/inference/VG_stanford_filtered_with_attribute_train/'
-    # where to save the generated annotation
-    output_path = './datasets/image_retrieval/sg_of_motifs-casual-sgdet-train.json'
+    if gt:
+        detected_path = './checkpoints/motifs-causal-sgdet/inference/VG_stanford_filtered_with_attribute_train/'
+        # where to save the generated annotation
+        output_path = './datasets/image_retrieval/grad_sg_of_gt-sgdet-train.json'
+    else:
+        detected_path = './checkpoints/{}-sgdet/inference/VG_stanford_filtered_with_attribute_train/'.format(sg_model_name)
+        output_path = './datasets/image_retrieval/grad_sg_of_{}-sgdet-train.json'.format(sg_model_name)
+
 
 cap_graph = json.load(open('./datasets/vg_capgraphs_anno.json'))
 vg_data = h5py.File('./datasets/vg/VG-SGG-with-attri.h5', 'r')
@@ -114,8 +121,6 @@ def generate_gt_sg():
             gt_triplet = [[i[0], i[1], j] for i, j in zip(gt_pairs, gt_rels)]
             img_to_sg[str(coco_id)] = [{'entities' : gt_boxes, 'relations' : gt_triplet}, ]
     return img_to_sg
-
-#gt_scene_graph = generate_gt_sg()
 
 # generate scene graph from test results
 def generate_detect_sg(det_result, det_info, valid_ids, img_coco_map, obj_thres = 0.1):
@@ -202,8 +207,6 @@ def generate_txt_img_sg(img_sg, txt_sg):
                 for j, rs in enumerate(relations):
                     if es in rs:
                         img_graph[i,j] = 1
-                    else:
-                        img_graph[i,j] = 0
 
             image_graph.append(img_graph.tolist())
 
@@ -220,8 +223,6 @@ def generate_txt_img_sg(img_sg, txt_sg):
                 for j, rs in enumerate(relations):
                     if es in rs:
                         txt_graph[i,j] = 1
-                    else:
-                        txt_graph[i,j] = 0
 
             text_graph.append(txt_graph.tolist())
 
@@ -248,11 +249,18 @@ detected_info = json.load(open(detected_path + 'visual_info.json'))
 img_coco = img_coco_mapping()
 
 valid_ids = []
+import ipdb; ipdb.set_trace()
 for img_id, val in zip(cap_graph['vg_image_ids'], cap_graph['vg_valids']):
     if val > 0:
         valid_ids.append(img_id)
 
-output = generate_detect_sg(detected_result, detected_info, valid_ids, img_coco, obj_thres = 0.1)
+if test:
+    output = generate_detect_sg(detected_result, detected_info,
+                                valid_ids, img_coco, obj_thres = 0.1)
+else:
+    output = generate_detect_sg(detected_result, detected_info,
+                                valid_ids, img_coco, obj_thres = 0.1)
+    #output = generate_gt_sg()
 
 txt_img_sg = generate_txt_img_sg(output, cap_graph['vg_coco_id_to_capgraphs'])
 

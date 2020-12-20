@@ -45,24 +45,24 @@ try:
 except ImportError:
     raise ImportError('Use APEX for multi-precision via apex.amp')
 
-#sg_model_name = 'obj_spectrum_gcn_sum_v3_0.7-sgdet'
-sg_model_name = 'motifs-casual-sgdet'
 sg_fusion_name = 'sum'
 sg_type_name = 'none'
+gt = False
 
 if True:
-    sg_train_path = './datasets/image_retrieval/sg_of_{}-train.json'.format(
-        sg_model_name)
-    sg_test_path = './datasets/image_retrieval/sg_of_{}-test.json'.format(
-        sg_model_name)
-    output_path = './datasets/image_retrieval_model/sg_of_' + sg_model_name + '_output_%s_%d.pytorch'
-else:
-    sg_train_path = './datasets/image_retrieval/sg_of_{}-train.json'.format(
-        sg_model_name)
-    sg_test_path = './datasets/image_retrieval/sg_of_{}-test.json'.format(
-        sg_model_name)
-    output_path = './datasets/image_retrieval_model/sg_of_' + sg_model_name + '_output_%s_%d.pytorch'
+    # training set - GT
+    #sg_model_name = 'motifs-casual-sgdet'
+    sg_model_name = 'obj_spectrum_gcn_sum_v3_0.7'
+    if gt :
+        sg_train_path = './datasets/image_retrieval/grad_sg_of_gt-sgdet-train.json'
+    else:
+        sg_train_path = './datasets/image_retrieval/grad_sg_of_{}-sgdet-train.json'.format(sg_model_name)
 
+    # test set
+    sg_model_name = 'obj_spectrum_gcn_sum_v3_0.7'
+    #sg_test_path = './datasets/image_retrieval/reg_of_{}-test.json'.format(sg_model_name)
+    sg_test_path = './datasets/image_retrieval/grad_sg_of_{}-sgdet-test.json'.format(sg_model_name)
+    output_path = './datasets/image_retrieval_model/sg_of_' + sg_model_name + '_output_%s_%d.pytorch'
 
 #sg_train_path = '/data1/image_retrieval/causal_sgdet_rubi_TDE_train.json'
 #sg_test_path = '/data1/image_retrieval/causal_sgdet_rubi_TDE_test.json'
@@ -201,13 +201,13 @@ def train(cfg, local_rank, distributed, logger, writer):
 
             optimizer.zero_grad()
             # L1 Reg
-            if True:
+            if False:
                 L1_reg = 0
                 for name, param in model.named_parameters():
                     if 'weight' in name:
                         L1_reg = L1_reg + torch.norm(param, 2)
 
-                losses = losses + 5e-7 * L1_reg
+                losses = losses + 1e-7 * L1_reg
 
             # Note: If mixed precision is not used, this ends up doing nothing
             # Otherwise apply loss scaling for mixed-precision recipe
@@ -216,10 +216,10 @@ def train(cfg, local_rank, distributed, logger, writer):
 
             # add clip_grad_norm from MOTIFS, used for debug
             verbose = (iteration % cfg.SOLVER.PRINT_GRAD_FREQ) == 0
-            if False:
+            if True:
                 clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.requires_grad],
                                max_norm=cfg.SOLVER.GRAD_NORM_CLIP, logger=logger,
-                               verbose=verbose, clip=True)
+                               verbose=False, clip=True)
 
             optimizer.step()
 
@@ -299,47 +299,6 @@ def train(cfg, local_rank, distributed, logger, writer):
     )
 
     return model, test_result
-
-def run_val(cfg, model, val_data_loader, distributed, logger):
-    if distributed:
-        model = model.module
-    torch.cuda.empty_cache()
-    device = torch.device(cfg.MODEL.DEVICE)
-    model.eval()
-
-    val_result = []
-    logger.info('START VALIDATION with size: ' + str(len(val_data_loader)))
-
-    for iteration, (fg_imgs, fg_txts, bg_imgs, bg_txts) in enumerate(tqdm(val_data_loader)):
-        for fg_img, fg_txt, bg_img, bg_txt in zip(fg_imgs, fg_txts, bg_imgs, bg_txts):
-            fg_img['entities'] = fg_img['entities'].to(device)
-            fg_img['relations'] = fg_img['relations'].to(device)
-            fg_img['graph'] = fg_img['graph'].to(device)
-            fg_txt['entities'] = fg_txt['entities'].to(device)
-            fg_txt['relations'] = fg_txt['relations'].to(device)
-            fg_txt['graph'] = fg_txt['graph'].to(device)
-            bg_img['entities'] = bg_img['entities'].to(device)
-            bg_img['relations'] = bg_img['relations'].to(device)
-            bg_img['graph'] = bg_img['graph'].to(device)
-            bg_txt['entities'] = bg_txt['entities'].to(device)
-            bg_txt['relations'] = bg_txt['relations'].to(device)
-            bg_txt['graph'] = bg_txt['graph'].to(device)
-
-        loss_list = model(fg_imgs, fg_txts, bg_imgs, bg_txts)
-
-        losses = sum(loss_list)
-
-        synchronize()
-        val_result.append(float(losses))
-    # support for multi gpu distributed testing
-    gathered_result = all_gather(torch.tensor(val_result).cpu())
-    gathered_result = [t.view(-1) for t in gathered_result]
-    gathered_result = torch.cat(gathered_result, dim=-1).view(-1)
-    valid_result = gathered_result[gathered_result>=0]
-    val_result = float(valid_result.mean())
-    del gathered_result, valid_result
-    torch.cuda.empty_cache()
-    return val_result
 
 def to_cpu(inp_list):
     cpu_output = []

@@ -110,7 +110,6 @@ class ApplySingleAttention(nn.Module):
         elif a_type is 'rel':
             v_ = self.lin_v(v_).transpose(1,2).unsqueeze(3) # [b,512,4,1]  (5)
             q_ = self.lin_q(q_).transpose(1,2).unsqueeze(2) # [b,512,1,10] (4)
-
             atten = atten.squeeze(1).transpose(1,2) # atten : [1,23,2] (6)
             q_ = torch.matmul(q_, atten) # [b,512,1,2] (4),(6) --> (7)
             h_ = torch.matmul(q_, v_) # [b,512,1,1] (7),(5) --> (8)
@@ -124,7 +123,10 @@ class ApplySingleAttention(nn.Module):
 class SGEncode(nn.Module):
     def __init__(self, img_num_obj=151, img_num_rel=51, txt_num_obj=4460, txt_num_rel=646):
         super(SGEncode, self).__init__()
-        self.embed_dim = 300
+
+        self.init = 'norm'
+
+        self.embed_dim = 512 if self.init is not 'embed' else 300
         self.hidden_dim = 512
         self.final_dim = 1024
         self.num_layer = 2
@@ -139,21 +141,38 @@ class SGEncode(nn.Module):
         cap_graph = json.load(open('./datasets/vg_capgraphs_anno.json'))
         vg_dict = json.load(open('./datasets/vg/VG-SGG-dicts-with-attri.json'))
 
+        sgg_rel_vocab = list(set(vg_dict['idx_to_predicate'].values()))
+        txt_rel_vocab = list(set(cap_graph['cap_predicate'].keys())) # no wear
+
+        sgg_obj_vocab = list(set(vg_dict['idx_to_label'].values()))
+        txt_obj_vocab = list(set(cap_graph['cap_category'].keys()))
+
         img_obj = ['backgrounds']
         img_rel = ['backgrounds']
         txt_obj = ['backgrounds']
         txt_rel = ['backgrounds']
 
-        for rel in vg_dict['idx_to_predicate'].values() :
-            img_rel.append(rel)
-        for obj in vg_dict['idx_to_label'].values() :
-            img_obj.append(obj)
-        for rel in cap_graph['cap_predicate'].keys():
-            txt_rel.append(rel)
-        for obj in cap_graph['cap_category'].keys():
-            txt_obj.append(obj)
+        if False:
+            for rel in vg_dict['idx_to_predicate'].values() :
+                img_rel.append(rel)
+            for obj in vg_dict['idx_to_label'].values() :
+                img_obj.append(obj)
+            for rel in cap_graph['cap_predicate'].keys():
+                txt_rel.append(rel)
+            for obj in cap_graph['cap_category'].keys():
+                txt_obj.append(obj)
+        else:
+            for rel in sgg_rel_vocab :
+                img_rel.append(rel)
+            for obj in sgg_obj_vocab :
+                img_obj.append(obj)
+            for rel in txt_rel_vocab:
+                txt_rel.append(rel)
+            for obj in txt_obj_vocab:
+                txt_obj.append(obj)
 
-        if True:
+
+        if self.init is 'embed':
             img_obj_embed_vecs = img_obj_vectors(img_obj,
                                                  wv_dir=self.GLOVE_DIR,
                                                  wv_dim=self.embed_dim)
@@ -175,7 +194,6 @@ class SGEncode(nn.Module):
         self.img_rel_tail_embed = nn.Embedding(self.img_num_obj, self.embed_dim)
         self.img_rel_pred_embed = nn.Embedding(self.img_num_rel, self.embed_dim)
 
-        self.init = 'embed'
         gain = 0.1
 
         if self.init is 'uniform':
@@ -276,6 +294,8 @@ class SGEncode(nn.Module):
 
         self.final_fc.apply(seq_init)
 
+        self.a_type = 'obj'
+
     def encode(self, inp_dict, is_img=False, is_txt=False):
         assert is_img + is_txt
         if len(inp_dict['relations'].shape) == 1:
@@ -302,7 +322,14 @@ class SGEncode(nn.Module):
         #atten = inp_dict['graph'].transpose(0, 1)  # num_rel, num_obj
         #atten = atten / (atten.sum(0).view(1, -1) + 1e-9)
         atten = inp_dict['graph'].transpose(1, 2)  # num_rel, num_obj
-        atten = atten / (atten.sum(1).view(1, -1) + 1e-9)
+        # atten : [1, 7 ,16]
+        # atten.sum(1) : [1,16]
+        # atten / atten.sum(1) : [1, 7, 16]
+        if self.a_type is 'rel':
+            atten = atten / (atten.sum(2)[:,:,None] + 1e-9)
+        else:
+            atten = atten / (atten.sum(1).view(1, -1) + 1e-9)
+
         # rel_encode : [b, 2, 1536]
         # obj_encode : [b, 23, 512]
         # atten : [b, 23, 1, 2]
