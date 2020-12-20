@@ -219,7 +219,12 @@ class RelWeight(nn.Module):
             batch_freq = freq_bias.data.cpu().numpy()
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
-            ent_v = entropy(cls_order, base=51, axis=1).mean()
+            if True:
+                ent_v = entropy(cls_order, base=51, axis=1)
+                ent_v = (np.sqrt(ent_v) + ent_v)/2
+                ent_v = ent_v.mean()
+            else:
+                ent_v = entropy(cls_order, base=51, axis=1).mean()
             skew_v = skew(cls_order, axis=1).mean()
         else:
             batch_freq = freq_bias.sum(0).data.cpu().numpy()
@@ -232,10 +237,10 @@ class RelWeight(nn.Module):
             # skew_v < 0 : more weight in the right tail
             skew_v = skew(cls_order)
 
-        if skew_v > 1.0 :
-            beta = 1.0 - ent_v * 0.9
-        elif skew_v < -1.0:
-            beta = 1.0 - ent_v * 0.9
+        if skew_v > 0.9 :
+            beta = 1.0 - ent_v * 0.8
+        elif skew_v < -0.9:
+            beta = 1.0 - ent_v * 0.8
         else:
             beta = 0.0
 
