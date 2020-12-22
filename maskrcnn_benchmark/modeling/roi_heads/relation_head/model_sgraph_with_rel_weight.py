@@ -161,9 +161,6 @@ class RelWeight(nn.Module):
 
     def forward(self, rel_logits, freq_bias, rel_labels, gamma=0.01):
 
-        #batch_freq = freq_bias.sum(0).data.cpu().numpy()
-        #cls_num_list = batch_freq
-
         # target [batch_size, batch_size] in {0, 1} and normalize in (0,1)
         fg_idx = np.where(rel_labels.cpu() > 0)[0]
         bg_idx = np.where(rel_labels.cpu() == 0)[0]
@@ -172,15 +169,15 @@ class RelWeight(nn.Module):
         target = target / torch.sum(target, dim=1, keepdim=True).float()
         target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
 
-        l_type = 'target'
         bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
         fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
         target[bg_idx, :] = bg_w * target[bg_idx,:]
         target[fg_idx, :] = fg_w * target[fg_idx,:]
 
         # scaled mean of logits
-        rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
-        rel_margin = rel_margin * target_mask * gamma
+        with torch.no_grad():
+            rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
+            rel_margin = rel_margin * target_mask * gamma
 
         # Entropy * scale
         # topk logits
@@ -218,10 +215,10 @@ class RelWeight(nn.Module):
             ent_v = ent_v.sum() / topk_false_mask.sum()
             skew_v = skew_v.sum() / topk_false_mask.sum()
 
-        if skew_v > 1.2 :
+        if skew_v > 0.9 :
             beta = 1.0 - ent_v * 1.0
-        elif skew_v < -1.0:
-            beta = 1.2 - ent_v * 1.0
+        elif skew_v < -0.9:
+            beta = 1.0 - ent_v * 1.0
         else:
             beta = 0.0
 

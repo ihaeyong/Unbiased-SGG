@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from collections import Counter
 from scipy.linalg import qr
+from .utils_relation import layer_init, seq_init
 
 class Geometric(nn.Module):
     """
@@ -23,6 +24,8 @@ class Geometric(nn.Module):
             nn.ReLU(inplace=True),
             nn.Dropout(0.3)
         ])
+
+        self.geo_embedding.apply(seq_init)
 
     def forward(self, proposals, rel_pair_idxs):
         subj_boxes = []

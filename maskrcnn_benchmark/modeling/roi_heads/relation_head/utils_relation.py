@@ -92,29 +92,39 @@ def layer_init(layer, init_para=0.1, normal=False, xavier=True):
 def seq_init(m):
 
     if type(m) == nn.Linear:
-        torch.nn.init.xavier_normal_(m.weight, gain=0.01)
+        torch.nn.init.xavier_normal_(m.weight, gain=1.0)
         if m.bias is not None:
             torch.nn.init.constant_(m.bias, 0)
 
     elif type(m) == nn.Conv2d :
-        torch.nn.init.xavier_normal_(m.weight, gain=0.01)
+        torch.nn.init.xavier_normal_(m.weight, gain=1.0)
         if m.bias is not None:
             torch.nn.init.constant_(m.bias, 0)
 
     elif type(m) == nn.ConvTranspose2d :
-        torch.nn.init.xavier_normal_(m.weight, gain=0.01)
+        torch.nn.init.xavier_normal_(m.weight, gain=1.0)
         if m.bias is not None:
             torch.nn.init.constant_(m.bias, 0)
 
     elif type(m) == nn.BatchNorm1d :
-        torch.nn.init.normal_(m.weight, mean=0, std=0.1)
-        if m.bias is not None:
-            torch.nn.init.constant_(m.bias, 0)
+        if True:
+            torch.nn.init.normal_(m.weight, mean=0, std=0.1)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0)
+        else:
+            torch.nn.init.xavier_normal_(m.weight, gain=1.0)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0)
 
     elif type(m) == nn.BatchNorm2d :
-        torch.nn.init.normal_(m.weight, mean=0, std=0.1)
-        if m.bias is not None:
-            torch.nn.init.constant_(m.bias, 0)
+        if True:
+            torch.nn.init.normal_(m.weight, mean=0, std=0.1)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0)
+        else:
+            torch.nn.init.xavier_normal_(m.weight, gain=1.0)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0)
 
 
 def obj_prediction_nms(boxes_per_cls, pred_logits, nms_thresh=0.3):
