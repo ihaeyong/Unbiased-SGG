@@ -76,5 +76,5 @@ elif [ $2 == "sgdet" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/obj_spectrum_gcn_sum_v3_0.7-sgdet
+           OUTPUT_DIR ./checkpoints/rel_2gpu_batch_skew_0.9_false_1.0_eps1e-4_gamma0.02_iba2_sum_v3-sgdet
 fi

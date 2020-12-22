@@ -108,7 +108,7 @@ class ObjWeight(nn.Module):
             batch_freq = freq_bias.data.cpu().numpy()
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.obj_idx]
-            ent_v = entropy(cls_order, base=51, axis=1).mean()
+            ent_v = entropy(cls_order, base=151, axis=1).mean()
             skew_v = skew(cls_order, axis=1).mean()
 
         elif w_type is 'true':
@@ -116,7 +116,7 @@ class ObjWeight(nn.Module):
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.obj_idx]
 
-            ent_v = entropy(cls_order, base=51, axis=1) * topk_true_mask
+            ent_v = entropy(cls_order, base=151, axis=1) * topk_true_mask
             skew_v = skew(cls_order, axis=1) * topk_true_mask
             ent_v = ent_v.sum() / topk_true_mask.sum()
             skew_v = skew_v.sum() / topk_true_mask.sum()
@@ -126,7 +126,7 @@ class ObjWeight(nn.Module):
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.obj_idx]
 
-            ent_v = entropy(cls_order, base=51, axis=1) * topk_false_mask
+            ent_v = entropy(cls_order, base=151, axis=1) * topk_false_mask
             skew_v = skew(cls_order, axis=1) * topk_false_mask
             ent_v = ent_v.sum() / topk_false_mask.sum()
             skew_v = skew_v.sum() / topk_false_mask.sum()
