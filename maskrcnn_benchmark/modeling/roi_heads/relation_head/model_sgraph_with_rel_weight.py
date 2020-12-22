@@ -76,8 +76,6 @@ class ObjWeight(nn.Module):
     def forward(self, obj_logits, obj_labels, gamma=0.01):
 
         freq_bias = torch.sigmoid(obj_logits)
-        batch_freq = freq_bias.sum(0).data.cpu().numpy()
-        cls_num_list = batch_freq
 
         fg_idx = np.where(obj_labels.cpu() > 0)[0]
         bg_idx = np.where(obj_labels.cpu() == 0)[0]
@@ -91,36 +89,58 @@ class ObjWeight(nn.Module):
         l_type = 'target'
         bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
         fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
-        if l_type is 'target_mask' :
-            target_mask[bg_idx, :] = bg_w * target_mask[bg_idx, :]
-            target_mask[fg_idx, :] = fg_w * target_mask[fg_idx, :]
-        elif l_type is 'target':
-            target[bg_idx, :] = bg_w * target[bg_idx,:]
-            target[fg_idx, :] = fg_w * target[fg_idx,:]
-        elif l_type is 'none':
-            None
+        target[bg_idx, :] = bg_w * target[bg_idx,:]
+        target[fg_idx, :] = fg_w * target[fg_idx,:]
 
-        obj_margin = torch.matmul(target, obj_logits.detach()) * target_mask
-        obj_mask_logits = obj_logits.detach() * target_mask
-
-        r_type = 'none'
-        if r_type is 'hinge' :
-            # mean - logits
-            obj_diff = obj_margin - obj_mask_logits
-            obj_hinge = torch.max(obj_diff,
-                                  torch.ones_like(obj_diff) * -1.0)
-            obj_margin = obj_hinge * target_mask * gamma
-        elif r_type is 'none':
+        with torch.no_grad():
+            obj_margin = torch.matmul(target, obj_logits.detach()) * target_mask
             obj_margin = obj_margin * target_mask * gamma
 
         # Entropy * scale
-        cls_order = batch_freq[self.obj_idx]
-        ent_v = entropy(cls_order, base=151)
+        # topk logits
+        topk_prob, topk_idx = F.softmax(obj_logits,1).topk(1)
+        topk_true_mask = (topk_idx[:,0] == obj_labels).float().data.cpu().numpy()
+        topk_false_mask = (topk_idx[:,0] != obj_labels).float().data.cpu().numpy()
+
+        w_type = 'false'
+
+        if w_type is 'full':
+            batch_freq = freq_bias.data.cpu().numpy()
+            cls_num_list = batch_freq.sum(0)
+            cls_order = batch_freq[:, self.obj_idx]
+            ent_v = entropy(cls_order, base=51, axis=1).mean()
+            skew_v = skew(cls_order, axis=1).mean()
+
+        elif w_type is 'true':
+            batch_freq = freq_bias.data.cpu().numpy()
+            cls_num_list = batch_freq.sum(0)
+            cls_order = batch_freq[:, self.obj_idx]
+
+            ent_v = entropy(cls_order, base=51, axis=1) * topk_true_mask
+            skew_v = skew(cls_order, axis=1) * topk_true_mask
+            ent_v = ent_v.sum() / topk_true_mask.sum()
+            skew_v = skew_v.sum() / topk_true_mask.sum()
+
+        elif w_type is 'false':
+            batch_freq = freq_bias.data.cpu().numpy()
+            cls_num_list = batch_freq.sum(0)
+            cls_order = batch_freq[:, self.obj_idx]
+
+            ent_v = entropy(cls_order, base=51, axis=1) * topk_false_mask
+            skew_v = skew(cls_order, axis=1) * topk_false_mask
+            ent_v = ent_v.sum() / topk_false_mask.sum()
+            skew_v = skew_v.sum() / topk_false_mask.sum()
+
+        else:
+            cls_order = batch_freq[self.obj_idx]
+            ent_v = entropy(cls_order, base=151)
 
         # skew_v > 0 : more weight in the left tail
         # skew_v < 0 : more weight in the right tail
         skew_v = skew(cls_order)
         if skew_v > 1.0 :
+            beta = 1.0 - ent_v * 1.0
+        elif skew_v < -1.0 :
             beta = 1.0 - ent_v * 1.0
         else:
             beta = 0.0
