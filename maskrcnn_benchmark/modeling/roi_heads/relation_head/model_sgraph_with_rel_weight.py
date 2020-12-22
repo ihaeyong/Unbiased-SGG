@@ -175,43 +175,16 @@ class RelWeight(nn.Module):
         l_type = 'target'
         bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
         fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
-        if l_type is 'target_mask' :
-            target_mask[bg_idx, :] = bg_w * target_mask[bg_idx, :]
-            target_mask[fg_idx, :] = fg_w * target_mask[fg_idx, :]
-        elif l_type is 'target':
-            target[bg_idx, :] = bg_w * target[bg_idx,:]
-            target[fg_idx, :] = fg_w * target[fg_idx,:]
-        elif l_type is 'none':
-            None
+        target[bg_idx, :] = bg_w * target[bg_idx,:]
+        target[fg_idx, :] = fg_w * target[fg_idx,:]
 
         # scaled mean of logits
         rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
-        rel_mask_logits = rel_logits.detach() * target_mask
-
-        n_type = 'none'
-        if n_type is 'noise':
-            beta = 0.08
-            rel_margin[bg_idx, :] = rel_margin[bg_idx,:] + torch.rand_like(rel_margin[bg_idx,:]) * beta
-            rel_margin[fg_idx, :] = rel_margin[fg_idx,:] + torch.rand_like(rel_margin[fg_idx,:]) * beta
-
-            rel_margin = rel_margin * target_mask
-        else:
-            None
-
-        r_type = 'none'
-        if r_type is 'hinge' :
-            # mean - logits
-            rel_diff = rel_margin - rel_mask_logits
-            rel_hinge = torch.max(rel_diff,
-                                  torch.ones_like(rel_diff) * -1.0)
-            rel_margin = rel_hinge * target_mask * gamma
-        elif r_type is 'none':
-            rel_margin = rel_margin * target_mask * gamma
+        rel_margin = rel_margin * target_mask * gamma
 
         # Entropy * scale
         # topk logits
         topk_prob, topk_idx = F.softmax(rel_logits,1).topk(1)
-        #topk_prob, topk_idx = torch.sigmoid(rel_logits).topk(1)
         topk_prob = topk_prob.data.cpu().numpy()
         topk_true_mask = (topk_idx[:,0] == rel_labels).float().data.cpu().numpy()
         topk_false_mask = (topk_idx[:,0] != rel_labels).float().data.cpu().numpy()
@@ -222,14 +195,9 @@ class RelWeight(nn.Module):
             batch_freq = freq_bias.data.cpu().numpy()
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
-            if True:
-                ent_v = entropy(cls_order, base=51, axis=1)
-                ent_v = (np.sqrt(ent_v) + ent_v)/2
-                ent_v = ent_v.mean()
-            else:
-                ent_v = entropy(cls_order, base=51, axis=1).mean()
+            ent_v = entropy(cls_order, base=51, axis=1).mean()
             skew_v = skew(cls_order, axis=1).mean()
-            
+
         elif w_type is 'true':
             batch_freq = freq_bias.data.cpu().numpy()
             cls_num_list = batch_freq.sum(0)
@@ -245,81 +213,15 @@ class RelWeight(nn.Module):
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
 
-            m_type = 'inv_avg'
-            if m_type is 'mean':
-                ent_v = entropy(cls_order, base=51, axis=1) * topk_false_mask
-                skew_v = skew(cls_order, axis=1) * topk_false_mask
-                ent_v = ent_v.sum() / topk_false_mask.sum()
-                skew_v = skew_v.sum() / topk_false_mask.sum()
-            elif m_type is 'wavg':
-                ent_v = entropy(cls_order, base=51, axis=1)
-                skew_v = skew(cls_order, axis=1)
+            ent_v = entropy(cls_order, base=51, axis=1) * topk_false_mask
+            skew_v = skew(cls_order, axis=1) * topk_false_mask
+            ent_v = ent_v.sum() / topk_false_mask.sum()
+            skew_v = skew_v.sum() / topk_false_mask.sum()
 
-                ent_false_v = ent_v * topk_false_mask
-                ent_true_v = ent_v * topk_true_mask
-
-                ent_v = ent_false_v.sum()/topk_false_mask.sum()
-                ent_v += ent_true_v.sum()/topk_true_mask.sum()
-                ent_v = ent_v / 2.0
-
-                skew_false_v = skew_v * topk_false_mask
-                skew_true_v = skew_v * topk_true_mask
-
-                skew_v = skew_false_v.sum()/topk_false_mask.sum()
-                skew_v += skew_true_v.sum()/topk_true_mask.sum()
-                skew_v = skew_v / 2.0
-
-            elif m_type is 'avg':
-                ent_v = entropy(cls_order, base=51, axis=1)
-                skew_v = skew(cls_order, axis=1)
-
-                ent_false_v = ent_v * topk_false_mask
-                ent_true_v = ent_v * topk_true_mask
-
-                alpha = topk_false_mask.sum() / freq_bias.size(0)
-
-                ent_v = ent_false_v.sum()/topk_false_mask.sum() * alpha
-                ent_v += ent_true_v.sum()/topk_true_mask.sum() * (1-alpha)
-
-                skew_false_v = skew_v * topk_false_mask
-                skew_true_v = skew_v * topk_true_mask
-
-                skew_v = skew_false_v.sum()/topk_false_mask.sum() * alpha
-                skew_v += skew_true_v.sum()/topk_true_mask.sum() * (1-alpha)
-
-            elif m_type is 'inv_avg':
-                ent_v = entropy(cls_order, base=51, axis=1)
-                skew_v = skew(cls_order, axis=1)
-
-                ent_false_v = ent_v * topk_false_mask
-                ent_true_v = ent_v * topk_true_mask
-
-                alpha = topk_false_mask.sum() / freq_bias.size(0)
-
-                ent_v = ent_false_v.sum()/topk_false_mask.sum() * (1-alpha)
-                ent_v += ent_true_v.sum()/topk_true_mask.sum() * alpha
-
-                skew_false_v = skew_v * topk_false_mask
-                skew_true_v = skew_v * topk_true_mask
-
-                skew_v = skew_false_v.sum()/topk_false_mask.sum() * (1-alpha)
-                skew_v += skew_true_v.sum()/topk_true_mask.sum() * alpha
-
-        else:
-            batch_freq = freq_bias.sum(0).data.cpu().numpy()
-
-            cls_num_list = batch_freq
-            cls_order = batch_freq[self.pred_idx]
-            ent_v = entropy(cls_order, base=51)
-
-            # skew_v > 0 : more weight in the left tail
-            # skew_v < 0 : more weight in the right tail
-            skew_v = skew(cls_order)
-
-        if skew_v > 0.9 :
+        if skew_v > 1.2 :
             beta = 1.0 - ent_v * 1.0
-        elif skew_v < -0.9:
-            beta = 1.0 - ent_v * 1.0
+        elif skew_v < -1.0:
+            beta = 1.2 - ent_v * 1.0
         else:
             beta = 0.0
 
