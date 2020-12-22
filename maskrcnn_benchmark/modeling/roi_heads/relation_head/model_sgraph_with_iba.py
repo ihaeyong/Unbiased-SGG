@@ -160,7 +160,8 @@ class PerSampleBottleneck(AttributionBottleneck):
 
         # Get sampling parameters
         if self.training:
-            eps = self.gaussian(lamb, rel_labels, 1e-8)
+            eps = self.gaussian(lamb, rel_labels, 1e-4)
+            #eps = 0.0
         else:
             #eps = torch.rand_like(lamb) * 1e-7
             eps = 0.0
