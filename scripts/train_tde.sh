@@ -51,7 +51,7 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/rel_3gpu_batch_skew_0.9_false_1.0_gamma0.02_sum_v3-predcls
+           OUTPUT_DIR ./checkpoints/rel_3gpu_batch_skew_0.9_false_1.0_iba1e-4_sum_v3-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \
