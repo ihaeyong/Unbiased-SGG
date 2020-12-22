@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=$3,$4,$5,$6
 
 if [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10030 \
+           --master_port 10033 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -28,7 +28,8 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/obj_spectrum_gcn_margin_target_hinge0.1_gamma0.9_sum_v3-0.7-sgdcls
+           OUTPUT_DIR ./checkpoints/rel_2gpu_batch_skew_0.9_false_1.0_eps1e-8_gamma0.02_iba2_sum_v3-sgcls
+
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
            --master_port 10045 \
@@ -51,7 +52,7 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/rel_2gpu_batch_skew_0.9_false_1.0_eps1e-4_gamma0.9_iba2_sum_v3-predcls
+           OUTPUT_DIR ./checkpoints/rel_2gpu_batch_skew_0.9_false_1.0_eps1e-4_iba2_sum_v3-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \

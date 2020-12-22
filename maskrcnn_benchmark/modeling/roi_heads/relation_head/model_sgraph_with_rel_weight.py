@@ -134,10 +134,10 @@ class ObjWeight(nn.Module):
         else:
             cls_order = batch_freq[self.obj_idx]
             ent_v = entropy(cls_order, base=151)
+            skew_v = skew(cls_order)
 
         # skew_v > 0 : more weight in the left tail
         # skew_v < 0 : more weight in the right tail
-        skew_v = skew(cls_order)
         if skew_v > 1.0 :
             beta = 1.0 - ent_v * 1.0
         elif skew_v < -1.0 :
