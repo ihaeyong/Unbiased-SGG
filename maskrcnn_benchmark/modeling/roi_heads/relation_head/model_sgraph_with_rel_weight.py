@@ -102,7 +102,7 @@ class ObjWeight(nn.Module):
         topk_true_mask = (topk_idx[:,0] == obj_labels).float().data.cpu().numpy()
         topk_false_mask = (topk_idx[:,0] != obj_labels).float().data.cpu().numpy()
 
-        w_type = 'false'
+        w_type = 'full'
 
         if w_type is 'full':
             batch_freq = freq_bias.data.cpu().numpy()
