@@ -90,24 +90,28 @@ class UnionRegionAttention(nn.Module):
 
         if self.rib_scale == 2:
             subjobj_mask = [
-                nn.ConvTranspose2d(8*3, 8, 3, stride=2, padding=1, bias=False),
-                #nn.BatchNorm2d(16),
-                nn.Conv2d(8, 3, 1, stride=1, bias=False),
-                nn.Conv2d(3, 1,1,stride=1, bias=False),
-                nn.Sigmoid(),]
+                nn.ConvTranspose2d(8*3, 8, 3, stride=2, padding=1, dilation=2,
+                                   bias=False),
+                nn.BatchNorm2d(8),
+                nn.Conv2d(8, 3, 1, stride=1, dilation=1, bias=False),
+                nn.BatchNorm2d(3),
+                nn.Conv2d(3, 1, 1, stride=1, dilation=1, bias=False),
+                nn.Sigmoid(),
+            ]
             self.subjobj_mask = nn.Sequential(*subjobj_mask)
 
             union_upconv = [
-                nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, bias=False),
-                #nn.BatchNorm2d(128),
-                nn.Conv2d(128, 64, 3, stride=1, padding=1, bias=False),
-                #nn.BatchNorm2d(64),
+                nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, dilation=2,
+                                   bias=False),
+                nn.BatchNorm2d(128),
+                nn.Conv2d(128, 64, 3, stride=1, padding=1, dilation=1, bias=False),
+                nn.BatchNorm2d(64),
             ]
             union_downconv = [
-                nn.Conv2d(64, 128, 3, stride=2, padding=1, bias=False),
-                #nn.BatchNorm2d(128),
-                nn.Conv2d(128, 256, 3, stride=1, padding=1, bias=False),
-                #nn.BatchNorm2d(256),
+                nn.Conv2d(64, 128, 3, stride=2, padding=1, dilation=2, bias=False),
+                nn.BatchNorm2d(128),
+                nn.Conv2d(128, 256, 3, stride=1, padding=1, dilation=1, bias=False),
+                nn.BatchNorm2d(256),
             ]
 
             self.union_upconv = nn.Sequential(*union_upconv)
