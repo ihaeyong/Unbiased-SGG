@@ -96,19 +96,26 @@ class ObjWeight(nn.Module):
 
         # Entropy * scale
         topk_prob, topk_idx = F.softmax(obj_logits,1).topk(1)
-        topk_prob = topk_prob.data.cpu().numpy()
         topk_true_mask = (topk_idx[:,0] == obj_labels).float().data.cpu().numpy()
         topk_false_mask = (topk_idx[:,0] != obj_labels).float().data.cpu().numpy()
 
-        w_type = 'full'
+        w_type = 'false'
         if w_type is 'full':
             batch_freq = freq_bias.data.cpu().numpy()
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.obj_idx]
             ent_v = entropy(cls_order, base=151, axis=1).mean()
             skew_v = skew(cls_order, axis=1).mean()
+        elif w_type is 'false':
+            batch_freq = freq_bias.data.cpu().numpy()
+            cls_num_list = batch_freq.sum(0)
+            cls_order = batch_freq[:, self.obj_idx]
+            ent_v = entropy(cls_order, base=151, axis=1) * topk_false_mask
+            ent_v = ent_v.sum() / (topk_false_mask.sum()+1)
+            skew_v = skew(cls_order, axis=1) * topk_false_mask
+            skew_v = skew_v.sum() / (topk_false_mask.sum()+1)
         else:
-            batch_freq = freq_bias.sum(0).data.cpu().numpy()
+            batch_freq = freq_bias.sum(0).data.cpu()
             cls_num_list = batch_freq
             cls_order = batch_freq[self.obj_idx]
             ent_v = entropy(cls_order, base=151)

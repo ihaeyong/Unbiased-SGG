@@ -124,7 +124,7 @@ class RelationLossComputation(object):
             loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
 
 
-        if self.weight == 'batchweight' and self.mode is not 'predcls' and False:
+        if self.weight == 'batchweight' and self.mode is not 'predcls':
 
             obj_weight, obj_margin = self.obj_weight(refine_obj_logits,
                                                      fg_labels,
