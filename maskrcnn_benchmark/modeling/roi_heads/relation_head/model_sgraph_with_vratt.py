@@ -117,7 +117,7 @@ class UnionRegionAttention(nn.Module):
             self.union_upconv = nn.Sequential(*union_upconv)
             self.union_downconv = nn.Sequential(*union_downconv)
 
-            self.fmap_size = 13
+            self.fmap_size = 15
             self.channel = 64
             self.sigma = 1
 
