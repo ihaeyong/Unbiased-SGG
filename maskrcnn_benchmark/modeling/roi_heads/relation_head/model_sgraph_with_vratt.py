@@ -22,37 +22,37 @@ class UnionRegionAttention(nn.Module):
 
         subjobj_upconv = [
             nn.ConvTranspose2d(obj_dim * 2, 32, 3, bias=False),
-            #nn.BatchNorm2d(32),
-            #nn.ReLU(inplace=True),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
             nn.ConvTranspose2d(32, 16, 3, bias=False),
-            #nn.BatchNorm2d(16),
-            #nn.ReLU(inplace=True),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
             nn.ConvTranspose2d(16, 8, 3, bias=False),
-            #nn.BatchNorm2d(8),
-            #nn.ReLU(inplace=True),
+            nn.BatchNorm2d(8),
+            nn.ReLU(inplace=True),
         ]
 
         subjobj_emb_upconv = [
             nn.ConvTranspose2d(200 * 2, 32, 3, bias=False),
-            #nn.BatchNorm2d(32),
-            #nn.ReLU(inplace=True),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
             nn.ConvTranspose2d(32, 16, 3, bias=False),
-            #nn.BatchNorm2d(16),
-            #nn.ReLU(inplace=True),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
             nn.ConvTranspose2d(16, 8, 3, bias=False),
-            #nn.BatchNorm2d(8),
-            #nn.ReLU(inplace=True),
+            nn.BatchNorm2d(8),
+            nn.ReLU(inplace=True),
         ]
 
         subjobj_geo_upconv = [
             nn.ConvTranspose2d(128, 32, 3, bias=False),
-            #nn.BatchNorm2d(32),
+            nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(32, 16, 3, bias=False),
-            #nn.BatchNorm2d(16),
+            nn.BatchNorm2d(16),
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(16, 8, 3, bias=False),
-            #nn.BatchNorm2d(8),
+            nn.BatchNorm2d(8),
             nn.ReLU(inplace=True),
         ]
 

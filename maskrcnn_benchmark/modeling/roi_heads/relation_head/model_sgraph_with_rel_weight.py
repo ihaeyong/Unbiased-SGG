@@ -123,9 +123,9 @@ class ObjWeight(nn.Module):
 
         # skew_v > 0 : more weight in the left tail
         # skew_v < 0 : more weight in the right tail
-        if skew_v > 1.5:
+        if skew_v > 1.0:
             beta = 1.0 - ent_v * 1.0
-        elif skew_v < -1.5:
+        elif skew_v < -1.0:
             beta = 1.0 - ent_v * 1.0
         else:
             beta = 0.0
