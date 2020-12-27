@@ -44,7 +44,7 @@ class RelationLossComputation(object):
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
 
         self.mode = mode
-        self.l_type = 'margin'
+        self.l_type = 'none'
         self.gamma = 0.02
 
         self.weight = 'batchweight'
@@ -124,7 +124,7 @@ class RelationLossComputation(object):
             loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
 
 
-        if self.weight == 'batchweight' and self.mode is not 'predcls':
+        if self.weight == 'batchweight' and self.mode is not 'predcls' and False:
 
             obj_weight, obj_margin = self.obj_weight(refine_obj_logits,
                                                      fg_labels,

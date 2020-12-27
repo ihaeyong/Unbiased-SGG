@@ -86,19 +86,18 @@ class ObjWeight(nn.Module):
 
         target_mask = (to_onehot(obj_labels, 151,1) > 0.0).float()
 
-        l_type = 'target'
         bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
         fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
         target[bg_idx, :] = bg_w * target[bg_idx,:]
         target[fg_idx, :] = fg_w * target[fg_idx,:]
 
-        with torch.no_grad():
-            obj_margin = torch.matmul(target, obj_logits.detach()) * target_mask
-            obj_margin = obj_margin * target_mask * gamma
+        obj_margin = torch.matmul(target, obj_logits.detach()) * target_mask
+        obj_margin = obj_margin * target_mask * gamma
 
         # Entropy * scale
-        # topk logits
         topk_prob, topk_idx = F.softmax(obj_logits,1).topk(1)
+        topk_prob = topk_prob.data.cpu().numpy()
+
         topk_true_mask = (topk_idx[:,0] == obj_labels).float().data.cpu().numpy()
         topk_false_mask = (topk_idx[:,0] != obj_labels).float().data.cpu().numpy()
 
@@ -110,20 +109,23 @@ class ObjWeight(nn.Module):
             cls_order = batch_freq[:, self.obj_idx]
             ent_v = entropy(cls_order, base=151, axis=1).mean()
             skew_v = skew(cls_order, axis=1).mean()
-
         else:
+            batch_freq = freq_bias.sum(0).data.cpu().numpy()
+            cls_num_list = batch_freq
             cls_order = batch_freq[self.obj_idx]
             ent_v = entropy(cls_order, base=151)
             skew_v = skew(cls_order)
 
         # skew_v > 0 : more weight in the left tail
         # skew_v < 0 : more weight in the right tail
-        if skew_v > 1.5 :
+        if skew_v > 1.5:
             beta = 1.0 - ent_v * 1.0
-        elif skew_v < -1.5 :
+        elif skew_v < -1.5:
             beta = 1.0 - ent_v * 1.0
         else:
             beta = 0.0
+
+        beta = np.clip(beta, 0,1)
 
         effect_num = 1.0 - np.power(beta, cls_num_list)
         per_cls_weights = (1.0 - beta) / np.array(effect_num)
@@ -182,7 +184,6 @@ class RelWeight(nn.Module):
         # Entropy * scale
         # topk logits
         topk_prob, topk_idx = F.softmax(rel_logits,1).topk(1)
-        topk_prob = topk_prob.data.cpu().numpy()
         topk_true_mask = (topk_idx[:,0] == rel_labels).float().data.cpu().numpy()
         topk_false_mask = (topk_idx[:,0] != rel_labels).float().data.cpu().numpy()
 
@@ -212,8 +213,8 @@ class RelWeight(nn.Module):
 
             ent_v = entropy(cls_order, base=51, axis=1) * topk_false_mask
             skew_v = skew(cls_order, axis=1) * topk_false_mask
-            ent_v = ent_v.sum() / topk_false_mask.sum()
-            skew_v = skew_v.sum() / topk_false_mask.sum()
+            ent_v = ent_v.sum() / (topk_false_mask.sum() + 1)
+            skew_v = skew_v.sum() / (topk_false_mask.sum() + 1)
 
         if skew_v > 0.9 :
             beta = 1.0 - ent_v * 1.0
@@ -221,6 +222,8 @@ class RelWeight(nn.Module):
             beta = 1.0 - ent_v * 1.0
         else:
             beta = 0.0
+
+        beta = np.clip(beta, 0,1)
 
         effect_num = 1.0 - np.power(beta, cls_num_list)
         per_cls_weights = (1.0 - beta) / np.array(effect_num)

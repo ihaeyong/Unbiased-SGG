@@ -28,11 +28,11 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/rel_2gpu_batch_skew_0.9_false_1.0_eps1e-8_gamma0.02_iba2_sum_v3-sgcls
+           OUTPUT_DIR ./checkpoints/rel_2gpu_batch_skew_0.9_iba1e-8_scale2_sum_v3-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10045 \
+           --master_port 10048 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -52,11 +52,11 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/rel_2gpu_batch_skew_0.9_false_1.0_eps1e-4_iba2_sum_v3-predcls
+           OUTPUT_DIR ./checkpoints/rel_2gpu_batch_skew_0.9_iba1e-8_norm_scale4_sigma3_sum_v3-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \
-           --master_port 10045 \
+           --master_port 10047 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -76,5 +76,5 @@ elif [ $2 == "sgdet" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/rel_2gpu_batch_skew_0.9_false_1.0_eps1e-4_iba2_sum_v3-sgdet
+           OUTPUT_DIR ./checkpoints/rel_2gpu_batch_skew_0.9_iba1e-8_scale4_sum_v3-sgdet
 fi
