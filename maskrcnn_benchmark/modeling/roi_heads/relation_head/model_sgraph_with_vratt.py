@@ -8,6 +8,8 @@ from collections import Counter
 from .model_sgraph_with_iba import PerSampleBottleneck
 from .utils_relation import layer_init, seq_init
 
+torch.cuda.manual_seed(2007)
+
 class UnionRegionAttention(nn.Module):
     """
     None dim means that not to use that sub module.
@@ -64,8 +66,11 @@ class UnionRegionAttention(nn.Module):
 
             subjobj_mask = [
                 nn.Conv2d(8*3, 8, 1, stride=1, bias=False),
-                #nn.BatchNorm2d(3),
+                nn.BatchNorm2d(3),
+                nn.ReLU(inplace=True),
                 nn.Conv2d(8, 3, 1, stride=1, bias=False),
+                nn.BatchNorm2d(3),
+                nn.ReLU(inplace=True),
                 nn.Conv2d(3, 1, 1, stride=1, bias=False),
                 nn.Sigmoid(),
             ]
@@ -74,11 +79,11 @@ class UnionRegionAttention(nn.Module):
 
             union_upconv = [
                 nn.Conv2d(256, 128, 3, stride=1, padding=1, bias=False),
-                #nn.BatchNorm2d(128),
+                nn.BatchNorm2d(128),
             ]
             union_downconv = [
                 nn.Conv2d(128, 256, 3, stride=1, padding=1, bias=False),
-                #nn.BatchNorm2d(256),
+                nn.BatchNorm2d(256),
             ]
 
             self.union_upconv = nn.Sequential(*union_upconv)
@@ -119,15 +124,15 @@ class UnionRegionAttention(nn.Module):
 
             self.fmap_size = 15
             self.channel = 64
-            self.sigma = 1
+            self.sigma = 2
 
         if self.rib_scale == 4:
 
             subjobj_mask = [
                 nn.ConvTranspose2d(8*3, 8, 3, stride=2, padding=1, bias=False),
-                #nn.BatchNorm2d(16),
+                nn.BatchNorm2d(16),
                 nn.ConvTranspose2d(8, 3, 3, stride=2, padding=1, bias=False),
-                #nn.BatchNorm2d(8),
+                nn.BatchNorm2d(8),
                 nn.Conv2d(3,1,1,stride=1, bias=False),
                 nn.Sigmoid()
             ]
@@ -136,20 +141,20 @@ class UnionRegionAttention(nn.Module):
 
             union_upconv = [
                 nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, bias=False),
-                #nn.BatchNorm2d(128),
+                nn.BatchNorm2d(128),
                 nn.Conv2d(128, 64, 3, padding=1, bias=False),
-                #nn.BatchNorm2d(64),
+                nn.BatchNorm2d(64),
                 nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, bias=False),
-                #nn.BatchNorm2d(32)
+                nn.BatchNorm2d(32)
             ]
 
             union_downconv = [
                 nn.Conv2d(32, 64, 3, stride=2, padding=1, bias=False),
-                #nn.BatchNorm2d(64),
+                nn.BatchNorm2d(64),
                 nn.Conv2d(64, 128, 3, stride=1, padding=1, bias=False),
-                #nn.BatchNorm2d(128),
+                nn.BatchNorm2d(128),
                 nn.Conv2d(128, 256, 3, stride=2, padding=1, bias=False),
-                #nn.BatchNorm2d(256)
+                nn.BatchNorm2d(256)
             ]
 
             self.union_upconv = nn.Sequential(*union_upconv)
@@ -157,7 +162,7 @@ class UnionRegionAttention(nn.Module):
 
             self.fmap_size = 25
             self.channel = 32
-            self.sigma = 3
+            self.sigma = 1
 
         self.g_type = 'iba'
         self.r_type = False
