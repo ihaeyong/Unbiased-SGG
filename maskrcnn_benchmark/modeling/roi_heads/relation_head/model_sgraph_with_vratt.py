@@ -29,8 +29,8 @@ class UnionRegionAttention(nn.Module):
             nn.ConvTranspose2d(32, 16, 3, bias=False),
             nn.BatchNorm2d(16),
             nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(16, 8, 3, bias=False),
-            nn.BatchNorm2d(8),
+            nn.ConvTranspose2d(16, 16, 3, bias=False),
+            nn.BatchNorm2d(16),
             nn.ReLU(inplace=True),
         ]
 
@@ -129,11 +129,11 @@ class UnionRegionAttention(nn.Module):
         if self.rib_scale == 4:
 
             subjobj_mask = [
-                nn.ConvTranspose2d(8*3, 8, 3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(16),
-                nn.ConvTranspose2d(8, 3, 3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(8),
-                nn.Conv2d(3,1,1,stride=1, bias=False),
+                nn.ConvTranspose2d(32, 32, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(32),
+                nn.ConvTranspose2d(32, 32, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(32),
+                nn.Conv2d(32,32,1,stride=1, bias=False),
                 nn.Sigmoid()
             ]
 
@@ -162,7 +162,7 @@ class UnionRegionAttention(nn.Module):
 
             self.fmap_size = 25
             self.channel = 32
-            self.sigma = 1
+            self.sigma = 2
 
         self.g_type = 'iba'
         self.r_type = False
