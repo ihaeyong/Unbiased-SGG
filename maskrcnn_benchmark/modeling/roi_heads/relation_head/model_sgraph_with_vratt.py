@@ -162,7 +162,7 @@ class UnionRegionAttention(nn.Module):
 
             self.fmap_size = 25
             self.channel = 32
-            self.sigma = 2
+            self.sigma = 3
 
         self.g_type = 'iba'
         self.r_type = False

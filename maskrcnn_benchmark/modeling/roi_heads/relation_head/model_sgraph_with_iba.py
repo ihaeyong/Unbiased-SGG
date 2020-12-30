@@ -23,7 +23,7 @@ class SpatialGaussianKernel(nn.Module):
         self.kernel_size = kernel_size
         assert kernel_size % 2 == 1, "kernel_size must be an odd number (for padding), {} given".format(self.kernel_size)
 
-        self.f_type = 'multi-gaussian'
+        self.f_type = 'gaussian'
 
         if self.f_type is 'gaussian':
             kernel_2d = self.gaussian_2d(sigma, kernel_size)
@@ -108,7 +108,7 @@ class SpatialGaussianKernel(nn.Module):
         # x : [batch, 32, 25, 25]
         # pad : [batch, 32, 29, 29]
         # conv : [batch, 32, 25, 25]
-        if self.f_type is 'gaussain':
+        if self.f_type is 'gaussian':
             return self.conv(self.pad(x))
         else:
             out_s1 = self.conv_s1(self.pad(x))
