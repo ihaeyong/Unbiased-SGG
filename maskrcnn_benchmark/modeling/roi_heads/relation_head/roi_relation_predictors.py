@@ -62,7 +62,7 @@ class SGraphPredictor(nn.Module):
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
-                                                   rib_scale=4,
+                                                   rib_scale=2,
                                                    power=1,
                                                    cfg=config)
 
@@ -241,7 +241,7 @@ class SGraphPredictor(nn.Module):
             roi_vis_features[so.long()] += union_features[sr:er].detach() * subj_alpha.half()
             roi_vis_features[eo.long()] += union_features[sr:er].detach() * obj_alpha.half()
 
-        obj_dists += self.obj_vis_dists(roi_vis_features)
+        obj_dists += self.obj_vis_dists(roi_vis_features) * 0.1
 
         # Rel constrastive learning
         rel_cl_loss = None
