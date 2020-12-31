@@ -129,11 +129,11 @@ class UnionRegionAttention(nn.Module):
         if self.rib_scale == 4:
 
             subjobj_mask = [
-                nn.ConvTranspose2d(32, 32, 3, stride=2, padding=1,dilation=1,bias=False),
-                nn.BatchNorm2d(32),
-                nn.ConvTranspose2d(32, 32, 3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(32),
-                nn.Conv2d(32,32,1,stride=1, bias=False),
+                nn.ConvTranspose2d(24, 8, 3, stride=2, padding=1,dilation=1,bias=False),
+                nn.BatchNorm2d(8),
+                nn.ConvTranspose2d(8, 3, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(3),
+                nn.Conv2d(3,1,1,stride=1, bias=False),
                 nn.Sigmoid()
             ]
 

@@ -62,7 +62,7 @@ class SGraphPredictor(nn.Module):
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
-                                                   rib_scale=5,
+                                                   rib_scale=4,
                                                    power=1,
                                                    cfg=config)
 
@@ -89,10 +89,13 @@ class SGraphPredictor(nn.Module):
         self.non_vis_dists = nn.Linear(self.embed_dim * 2,
                                        self.num_rel_cls, bias=True)
 
+        self.obj_vis_dists = nn.Linear(self.pooling_dim, 151)
+
         # initialize layer parameters
         layer_init(self.vis_dists, xavier=True)
         layer_init(self.vis_ctx_dists, xavier=True)
         layer_init(self.non_vis_dists, xavier=True)
+        layer_init(self.obj_vis_dists, xavier=True)
 
         if self.pooling_dim != config.MODEL.ROI_BOX_HEAD.MLP_HEAD_DIM:
             self.union_single_not_match = True
@@ -120,6 +123,21 @@ class SGraphPredictor(nn.Module):
             self.geo_embed = Geometric(out_features=geo_dim)
             self.geo_dists = nn.Linear(geo_dim, self.num_rel_cls, bias=True)
             layer_init(self.geo_dists, xavier=True)
+
+    def normalized_adj(self, A, power=1):
+
+        # Normalization as per (Kipf & Welling, ICLR 2017)
+        D = A.sum(1)  # nodes degree (N,)
+        D_hat = (D + 1e-5) ** (-0.5)
+        A_hat = D_hat.view(-1, 1) * A * D_hat.view(-1, 1)  # N,N
+
+        # Some additional trick I found to be useful
+        A_hat[A_hat > 0.0001] = A_hat[A_hat > 0.0001] - 0.2
+
+        if power > 1:
+            A_hat = A_hat**power
+
+        return A_hat
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
                 union_features, logger=None):
@@ -197,8 +215,35 @@ class SGraphPredictor(nn.Module):
                                                                      embed_bias,
                                                                      freq_bias)
         #obj_freq_bias = torch.sigmoid(obj_emb)
+        # update roi_features
+        roi_vis_features = torch.zeros_like(roi_features)
+        cum_objs = np.cumsum(num_objs)
+        cum_rels = np.cumsum(num_rels)
+        for bt, pair_idx in enumerate(zip(rel_pair_idxs)):
+            sr = 0 if bt is 0 else cum_rels[bt-1]
+            er = cum_rels[bt] if bt is 0 else cum_rels[bt]
 
-        # rel constrastive learning
+            so_idx = 0 if bt is 0 else cum_objs[bt-1]
+
+            so = so_idx + pair_idx[0][:,0] if bt > 0 else pair_idx[0][:,0]
+            eo = so_idx + pair_idx[0][:,1] if bt > 0 else pair_idx[0][:,1]
+
+            subj = pair_idx[0][:,0].long()
+            obj = pair_idx[0][:,1].long()
+
+            adj = torch.zeros((num_objs[bt], num_objs[bt])).to(obj.get_device())
+            adj[subj,obj] = 1.0
+            #adj = self.normalized_adj(adj)
+
+            subj_alpha = 1.0/(adj.sum(1)[subj,None] + 1.0)
+            obj_alpha = 1.0/(adj.sum(1)[obj,None] + 1.0)
+
+            roi_vis_features[so.long()] += union_features[sr:er].detach() * subj_alpha.half()
+            roi_vis_features[eo.long()] += union_features[sr:er].detach() * obj_alpha.half()
+
+        obj_dists += self.obj_vis_dists(roi_vis_features)
+
+        # Rel constrastive learning
         rel_cl_loss = None
         if self.rel_const and self.training:
             c_type = 'ctx_vis_dists'
@@ -254,10 +299,9 @@ class SGraphPredictor(nn.Module):
 
         if self.attribute_on:
             att_dists = att_dists.split(num_objs, dim=0)
-            return (obj_dists, att_dists), rel_dists, add_losses
+            return (Obj_dists, att_dists), rel_dists, add_losses
         else:
             return obj_dists, rel_dists, add_losses, freq_bias
-
 
     def rel_logits(self, vis_rep, ctx_rep, geo_emb, emb_dists, freq_dists):
 

@@ -176,7 +176,7 @@ class PerSampleBottleneck(AttributionBottleneck):
         fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
         randn = torch.randn_like(ins)
-        if False:
+        if True:
             bg_stddev = len(bg_idx) / batch_size * randn[bg_idx, ]
             fg_stddev = len(fg_idx) / batch_size * randn[fg_idx, ]
         else:
