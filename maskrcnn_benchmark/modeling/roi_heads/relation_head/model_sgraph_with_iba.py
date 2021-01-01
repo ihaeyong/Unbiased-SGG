@@ -176,10 +176,14 @@ class PerSampleBottleneck(AttributionBottleneck):
         fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
         randn = torch.randn_like(ins)
-        if False:
+        n_type = "uniform"
+        if n_type is "uniform":
+            bg_stddev = randn[bg_idx, ]
+            fg_stddev = randn[fg_idx, ]
+        elif n_type is 'normal':
             bg_stddev = len(bg_idx) / batch_size * randn[bg_idx, ]
             fg_stddev = len(fg_idx) / batch_size * randn[fg_idx, ]
-        else:
+        elif n_type is "inv":
             bg_stddev = len(fg_idx) / batch_size * randn[bg_idx, ]
             fg_stddev = len(bg_idx) / batch_size * randn[fg_idx, ]
 
