@@ -176,10 +176,14 @@ class PerSampleBottleneck(AttributionBottleneck):
         fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
         randn = torch.randn_like(ins)
-        if False:
+        n_type = "normal"
+        if n_type is "uniform":
+            bg_stddev = randn[bg_idx, ]
+            fg_stddev = randn[fg_idx, ]
+        elif n_type is 'normal':
             bg_stddev = len(bg_idx) / batch_size * randn[bg_idx, ]
             fg_stddev = len(fg_idx) / batch_size * randn[fg_idx, ]
-        else:
+        elif n_type is "inv":
             bg_stddev = len(fg_idx) / batch_size * randn[bg_idx, ]
             fg_stddev = len(bg_idx) / batch_size * randn[fg_idx, ]
 
@@ -196,6 +200,13 @@ class PerSampleBottleneck(AttributionBottleneck):
         lamb = lamb.expand(r_.shape[0], r_.shape[1], -1, -1)
         lamb = self.smooth(lamb) if self.smooth is not None else lamb
 
+        if self.training:
+            eps = self.gaussian(lamb, rel_labels, 1e-8)
+        else:
+            eps = 0
+
+        r_ = torch.sigmoid(r_ + eps)
+
         mean = self.mean(r_)
         std = F.softplus(self.std(r_))
 
@@ -206,12 +217,10 @@ class PerSampleBottleneck(AttributionBottleneck):
             r_norm = r_p.sample()
 
         # Get sampling parameters
-        if self.training:
-            eps = self.gaussian(lamb, rel_labels, 1e-4)
-            #eps = 1e-8
-        else:
-            #eps = torch.rand_like(lamb) * 1e-7
-            eps = 0.0
+        #if self.training:
+        #    eps = self.gaussian(lamb, rel_labels, 1e-4)
+        #else:
+        eps = 0.0
 
         noise_var = (1-lamb + eps)**2
         scaled_signal = r_norm * lamb

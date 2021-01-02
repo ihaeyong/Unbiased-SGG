@@ -101,7 +101,8 @@ class UnionRegionAttention(nn.Module):
                 nn.Conv2d(8, 3, 1, stride=1, dilation=1, bias=False),
                 nn.BatchNorm2d(3),
                 nn.Conv2d(3, 1, 1, stride=1, dilation=1, bias=False),
-                nn.Sigmoid(),
+                nn.BatchNorm2d(1),
+                #nn.Sigmoid(),
             ]
             self.subjobj_mask = nn.Sequential(*subjobj_mask)
 
@@ -201,7 +202,7 @@ class UnionRegionAttention(nn.Module):
 
             self.fmap_size = 29
             self.channel = 32
-            self.sigma = 3
+            self.sigma = 4
 
         self.g_type = 'iba'
         self.r_type = False
