@@ -142,7 +142,7 @@ class PerSampleBottleneck(AttributionBottleneck):
     """
     def __init__(self, mean=None, std=None,
                  sigma=0, device=None, relu=False,
-                 fmap_size=25, channel=32):
+                 fmap_size=25, channel=32, pred_prop=None):
         """
         :param mean: The empirical mean of the activations of the layer
         :param std: The empirical standard deviation of the activations of the layer
@@ -157,6 +157,11 @@ class PerSampleBottleneck(AttributionBottleneck):
         self.mean = nn.Conv2d(channel,channel,1,1)
         self.std = nn.Sequential(
             nn.Conv2d(channel,channel,1,1),)
+
+        # predicate proportion
+        self.pred_prop = np.array(pred_prop)
+        self.pred_prop = np.concatenate(([1], self.pred_prop), 0)
+        self.pred_prop[0] = 1.0 - self.pred_prop[1:-1].sum()
 
         self.buffer_capacity = None
         if sigma is not None and sigma > 0:
@@ -176,7 +181,7 @@ class PerSampleBottleneck(AttributionBottleneck):
         fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
         randn = torch.randn_like(ins)
-        n_type = "normal"
+        n_type = "prop"
         if n_type is "uniform":
             bg_stddev = randn[bg_idx, ]
             fg_stddev = randn[fg_idx, ]
@@ -186,10 +191,16 @@ class PerSampleBottleneck(AttributionBottleneck):
         elif n_type is "inv":
             bg_stddev = len(fg_idx) / batch_size * randn[bg_idx, ]
             fg_stddev = len(bg_idx) / batch_size * randn[fg_idx, ]
+        elif n_type is "prop":
+            stddev = self.pred_prop[rel_labels.cpu()][:,None,None,None]
+            stddev = torch.FloatTensor(stddev).cuda(randn.get_device())
 
-        ins[bg_idx, ] = ins[bg_idx,] + bg_stddev * scale
-        ins[fg_idx, ] = ins[fg_idx,] + fg_stddev * scale
-
+        if n_type is not "prop":
+            ins[bg_idx, ] = ins[bg_idx,] + bg_stddev * scale
+            ins[fg_idx, ] = ins[fg_idx,] + fg_stddev * scale
+        else:
+            ins = ins + ins*stddev
+            
         return ins
 
 
@@ -199,13 +210,6 @@ class PerSampleBottleneck(AttributionBottleneck):
         # Smoothen and expand a on batch dimension
         lamb = lamb.expand(r_.shape[0], r_.shape[1], -1, -1)
         lamb = self.smooth(lamb) if self.smooth is not None else lamb
-
-        if self.training:
-            eps = self.gaussian(lamb, rel_labels, 1e-8)
-        else:
-            eps = 0
-
-        r_ = torch.sigmoid(r_ + eps)
 
         mean = self.mean(r_)
         std = F.softplus(self.std(r_))
@@ -217,12 +221,12 @@ class PerSampleBottleneck(AttributionBottleneck):
             r_norm = r_p.sample()
 
         # Get sampling parameters
-        #if self.training:
-        #    eps = self.gaussian(lamb, rel_labels, 1e-4)
-        #else:
-        eps = 0.0
+        if self.training:
+            eps = self.gaussian(lamb, rel_labels, 1e-6)
+        else:
+            eps = 0.0
 
-        noise_var = (1-lamb + eps)**2
+        noise_var = (1-(lamb + eps)/2.0)**2
         scaled_signal = r_norm * lamb
         noise_log_var = torch.log(noise_var)
 

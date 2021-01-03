@@ -101,8 +101,7 @@ class UnionRegionAttention(nn.Module):
                 nn.Conv2d(8, 3, 1, stride=1, dilation=1, bias=False),
                 nn.BatchNorm2d(3),
                 nn.Conv2d(3, 1, 1, stride=1, dilation=1, bias=False),
-                nn.BatchNorm2d(1),
-                #nn.Sigmoid(),
+                nn.Sigmoid(),
             ]
             self.subjobj_mask = nn.Sequential(*subjobj_mask)
 
@@ -218,7 +217,8 @@ class UnionRegionAttention(nn.Module):
         elif self.g_type is 'iba' or self.g_type is 'gcn_iba':
             self.iba = PerSampleBottleneck(sigma=self.sigma,
                                            fmap_size=self.fmap_size,
-                                           channel=self.channel)
+                                           channel=self.channel,
+                                           pred_prop=cfg.MODEL.ROI_RELATION_HEAD.REL_PROP)
 
         # init weight
         self.subjobj_upconv.apply(seq_init)
