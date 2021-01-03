@@ -199,7 +199,7 @@ class PerSampleBottleneck(AttributionBottleneck):
             ins[bg_idx, ] = ins[bg_idx,] + bg_stddev * scale
             ins[fg_idx, ] = ins[fg_idx,] + fg_stddev * scale
         else:
-            ins = ins + ins*stddev
+            ins = ins + ins*stddev * scale
             
         return ins
 
