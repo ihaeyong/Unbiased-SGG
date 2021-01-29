@@ -45,6 +45,7 @@ class RelationLossComputation(object):
 
         self.mode = mode
         self.l_type = 'none'
+        self.obj_l_type = 'none'
         self.gamma = 0.02
 
         self.weight = 'batchweight'
@@ -130,14 +131,17 @@ class RelationLossComputation(object):
                                                      fg_labels,
                                                      self.gamma)
 
-            if self.l_type is 'margin':
+            if self.obj_l_type is 'margin':
                 loss_refine_obj = F.cross_entropy(refine_obj_logits-obj_margin,
                                                   fg_labels.long(),
                                                   obj_weight)
-            elif self.l_type is 'none':
+            elif self.obj_l_type is 'weight':
                 loss_refine_obj = F.cross_entropy(refine_obj_logits,
                                                   fg_labels.long(),
                                                   obj_weight)
+            elif self.obj_l_type is 'none':
+                loss_refine_obj = F.cross_entropy(refine_obj_logits,
+                                                  fg_labels.long())
 
         else:
             loss_refine_obj = self.criterion_loss(refine_obj_logits, fg_labels.long())
