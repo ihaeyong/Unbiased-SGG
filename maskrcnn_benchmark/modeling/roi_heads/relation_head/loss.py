@@ -50,20 +50,21 @@ class RelationLossComputation(object):
 
         self.weight = 'weight'
 
-        self.obj_weight = ObjWeight(temp=1e0)
-        self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
+        cls_num_list = np.load('./datasets/vg/obj_freq.npy')
+        cls_num_list[0] = cls_num_list.max()
+        obj_prop = cls_num_list / cls_num_list.sum()
 
+        self.obj_weight = ObjWeight(obj_prop, temp=1e0)
+        self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
 
         if self.use_label_smoothing:
             self.criterion_loss = Label_Smoothing_Regression(e=0.01)
         else:
 
             if self.obj_type is 'ldam':
-                self.criterion_loss = LDAMLoss(max_m=0.001, weight=None, s=10.0)
+                self.criterion_loss = LDAMLoss(max_m=0.001, weight=None, s=1.0)
             else:
                 self.criterion_loss = nn.CrossEntropyLoss()
-
-
 
             if self.weight == 'reweight':
                 self.criterion_rel_loss = nn.CrossEntropyLoss(self.pred_weight)
