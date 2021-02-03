@@ -44,14 +44,14 @@ class RelationLossComputation(object):
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
 
         self.mode = mode
-        self.rel_type = 'none'
-        self.obj_type = 'ldam'
+        self.rel_type = 'weight'
+        self.obj_type = 'weight'
         self.gamma = 0.02
 
-        self.weight = 'weight'
+        self.weight = 'batchweight'
 
         cls_num_list = np.load('./datasets/vg/obj_freq.npy')
-        cls_num_list[0] = cls_num_list.max()
+        #cls_num_list[0] = cls_num_list.max()
         obj_prop = cls_num_list / cls_num_list.sum()
 
         self.obj_weight = ObjWeight(obj_prop, temp=1e0)
@@ -124,7 +124,7 @@ class RelationLossComputation(object):
                                                 rel_labels.long(),
                                                 rel_weight)
 
-            elif self.rel_type is 'none':
+            elif self.rel_type is 'weight':
                 loss_relation = F.cross_entropy(relation_logits,
                                                 rel_labels.long(),
                                                 rel_weight)
