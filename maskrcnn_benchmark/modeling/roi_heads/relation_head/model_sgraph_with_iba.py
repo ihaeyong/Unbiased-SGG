@@ -159,9 +159,18 @@ class PerSampleBottleneck(AttributionBottleneck):
             nn.Conv2d(channel,channel,1,1),)
 
         # predicate proportion
-        self.pred_prop = np.array(pred_prop)
-        self.pred_prop = np.concatenate(([1], self.pred_prop), 0)
-        self.pred_prop[0] = 1.0 - self.pred_prop[1:-1].sum()
+        if False:
+            self.pred_prop = np.array(pred_prop)
+            self.pred_prop = np.concatenate(([1], self.pred_prop), 0)
+            self.pred_prop[0] = 1.0 - self.pred_prop[1:-1].sum()
+        else:
+            fg_rel = np.load('./datasets/vg/fg_matrix.npy')
+            bg_rel = np.load('./datasets/vg/bg_matrix.npy')
+
+            bg_rel += 1
+            fg_rel[:,:,0] = bg_rel
+            pred_freq = fg_rel.sum(0).sum(0)
+            self.pred_prop = pred_freq / pred_freq.sum()
 
         self.buffer_capacity = None
         if sigma is not None and sigma > 0:
