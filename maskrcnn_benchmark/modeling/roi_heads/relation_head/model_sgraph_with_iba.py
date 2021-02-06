@@ -168,7 +168,14 @@ class PerSampleBottleneck(AttributionBottleneck):
             bg_rel = np.load('./datasets/vg/bg_matrix.npy')
             fg_rel[:,:,0] = bg_rel
             pred_freq = fg_rel.sum(0).sum(0)
+
+            # pred prop
             self.pred_prop = pred_freq / pred_freq.max()
+
+            # pred margin
+            pred_margin = 1.0 / np.sqrt(np.sqrt(pred_freq))
+            max_m = 0.001
+            self.pred_margin = pred_margin * (max_m / pred_margin.max())
 
         self.buffer_capacity = None
         if sigma is not None and sigma > 0:
@@ -188,32 +195,42 @@ class PerSampleBottleneck(AttributionBottleneck):
         fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
         rand = torch.rand_like(ins)
-        n_type = "prop_v1"
-        if n_type is "uniform":
-            bg_stddev = rand[bg_idx, ]
-            fg_stddev = rand[fg_idx, ]
-        elif n_type is 'normal':
-            bg_stddev = len(bg_idx) / batch_size * rand[bg_idx, ]
-            fg_stddev = len(fg_idx) / batch_size * rand[fg_idx, ]
+        eps = torch.zeros_like(ins)
+        n_type = "pred_avg_margin"
+
+        if n_type is 'normal':
+            bg_stddev = len(bg_idx) / batch_size * rand[bg_idx,]
+            fg_stddev = len(fg_idx) / batch_size * rand[fg_idx,]
+
+            eps[bg_idx, ] = ins[bg_idx,] + bg_stddev * scale
+            eps[fg_idx, ] = ins[fg_idx,] + fg_stddev * scale
+
         elif n_type is "inv":
-            bg_stddev = len(fg_idx) / batch_size * rand[bg_idx, ]
-            fg_stddev = len(bg_idx) / batch_size * rand[fg_idx, ]
+            bg_stddev = len(fg_idx) / batch_size * rand[bg_idx,]
+            fg_stddev = len(bg_idx) / batch_size * rand[fg_idx,]
+
+            eps[bg_idx, ] = ins[bg_idx,] + bg_stddev * scale
+            eps[fg_idx, ] = ins[fg_idx,] + fg_stddev * scale
+
         elif n_type is "prop":
             stddev = self.pred_prop[rel_labels.cpu()][:,None,None,None]
             stddev = torch.FloatTensor(stddev).cuda(rand.get_device())
-        elif n_type is "prop_v1":
-            stddev = self.pred_prop[rel_labels.cpu()][:,None,None,None]
+
+            eps = ins + ins * stddev * scale
+
+        elif n_type is "pred_margin":
+            stddev = self.pred_margin[rel_labels.cpu()][:,None,None,None]
             stddev = torch.FloatTensor(stddev).cuda(rand.get_device())
 
-        if n_type is "inv":
-            ins[bg_idx, ] = ins[bg_idx,] + bg_stddev * scale
-            ins[fg_idx, ] = ins[fg_idx,] + fg_stddev * scale
-        elif n_type is "prop_v1":
-            ins = ins * rand * stddev
-        else:
-            ins = ins + ins * stddev * scale
+            eps = rand * stddev
 
-        return ins
+        elif n_type is "pred_avg_margin":
+            stddev = self.pred_margin[rel_labels.cpu()][:,None,None,None]
+            stddev = torch.FloatTensor(stddev).cuda(rand.get_device())
+
+            eps = ins + rand * stddev
+
+        return eps
 
 
     def forward(self, lamb, r_, rel_labels=None):
@@ -233,16 +250,16 @@ class PerSampleBottleneck(AttributionBottleneck):
             r_norm = r_p.sample()
 
         # Get sampling parameters
-        if self.training and False:
+        if self.training and True:
             eps = self.gaussian(lamb, rel_labels, 1e-8)
         else:
             eps = 0.0
 
-        if False:
+        if True:
             noise_var = (1-(lamb + eps)/2.0)**2
         else:
             noise_var = (1-lamb)**2
-            
+
         scaled_signal = r_norm * lamb
         noise_log_var = torch.log(noise_var)
 
