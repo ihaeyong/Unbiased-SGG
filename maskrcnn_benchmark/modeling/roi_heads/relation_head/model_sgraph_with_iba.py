@@ -166,11 +166,9 @@ class PerSampleBottleneck(AttributionBottleneck):
         else:
             fg_rel = np.load('./datasets/vg/fg_matrix.npy')
             bg_rel = np.load('./datasets/vg/bg_matrix.npy')
-
-            bg_rel += 1
             fg_rel[:,:,0] = bg_rel
             pred_freq = fg_rel.sum(0).sum(0)
-            self.pred_prop = pred_freq / pred_freq.sum()
+            self.pred_prop = pred_freq / pred_freq.max()
 
         self.buffer_capacity = None
         if sigma is not None and sigma > 0:
@@ -189,27 +187,32 @@ class PerSampleBottleneck(AttributionBottleneck):
         bg_idx = np.where(rel_labels.cpu() == 0)[0]
         fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
-        randn = torch.randn_like(ins)
-        n_type = "prop"
+        rand = torch.rand_like(ins)
+        n_type = "prop_v1"
         if n_type is "uniform":
-            bg_stddev = randn[bg_idx, ]
-            fg_stddev = randn[fg_idx, ]
+            bg_stddev = rand[bg_idx, ]
+            fg_stddev = rand[fg_idx, ]
         elif n_type is 'normal':
-            bg_stddev = len(bg_idx) / batch_size * randn[bg_idx, ]
-            fg_stddev = len(fg_idx) / batch_size * randn[fg_idx, ]
+            bg_stddev = len(bg_idx) / batch_size * rand[bg_idx, ]
+            fg_stddev = len(fg_idx) / batch_size * rand[fg_idx, ]
         elif n_type is "inv":
-            bg_stddev = len(fg_idx) / batch_size * randn[bg_idx, ]
-            fg_stddev = len(bg_idx) / batch_size * randn[fg_idx, ]
+            bg_stddev = len(fg_idx) / batch_size * rand[bg_idx, ]
+            fg_stddev = len(bg_idx) / batch_size * rand[fg_idx, ]
         elif n_type is "prop":
             stddev = self.pred_prop[rel_labels.cpu()][:,None,None,None]
-            stddev = torch.FloatTensor(stddev).cuda(randn.get_device())
+            stddev = torch.FloatTensor(stddev).cuda(rand.get_device())
+        elif n_type is "prop_v1":
+            stddev = self.pred_prop[rel_labels.cpu()][:,None,None,None]
+            stddev = torch.FloatTensor(stddev).cuda(rand.get_device())
 
-        if n_type is not "prop":
+        if n_type is "inv":
             ins[bg_idx, ] = ins[bg_idx,] + bg_stddev * scale
             ins[fg_idx, ] = ins[fg_idx,] + fg_stddev * scale
+        elif n_type is "prop_v1":
+            ins = ins * rand * stddev
         else:
-            ins = ins + ins*stddev * scale
-            
+            ins = ins + ins * stddev * scale
+
         return ins
 
 
@@ -230,12 +233,16 @@ class PerSampleBottleneck(AttributionBottleneck):
             r_norm = r_p.sample()
 
         # Get sampling parameters
-        if self.training:
+        if self.training and False:
             eps = self.gaussian(lamb, rel_labels, 1e-8)
         else:
             eps = 0.0
 
-        noise_var = (1-(lamb + eps)/2.0)**2
+        if False:
+            noise_var = (1-(lamb + eps)/2.0)**2
+        else:
+            noise_var = (1-lamb)**2
+            
         scaled_signal = r_norm * lamb
         noise_log_var = torch.log(noise_var)
 
