@@ -28,7 +28,7 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/skew_margin0.001_obj2.3_scale2_sigma2_sum_v3-sgcls
+           OUTPUT_DIR ./checkpoints/obj_margin_gamma0.02_max_m0.1_obj2.3_scale2_sigma2_sum_v3-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \

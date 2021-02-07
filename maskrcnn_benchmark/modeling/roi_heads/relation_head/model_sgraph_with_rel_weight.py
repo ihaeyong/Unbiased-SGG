@@ -62,7 +62,7 @@ class ObjWeight(nn.Module):
 
         return y
 
-    def forward(self, obj_logits, obj_labels, gamma=0.01):
+    def forward(self, obj_logits, obj_labels, gamma=0.02):
 
         freq_bias = torch.sigmoid(obj_logits)
 
@@ -74,16 +74,19 @@ class ObjWeight(nn.Module):
         target = target / torch.sum(target, dim=1, keepdim=True).float()
 
         target_mask = (to_onehot(obj_labels, 151,1) > 0.0).float()
-
-        bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
-        fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
-        target[bg_idx, :] = bg_w * target[bg_idx,:]
-        target[fg_idx, :] = fg_w * target[fg_idx,:]
-
         obj_margin = torch.matmul(target, obj_logits.detach()) * target_mask
-        obj_margin = obj_margin * target_mask * gamma
 
-        # Entropy * scale
+        obj_mask_logits = obj_logits.detach() * target_mask
+
+        if True :
+            # Mean - logits
+            obj_diff = obj_margin - obj_mask_logits
+            obj_diff_mask = (obj_diff < 0).float()
+            obj_margin = obj_margin * obj_diff_mask * gamma
+        else:
+            obj_margin = obj_margin * target_mask * gamma
+
+        # ------- Entropy * scale-------
         topk_prob, topk_idx = F.softmax(obj_logits,1).topk(1)
         topk_true_mask = (topk_idx[:,0] == obj_labels).float().data.cpu().numpy()
         topk_false_mask = (topk_idx[:,0] != obj_labels).float().data.cpu().numpy()
@@ -165,15 +168,25 @@ class RelWeight(nn.Module):
         target = target / torch.sum(target, dim=1, keepdim=True).float()
         target_mask = (to_onehot(rel_labels, len(self.pred_prop),1) > 0.0).float()
 
-        bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
-        fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
-        target[bg_idx, :] = bg_w * target[bg_idx,:]
-        target[fg_idx, :] = fg_w * target[fg_idx,:]
+        if True:
+            bg_w = len(fg_idx) / (len(fg_idx) + len(bg_idx))
+            fg_w = len(bg_idx) / (len(fg_idx) + len(bg_idx))
+            target[bg_idx, :] = bg_w * target[bg_idx,:]
+            target[fg_idx, :] = fg_w * target[fg_idx,:]
 
         # scaled mean of logits
-        with torch.no_grad():
-            rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
-            rel_margin = rel_margin * target_mask * gamma
+        rel_margin = torch.matmul(target, rel_logits.detach()) * target_mask
+        rel_margin = rel_margin * target_mask * gamma
+
+        rel_mask_logits = rel_logits.detach() * target_mask
+
+        if True :
+            # Mean - logits
+            rel_diff = obj_margin - obj_mask_logits
+            rel_diff_mask = (rel_diff < 0).float()
+            rel_margin = rel_margin * rel_diff_mask * gamma
+        else:
+            rel_margin = rel_margin * gamma
 
         # Entropy * scale
         # topk logits
@@ -224,5 +237,5 @@ class RelWeight(nn.Module):
         per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
         rel_weight = torch.FloatTensor(per_cls_weights).cuda()
 
-        return  rel_weight, rel_margin  
+        return  rel_weight, rel_margin
 
