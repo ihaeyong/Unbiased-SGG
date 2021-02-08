@@ -159,7 +159,7 @@ class PerSampleBottleneck(AttributionBottleneck):
             nn.Conv2d(channel,channel,1,1),)
 
         # predicate proportion
-        if False:
+        if True :
             self.pred_prop = np.array(pred_prop)
             self.pred_prop = np.concatenate(([1], self.pred_prop), 0)
             self.pred_prop[0] = 1.0 - self.pred_prop[1:-1].sum()
@@ -196,7 +196,7 @@ class PerSampleBottleneck(AttributionBottleneck):
 
         rand = torch.rand_like(ins)
         eps = torch.zeros_like(ins)
-        n_type = "pred_avg_margin"
+        n_type = "prop"
 
         if n_type is 'normal':
             bg_stddev = len(bg_idx) / batch_size * rand[bg_idx,]

@@ -182,7 +182,7 @@ class RelWeight(nn.Module):
 
         if True :
             # Mean - logits
-            rel_diff = obj_margin - obj_mask_logits
+            rel_diff = rel_margin - rel_mask_logits
             rel_diff_mask = (rel_diff < 0).float()
             rel_margin = rel_margin * rel_diff_mask * gamma
         else:
