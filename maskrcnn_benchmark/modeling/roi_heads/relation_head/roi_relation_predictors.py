@@ -224,51 +224,12 @@ class SGraphPredictor(nn.Module):
             freq_bias = self.freq_bias.index_with_labels(pair_pred)
 
         # sum of non-vis/visual dists
-        #rel_dists = non_vis_dists + vis_dists
         rel_dists, vis_dists, ctx_dists, freq_bias = self.rel_logits(union_features,
                                                                      prod_rep,
                                                                      geo_embed,
                                                                      embed_bias,
                                                                      freq_bias)
-        #obj_freq_bias = torch.sigmoid(obj_emb)
-
-        # rel constrastive learning
         rel_cl_loss = None
-        if self.rel_const and self.training:
-            c_type = 'ctx_vis_dists'
-            if c_type is 'vis_dists':
-                anchors = vis_dists
-                positives = vis_dists
-            elif c_type is 'rel_dists' :
-                anchors = rel_dists
-                positives = rel_dists
-            elif c_type is 'ctx_dists' :
-                anchors = ctx_dists
-                positives = ctx_dists
-            #--------------------------------
-            elif c_type is 'vis_rel_dists' :
-                anchors = vis_dists
-                positives = rel_dists
-            elif c_type is 'rel_vis_dists' :
-                anchors = rel_dists
-                positives = vis_dists
-            #--------------------------------
-            elif c_type is 'rel_ctx_dists' :
-                anchors = rel_dists
-                positives = ctx_dists
-            elif c_type is 'ctx_rel_dists' :
-                anchors = ctx_dists
-                positives = rel_dists
-            #-------------------------------
-            elif c_type is 'vis_ctx_dists' :
-                anchors = vis_dists
-                positives = ctx_dists
-            elif c_type is 'ctx_vis_dists' :
-                anchors = ctx_dists
-                positives = vis_dists
-
-            rel_labels = torch.cat(rel_labels)
-            rel_cl_loss = self.rel_cl_loss(anchors, positives, rel_labels)
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
