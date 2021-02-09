@@ -89,10 +89,14 @@ class SGraphPredictor(nn.Module):
         self.non_vis_dists = nn.Linear(self.embed_dim * 2,
                                        self.num_rel_cls, bias=True)
 
+        self.vis_att_dists = nn.Linear(self.pooling_dim + 256,
+                                       self.num_obj_cls, bias=True)
+
         # initialize layer parameters
         layer_init(self.vis_dists, xavier=True)
         layer_init(self.vis_ctx_dists, xavier=True)
         layer_init(self.non_vis_dists, xavier=True)
+        layer_init(self.vis_att_dists, xavier=True)
 
         if self.pooling_dim != config.MODEL.ROI_BOX_HEAD.MLP_HEAD_DIM:
             self.union_single_not_match = True
@@ -100,11 +104,6 @@ class SGraphPredictor(nn.Module):
             layer_init(self.up_dim, xavier=True)
         else:
             self.union_single_not_match = False
-
-        # constrastive loss
-        self.rel_const = False
-        if self.rel_const:
-            self.rel_cl_loss = NpairLoss(l2_reg=0.02)
 
         if self.use_bias:
             # convey statistics into FrequencyBias to avoid loading again
@@ -141,7 +140,7 @@ class SGraphPredictor(nn.Module):
             obj_dists, obj_preds, att_dists, edge_ctx = self.context_layer(
                 roi_features, proposals, logger)
         else:
-            obj_dists,obj_preds,obj_ctx_rep,obj_ctx_emb,link_loss=self.context_layer(
+            obj_dists, obj_preds, obj_ctx_rep, obj_ctx_emb, link_loss = self.context_layer(
                 roi_features, proposals, self.freq_bias, rel_pair_idxs, rel_labels, logger)
 
         obj_reps = obj_ctx_rep.split(num_objs, dim=0)
@@ -183,6 +182,41 @@ class SGraphPredictor(nn.Module):
 
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
+
+        # ========== update object logit message passing =============
+        obj_per_dists = obj_dists.split(num_objs, dim=0)
+
+        u_subj, u_obj = prod_rep.split(256, dim=1)
+        subj_dists = self.vis_att_dists(torch.cat((union_features.detach(), u_subj), dim=-1))
+        obj_dists = self.vis_att_dists(torch.cat((union_features.detach(), u_obj), dim=-1))
+
+        subj_att_dists = subj_dists.split(num_rels, dim=0)
+        obj_att_dists = obj_dists.split(num_rels, dim=0)
+
+        u_type = 'mask'
+        u_obj_dists = []
+        for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
+            if u_type == 'mask':
+                M = logit.size(0)
+                N = subj.size(0)
+                subj_mask = torch.zeros(M, N).cuda(logit.get_device())
+                obj_mask = torch.zeros_like(subj_mask)
+                subj_mask.scatter_(0,pair_idx[:,0][None],1)
+                obj_mask.scatter_(0,pair_idx[:,1][None],1)
+
+            elif u_type == 'soft_mask':
+                subj_mask = torch.matmul(logit, subj.transpose(0,1))
+                obj_mask = torch.matmul(logit, obj.transpose(0,1))
+
+            subj_mask = subj_mask / subj_mask.sum(1, True)
+            obj_mask = obj_mask / obj_mask.sum(1, True)
+            mean_subj = torch.mm(subj_mask, subj)
+            mean_obj = torch.mm(obj_mask, obj)
+            logit = logit + mean_subj + mean_obj
+
+            u_obj_dists.append(logit)
+
+        obj_dists = torch.cat(u_obj_dists, dim=0)
 
         # use frequence bias
         if self.use_bias:
