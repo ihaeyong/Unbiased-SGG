@@ -174,7 +174,7 @@ class PerSampleBottleneck(AttributionBottleneck):
 
             # pred margin
             pred_margin = 1.0 / np.sqrt(np.sqrt(pred_freq))
-            max_m = 0.001
+            max_m = 0.06
             self.pred_margin = pred_margin * (max_m / pred_margin.max())
 
         self.buffer_capacity = None
@@ -196,7 +196,7 @@ class PerSampleBottleneck(AttributionBottleneck):
 
         rand = torch.rand_like(ins)
         eps = torch.zeros_like(ins)
-        n_type = "pred_avg_margin"
+        n_type = "pred_avg_margin_sigmoid"
 
         if n_type is 'normal':
             bg_stddev = len(bg_idx) / batch_size * rand[bg_idx,]
@@ -229,6 +229,12 @@ class PerSampleBottleneck(AttributionBottleneck):
             stddev = torch.FloatTensor(stddev).cuda(rand.get_device())
 
             eps = ins + rand * stddev
+
+        elif n_type is "pred_avg_margin_sigmoid":
+            stddev = self.pred_margin[rel_labels.cpu()][:,None,None,None]
+            stddev = torch.FloatTensor(stddev).cuda(rand.get_device())
+
+            eps = torch.sigmoid(ins + rand * stddev)
 
         return eps
 
