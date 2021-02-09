@@ -196,7 +196,7 @@ class PerSampleBottleneck(AttributionBottleneck):
 
         rand = torch.rand_like(ins)
         eps = torch.zeros_like(ins)
-        n_type = "pred_avg_margin_sigmoid"
+        n_type = "pred_avg_margin"
 
         if n_type is 'normal':
             bg_stddev = len(bg_idx) / batch_size * rand[bg_idx,]
