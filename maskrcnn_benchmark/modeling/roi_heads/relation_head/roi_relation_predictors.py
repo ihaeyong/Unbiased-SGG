@@ -62,7 +62,7 @@ class SGraphPredictor(nn.Module):
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
-                                                   rib_scale=2,
+                                                   rib_scale=4,
                                                    power=1,
                                                    cfg=config)
 
@@ -101,11 +101,6 @@ class SGraphPredictor(nn.Module):
         else:
             self.union_single_not_match = False
 
-        # constrastive loss
-        self.rel_const = False
-        if self.rel_const:
-            self.rel_cl_loss = NpairLoss(l2_reg=0.02)
-
         if self.use_bias:
             # convey statistics into FrequencyBias to avoid loading again
             self.freq_bias = FrequencyBias(config, statistics)
@@ -120,6 +115,11 @@ class SGraphPredictor(nn.Module):
             self.geo_embed = Geometric(out_features=geo_dim)
             self.geo_dists = nn.Linear(geo_dim, self.num_rel_cls, bias=True)
             layer_init(self.geo_dists, xavier=True)
+
+        self.post_cat_for_gate = True
+        if self.post_cat_for_gate:
+            self.post_cat = nn.Linear(256 * 2, self.pooling_dim)
+            layer_init(self.post_cat, xavier=True)
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
                 union_features, logger=None):
@@ -184,6 +184,12 @@ class SGraphPredictor(nn.Module):
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
 
+
+        # use union box and mask convolution
+        if self.post_cat_for_gate :
+            ctx_gate = self.post_cat(prod_rep)
+            union_features = ctx_gate * union_features
+
         # use frequence bias
         if self.use_bias:
             embed_bias = self.non_vis_dists(prod_emb)
@@ -200,41 +206,6 @@ class SGraphPredictor(nn.Module):
 
         # rel constrastive learning
         rel_cl_loss = None
-        if self.rel_const and self.training:
-            c_type = 'ctx_vis_dists'
-            if c_type is 'vis_dists':
-                anchors = vis_dists
-                positives = vis_dists
-            elif c_type is 'rel_dists' :
-                anchors = rel_dists
-                positives = rel_dists
-            elif c_type is 'ctx_dists' :
-                anchors = ctx_dists
-                positives = ctx_dists
-            #--------------------------------
-            elif c_type is 'vis_rel_dists' :
-                anchors = vis_dists
-                positives = rel_dists
-            elif c_type is 'rel_vis_dists' :
-                anchors = rel_dists
-                positives = vis_dists
-            #--------------------------------
-            elif c_type is 'rel_ctx_dists' :
-                anchors = rel_dists
-                positives = ctx_dists
-            elif c_type is 'ctx_rel_dists' :
-                anchors = ctx_dists
-                positives = rel_dists
-            #-------------------------------
-            elif c_type is 'vis_ctx_dists' :
-                anchors = vis_dists
-                positives = ctx_dists
-            elif c_type is 'ctx_vis_dists' :
-                anchors = ctx_dists
-                positives = vis_dists
-
-            rel_labels = torch.cat(rel_labels)
-            rel_cl_loss = self.rel_cl_loss(anchors, positives, rel_labels)
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)

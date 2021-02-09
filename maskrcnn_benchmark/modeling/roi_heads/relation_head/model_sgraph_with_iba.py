@@ -251,7 +251,7 @@ class PerSampleBottleneck(AttributionBottleneck):
 
         # Get sampling parameters
         if self.training and True:
-            eps = self.gaussian(lamb, rel_labels, 1e-8)
+            eps = self.gaussian(lamb, rel_labels, 1e-2)
         else:
             eps = 0.0
 
