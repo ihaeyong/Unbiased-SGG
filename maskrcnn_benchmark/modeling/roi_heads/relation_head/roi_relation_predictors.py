@@ -120,6 +120,11 @@ class SGraphPredictor(nn.Module):
             self.geo_dists = nn.Linear(geo_dim, self.num_rel_cls, bias=True)
             layer_init(self.geo_dists, xavier=True)
 
+        self.post_cat_for_gate = False
+        if self.post_cat_for_gate:
+            self.post_cat = nn.Linear(256 * 2, self.pooling_dim)
+            layer_init(self.post_cat, xavier=True)
+
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
                 union_features, logger=None):
         """
@@ -217,6 +222,11 @@ class SGraphPredictor(nn.Module):
             u_obj_dists.append(logit)
 
         obj_dists = torch.cat(u_obj_dists, dim=0)
+        
+        # use union box and mask convolution
+        if self.post_cat_for_gate :
+            ctx_gate = self.post_cat(prod_rep)
+            union_features = ctx_gate * union_features
 
         # use frequence bias
         if self.use_bias:
