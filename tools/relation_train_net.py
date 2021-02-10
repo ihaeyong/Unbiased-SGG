@@ -240,7 +240,10 @@ def train(cfg, local_rank, distributed, logger, writer):
         val_result = None # used for scheduler updating
         if cfg.SOLVER.TO_VAL and iteration % cfg.SOLVER.VAL_PERIOD == 0:
             logger.info("Start validating")
-            val_result = run_val(cfg, model, val_data_loaders, distributed, logger)
+            cfg.iter = iteration
+            cfg.eval_mode = 'val'
+            val_result = run_val(cfg, model, val_data_loaders, distributed,
+                                 logger, writer)
             logger.info("Validation Result: %.4f" % val_result)
 
             # mode
@@ -279,7 +282,7 @@ def fix_eval_modules(eval_modules):
             param.requires_grad = False
         # DO NOT use module.eval(), otherwise the module will be in the test mode, i.e., all self.training condition is set to False
 
-def run_val(cfg, model, val_data_loaders, distributed, logger):
+def run_val(cfg, model, val_data_loaders, distributed, logger, writer):
     if distributed:
         model = model.module
     torch.cuda.empty_cache()
@@ -297,18 +300,19 @@ def run_val(cfg, model, val_data_loaders, distributed, logger):
     val_result = []
     for dataset_name, val_data_loader in zip(dataset_names, val_data_loaders):
         dataset_result = inference(
-                            cfg,
-                            model,
-                            val_data_loader,
-                            dataset_name=dataset_name,
-                            iou_types=iou_types,
-                            box_only=False if cfg.MODEL.RETINANET_ON else cfg.MODEL.RPN_ONLY,
-                            device=cfg.MODEL.DEVICE,
-                            expected_results=cfg.TEST.EXPECTED_RESULTS,
-                            expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
-                            output_folder=None,
-                            logger=logger,
-                        )
+            cfg,
+            model,
+            val_data_loader,
+            dataset_name=dataset_name,
+            iou_types=iou_types,
+            box_only=False if cfg.MODEL.RETINANET_ON else cfg.MODEL.RPN_ONLY,
+            device=cfg.MODEL.DEVICE,
+            expected_results=cfg.TEST.EXPECTED_RESULTS,
+            expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
+            output_folder=None,
+            logger=logger,
+            writer=writer,
+        )
         synchronize()
         val_result.append(dataset_result)
     # support for multi gpu distributed testing
@@ -321,7 +325,7 @@ def run_val(cfg, model, val_data_loaders, distributed, logger):
     torch.cuda.empty_cache()
     return val_result
 
-def run_test(cfg, model, distributed, logger):
+def run_test(cfg, model, distributed, logger, writer):
     if distributed:
         model = model.module
     torch.cuda.empty_cache()
@@ -355,6 +359,7 @@ def run_test(cfg, model, distributed, logger):
             expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
             output_folder=output_folder,
             logger=logger,
+            writer=writer,
         )
         synchronize()
 
@@ -369,6 +374,8 @@ def main():
         type=str,
     )
     parser.add_argument("--local_rank", type=int, default=0)
+    parser.add_argument("--iter", type=int, default=0)
+    parser.add_argument("--eval_mode", type=str, default='val')
     parser.add_argument(
         "--skip-test",
         dest="skip_test",
@@ -425,10 +432,11 @@ def main():
     # save overloaded model config in the output directory
     save_config(cfg, output_config_path)
 
+    cfg.eval_mode = 'test'
     model = train(cfg, args.local_rank, args.distributed, logger, writer)
 
     if not args.skip_test:
-        run_test(cfg, model, args.distributed, logger)
+        run_test(cfg, model, args.distributed, logger, writer)
 
 
 if __name__ == "__main__":

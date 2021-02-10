@@ -5,7 +5,7 @@ from .voc import voc_evaluation
 from .vg import vg_evaluation
 
 
-def evaluate(cfg, dataset, predictions, output_folder, logger, **kwargs):
+def evaluate(cfg, dataset, predictions, output_folder, logger, writer, **kwargs):
     """evaluate dataset using different methods based on dataset type.
     Args:
         dataset: Dataset object
@@ -17,7 +17,8 @@ def evaluate(cfg, dataset, predictions, output_folder, logger, **kwargs):
         evaluation result
     """
     args = dict(
-        cfg=cfg, dataset=dataset, predictions=predictions, output_folder=output_folder, logger=logger, **kwargs
+        cfg=cfg, dataset=dataset, predictions=predictions, output_folder=output_folder,
+        logger=logger, writer=writer, **kwargs
     )
     if isinstance(dataset, datasets.COCODataset):
         return coco_evaluation(**args)

@@ -15,12 +15,13 @@ from maskrcnn_benchmark.utils.miscellaneous import intersect_2d, argsort_desc, b
 from maskrcnn_benchmark.data.datasets.evaluation.vg.sgg_eval import SGRecall, SGNoGraphConstraintRecall, SGZeroShotRecall, SGNGZeroShotRecall, SGPairAccuracy, SGMeanRecall, SGNGMeanRecall, SGAccumulateRecall
 
 def do_vg_evaluation(
-    cfg,
-    dataset,
-    predictions,
-    output_folder,
-    logger,
-    iou_types,
+        cfg,
+        dataset,
+        predictions,
+        output_folder,
+        logger,
+        writer,
+        iou_types,
 ):
     # get zeroshot triplet
     zeroshot_triplet = torch.load("maskrcnn_benchmark/data/datasets/evaluation/vg/zeroshot_triplet.pytorch", map_location=torch.device("cpu")).long().numpy()
@@ -182,6 +183,7 @@ def do_vg_evaluation(
 
 
     logger.info(result_str)
+    writer.add_scalar('val/{}_mr20'.format(mode), mr20, cfg.iter)
     
     if "relations" in iou_types:
         if output_folder:

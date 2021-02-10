@@ -92,6 +92,7 @@ def inference(
         expected_results_sigma_tol=4,
         output_folder=None,
         logger=None,
+        writer=None,
 ):
     load_prediction_from_cache = cfg.TEST.ALLOW_LOAD_FROM_CACHE and output_folder is not None and os.path.exists(os.path.join(output_folder, "eval_results.pytorch"))
     # convert to a torch.device for efficiency
@@ -154,6 +155,7 @@ def inference(
                     predictions=predictions,
                     output_folder=output_folder,
                     logger=logger,
+                    writer=writer,
                     **extra_args)
 
 
