@@ -62,7 +62,7 @@ class SGraphPredictor(nn.Module):
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
-                                                   rib_scale=4,
+                                                   rib_scale=2,
                                                    power=1,
                                                    cfg=config)
 
@@ -204,26 +204,29 @@ class SGraphPredictor(nn.Module):
         subj_att_dists = subj_dists.split(num_rels, dim=0)
         obj_att_dists = obj_dists.split(num_rels, dim=0)
 
-        u_type = 'mask'
+        u_type = 'sum'
         u_obj_dists = []
         for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
-            if u_type == 'mask':
-                M = logit.size(0)
-                N = subj.size(0)
-                subj_mask = torch.zeros(M, N).cuda(logit.get_device())
-                obj_mask = torch.zeros_like(subj_mask)
-                subj_mask.scatter_(0,pair_idx[:,0][None],1)
-                obj_mask.scatter_(0,pair_idx[:,1][None],1)
 
-            elif u_type == 'soft_mask':
-                subj_mask = torch.matmul(logit, subj.transpose(0,1))
-                obj_mask = torch.matmul(logit, obj.transpose(0,1))
+            M = logit.size(0)
+            N = subj.size(0)
+            subj_mask = torch.zeros(M, N).cuda(logit.get_device())
+            obj_mask = torch.zeros_like(subj_mask)
+            subj_mask.scatter_(0,pair_idx[:,0][None],1)
+            obj_mask.scatter_(0,pair_idx[:,1][None],1)
 
             subj_mask = subj_mask / subj_mask.sum(1, True)
             obj_mask = obj_mask / obj_mask.sum(1, True)
             mean_subj = torch.mm(subj_mask, subj)
             mean_obj = torch.mm(obj_mask, obj)
-            logit = logit + mean_subj + mean_obj
+
+            if u_type == 'sum':
+                logit = logit + mean_subj + mean_obj
+            elif u_type == 'avg_v0':
+                logit = (logit + mean_subj + mean_obj) / 3
+            elif u_type == 'avg_v1':
+                alpha = 1.0
+                logit = logit + alpha * (mean_subj + mean_obj) / 2
 
             u_obj_dists.append(logit)
 
