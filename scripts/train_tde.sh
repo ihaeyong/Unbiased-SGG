@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=$3,$4,$5,$6
 
 if [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10034 \
+           --master_port 10035 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -28,11 +28,11 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/obj_mask_avg_sigmoid_margin0.05_obj2.3_scale4_sigma3_sum_v3-sgcls
+           OUTPUT_DIR ./checkpoints/obj_mask_avg_sigmoid_margin0.03_obj2.3_scale2_sigma2_sum_v3-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10050 \
+           --master_port 10051 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -52,7 +52,7 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/obj_mask_avg_margin0.06_obj2.3_scale4_sigma3_sum_v3-predcls
+           OUTPUT_DIR ./checkpoints/obj_mask_avg_sigmoid_margin0.03_obj2.3_scale2_sigma2_sum_v3-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \
