@@ -54,18 +54,18 @@ class SpectralContext(nn.Module):
         self.hidden_dim = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM
 
         self.obj_ctx = nn.Linear(self.obj_dim + self.embed_dim + 128,
-                                 self.hidden_dim * 8)
+                                 self.hidden_dim * 4)
 
         self.nms_thresh = self.cfg.TEST.RELATION.LATER_NMS_PREDICTION_THRES
 
         # relation context
-        self.lin_obj_h = nn.Linear(self.hidden_dim * 8, self.hidden_dim // 2)
-        self.out_obj = nn.Linear(self.hidden_dim * 8, len(self.obj_classes))
+        self.lin_obj_h = nn.Linear(self.hidden_dim * 4, self.hidden_dim // 2)
+        self.out_obj = nn.Linear(self.hidden_dim * 4, len(self.obj_classes))
 
         # spectral message passing
         self.obj_ctx_layer = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER
         if self.obj_ctx_layer > 0:
-            self.sg_msg = SpectralMessage(config, self.hidden_dim * 8)
+            self.sg_msg = SpectralMessage(config, self.hidden_dim * 4)
 
 
         # initialize layers
