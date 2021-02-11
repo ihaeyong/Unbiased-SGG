@@ -241,7 +241,7 @@ def train(cfg, local_rank, distributed, logger, writer):
         if cfg.SOLVER.TO_VAL and iteration % cfg.SOLVER.VAL_PERIOD == 0:
             logger.info("Start validating")
 
-            cfg.merge_from_list(['LOG.ITER', iteration])
+            cfg.merge_from_list(['LOG.ITER', str(iteration)])
             cfg.merge_from_list(['LOG.MODE', 'val'])
             val_result = run_val(cfg, model, val_data_loaders, distributed,
                                logger, writer)
@@ -262,7 +262,7 @@ def train(cfg, local_rank, distributed, logger, writer):
 
                 logger.info("======== TEST : {} ============".format(iteration))
                 cfg.merge_from_list(['LOG.MODE', 'test'])
-                cfg.merge_from_list(['LOG.ITER', iteration])
+                cfg.merge_from_list(['LOG.ITER', str(iteration)])
                 run_test(cfg, model, distributed, logger, writer)
                 logger.info("===============================")
 
@@ -403,7 +403,6 @@ def main():
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     cfg.freeze()
-
     output_dir = cfg.OUTPUT_DIR
     if output_dir:
         mkdir(output_dir)
