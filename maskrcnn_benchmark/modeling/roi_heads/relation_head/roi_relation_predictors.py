@@ -221,7 +221,7 @@ class SGraphPredictor(nn.Module):
             elif u_type == 'avg_v0':
                 logit = (logit + mean_subj + mean_obj) / 3
             elif u_type == 'avg_v1':
-                alpha = 0.4
+                alpha = 0.6
                 logit = logit + alpha * (mean_subj + mean_obj) / 2
 
             u_obj_dists.append(logit)

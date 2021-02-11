@@ -191,9 +191,9 @@ def do_vg_evaluation(
 
     writer.add_scalar('{}/{}/r100'.format(cfg.LOG.MODE, mode),
                       results['r100'], cfg.LOG.ITER)
-    writer.add_scalar('{}/{}/zr100'.format(cfg.LOG.MODE, mode),
-                      results['mr100'], cfg.LOG.ITER)
     writer.add_scalar('{}/{}/mr100'.format(cfg.LOG.MODE, mode),
+                      results['mr100'], cfg.LOG.ITER)
+    writer.add_scalar('{}/{}/zr100'.format(cfg.LOG.MODE, mode),
                       results['zr100'], cfg.LOG.ITER)
 
     if "relations" in iou_types:
