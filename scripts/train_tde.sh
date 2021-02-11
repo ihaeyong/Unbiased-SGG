@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=$3,$4,$5,$6
 
 if [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10035 \
+           --master_port 10038 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -28,7 +28,7 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/mask_avg_v0_sig0.04_obj2.3_scale4_sum_v3-sgcls
+           OUTPUT_DIR ./checkpoints/mask_alpha0.1_sig0.04_obj2.3_scale4_sum_v3-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \

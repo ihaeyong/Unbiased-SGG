@@ -241,24 +241,12 @@ def train(cfg, local_rank, distributed, logger, writer):
         if cfg.SOLVER.TO_VAL and iteration % cfg.SOLVER.VAL_PERIOD == 0:
             logger.info("Start validating")
 
-            cfg.merge_from_list(['LOG.ITER', str(iteration)])
+            cfg.merge_from_list(['LOG.ITER', iteration])
             cfg.merge_from_list(['LOG.MODE', 'val'])
-            val_r100, val_mr100, val_zr100 = run_val(cfg, model, val_data_loaders, distributed,
-                                                     logger, writer)
-            logger.info("Validation Result: %.4f" % val_r100)
+            val_result = run_val(cfg, model, val_data_loaders, distributed,
+                               logger, writer)
 
-            # mode
-            if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
-                if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL:
-                    mode = 'predcls'
-                else:
-                    mode = 'sgcls'
-            else:
-                mode = 'sgdet'
-
-            writer.add_scalar('val/{}_r100'.format(mode), val_r100, iteration)
-            writer.add_scalar('val/{}_mr100'.format(mode), val_mr100, iteration)
-            writer.add_scalar('val/{}_zr100'.format(mode), val_zr100, iteration)
+            logger.info("Validation Result: %.4f" % val_result)
 
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
         # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
@@ -269,6 +257,14 @@ def train(cfg, local_rank, distributed, logger, writer):
                 break
         else:
             scheduler.step()
+
+            if optimizer.param_groups[-1]["lr"] < 2e-3:
+
+                logger.info("======== TEST : {} ============".format(iteration))
+                cfg.merge_from_list(['LOG.MODE', 'test'])
+                cfg.merge_from_list(['LOG.ITER', iteration])
+                run_test(cfg, model, distributed, logger, writer)
+                logger.info("===============================")
 
     total_training_time = time.time() - start_training_time
     total_time_str = str(datetime.timedelta(seconds=total_training_time))
@@ -300,10 +296,6 @@ def run_val(cfg, model, val_data_loaders, distributed, logger, writer):
         iou_types = iou_types + ("attributes", )
 
     dataset_names = cfg.DATASETS.VAL
-    val_result = []
-    val_r100 = []
-    val_mr100 = []
-    val_zr100 = []
     for dataset_name, val_data_loader in zip(dataset_names, val_data_loaders):
         results = inference(
             cfg,
@@ -320,34 +312,17 @@ def run_val(cfg, model, val_data_loaders, distributed, logger, writer):
             writer=writer,
         )
         synchronize()
-        val_r100.append(results['r100'])
-        val_mr100.append(results['mr100'])
-        val_zr100.append(results['zr100'])
 
     # support for multi gpu distributed testing
-    gathered_r100 = all_gather(torch.tensor(results['r100']).cpu())
-    gathered_r100 = [t.view(-1) for t in gathered_r100]
-    gathered_r100 = torch.cat(gathered_r100, dim=-1).view(-1)
-    valid_r100 = gathered_result[results['r100']>=0]
-    val_r100 = float(valid_r100.mean())
-    del gathered_r100, valid_r100
-
-    gathered_mr100 = all_gather(torch.tensor(results['mr100']).cpu())
-    gathered_mr100 = [t.view(-1) for t in gathered_mr100]
-    gathered_mr100 = torch.cat(gathered_mr100, dim=-1).view(-1)
-    valid_mr100 = gathered_result[results['mr100']>=0]
-    val_mr100 = float(valid_mr100.mean())
-    del gathered_mr100, valid_mr100
-
-    gathered_zr100 = all_gather(torch.tensor(results['zr100']).cpu())
-    gathered_zr100 = [t.view(-1) for t in gathered_zr100]
-    gathered_zr100 = torch.cat(gathered_zr100, dim=-1).view(-1)
-    valid_zr100 = gathered_result[results['zr100']>=0]
-    val_zr100 = float(valid_zr100.mean())
-    del gathered_zr100, valid_zr100
+    gathered_result = all_gather(torch.tensor(results).cpu())
+    gathered_result = [t.view(-1) for t in gathered_result]
+    gathered_result = torch.cat(gathered_result, dim=-1).view(-1)
+    valid_result = gathered_result[results>=0]
+    val_result = float(valid_result.mean())
+    del gathered_result, valid_result
 
     torch.cuda.empty_cache()
-    return val_r100, val_mr100, val_zr100
+    return val_result
 
 def run_test(cfg, model, distributed, logger, writer):
     if distributed:
@@ -459,6 +434,7 @@ def main():
     model = train(cfg, args.local_rank, args.distributed, logger, writer)
 
     if not args.skip_test:
+        cfg.merge_from_list(['LOG.MODE', 'test'])
         run_test(cfg, model, args.distributed, logger, writer)
 
     print(cfg.OUTPUT_DIR)

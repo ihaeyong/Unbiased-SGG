@@ -184,16 +184,23 @@ def do_vg_evaluation(
 
     logger.info(result_str)
 
+    results={}
+    results['r100'] = float(np.mean(result_dict[mode + '_recall'][100]))
+    results['mr100'] = float(np.mean(result_dict[mode + '_mean_recall'][100]))
+    results['zr100'] = float(np.mean(result_dict[mode + '_zeroshot_recall'][100]))
+
+    writer.add_scalar('{}/{}/r100'.format(cfg.LOG.MODE, mode),
+                      results['r100'], cfg.LOG.ITER)
+    writer.add_scalar('{}/{}/zr100'.format(cfg.LOG.MODE, mode),
+                      results['mr100'], cfg.LOG.ITER)
+    writer.add_scalar('{}/{}/mr100'.format(cfg.LOG.MODE, mode),
+                      results['zr100'], cfg.LOG.ITER)
+
     if "relations" in iou_types:
         if output_folder:
             torch.save(result_dict, os.path.join(output_folder, 'result_dict.pytorch'))
 
-        results={}
-        results['r100'] = float(np.mean(result_dict[mode + '_recall'][100]))
-        results['mr100'] = float(np.mean(result_dict[mode + '_mean_recall'][100]))
-        results['zr100'] = float(np.mean(result_dict[mode + '_zeroshot_recall'][100]))
-
-        return results
+        return results['r100']
     elif "bbox" in iou_types:
         return float(mAp)
     else:
