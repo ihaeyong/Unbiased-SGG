@@ -89,18 +89,14 @@ class SGraphPredictor(nn.Module):
         self.non_vis_dists = nn.Linear(self.embed_dim * 2,
                                        self.num_rel_cls, bias=True)
 
-        self.vis_subj_dists = nn.Linear(self.pooling_dim + 256,
+        self.vis_att_dists = nn.Linear(self.pooling_dim + 256,
                                         self.num_obj_cls, bias=True)
-
-        self.vis_obj_dists = nn.Linear(self.pooling_dim + 256,
-                                        self.num_obj_cls, bias=True)
-
+        
         # initialize layer parameters
         layer_init(self.vis_dists, xavier=True)
         layer_init(self.vis_ctx_dists, xavier=True)
         layer_init(self.non_vis_dists, xavier=True)
-        layer_init(self.vis_subj_dists, xavier=True)
-        layer_init(self.vis_obj_dists, xavier=True)
+        layer_init(self.vis_att_dists, xavier=True)
 
         if self.pooling_dim != config.MODEL.ROI_BOX_HEAD.MLP_HEAD_DIM:
             self.union_single_not_match = True
@@ -198,8 +194,8 @@ class SGraphPredictor(nn.Module):
         obj_per_dists = obj_dists.split(num_objs, dim=0)
         u_subj, u_obj = prod_rep.split(256, dim=1)
 
-        subj_dists = self.vis_subj_dists(torch.cat((u_features, u_subj), dim=-1))
-        obj_dists = self.vis_obj_dists(torch.cat((u_features, u_obj), dim=-1))
+        subj_dists = self.vis_att_dists(torch.cat((u_features, u_subj), dim=-1))
+        obj_dists = self.vis_att_dists(torch.cat((u_features, u_obj), dim=-1))
 
         subj_att_dists = subj_dists.split(num_rels, dim=0)
         obj_att_dists = obj_dists.split(num_rels, dim=0)
