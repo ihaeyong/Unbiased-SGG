@@ -120,9 +120,9 @@ def train(cfg, local_rank, distributed, logger, writer):
     debug_print(logger, 'end dataloader')
     checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
 
-    if cfg.SOLVER.PRE_VAL and False:
+    if cfg.SOLVER.PRE_VAL:
         logger.info("Validate before training")
-        run_val(cfg, model, val_data_loaders, distributed, logger)
+        run_val(cfg, model, val_data_loaders, distributed, logger, writer)
 
     logger.info("Start training")
     meters = MetricLogger(delimiter="  ")
@@ -240,11 +240,12 @@ def train(cfg, local_rank, distributed, logger, writer):
         val_result = None # used for scheduler updating
         if cfg.SOLVER.TO_VAL and iteration % cfg.SOLVER.VAL_PERIOD == 0:
             logger.info("Start validating")
-            cfg.iter = iteration
-            cfg.eval_mode = 'val'
-            val_result = run_val(cfg, model, val_data_loaders, distributed,
-                                 logger, writer)
-            logger.info("Validation Result: %.4f" % val_result)
+
+            cfg.merge_from_list(['LOG.ITER', str(iteration)])
+            cfg.merge_from_list(['LOG.MODE', 'val'])
+            val_r100, val_mr100, val_zr100 = run_val(cfg, model, val_data_loaders, distributed,
+                                                     logger, writer)
+            logger.info("Validation Result: %.4f" % val_r100)
 
             # mode
             if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
@@ -255,7 +256,9 @@ def train(cfg, local_rank, distributed, logger, writer):
             else:
                 mode = 'sgdet'
 
-            writer.add_scalar('val/{}_r100'.format(mode), val_result, iteration)
+            writer.add_scalar('val/{}_r100'.format(mode), val_r100, iteration)
+            writer.add_scalar('val/{}_mr100'.format(mode), val_mr100, iteration)
+            writer.add_scalar('val/{}_zr100'.format(mode), val_zr100, iteration)
 
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
         # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
@@ -298,8 +301,11 @@ def run_val(cfg, model, val_data_loaders, distributed, logger, writer):
 
     dataset_names = cfg.DATASETS.VAL
     val_result = []
+    val_r100 = []
+    val_mr100 = []
+    val_zr100 = []
     for dataset_name, val_data_loader in zip(dataset_names, val_data_loaders):
-        dataset_result = inference(
+        results = inference(
             cfg,
             model,
             val_data_loader,
@@ -314,16 +320,34 @@ def run_val(cfg, model, val_data_loaders, distributed, logger, writer):
             writer=writer,
         )
         synchronize()
-        val_result.append(dataset_result)
+        val_r100.append(results['r100'])
+        val_mr100.append(results['mr100'])
+        val_zr100.append(results['zr100'])
+
     # support for multi gpu distributed testing
-    gathered_result = all_gather(torch.tensor(dataset_result).cpu())
-    gathered_result = [t.view(-1) for t in gathered_result]
-    gathered_result = torch.cat(gathered_result, dim=-1).view(-1)
-    valid_result = gathered_result[gathered_result>=0]
-    val_result = float(valid_result.mean())
-    del gathered_result, valid_result
+    gathered_r100 = all_gather(torch.tensor(results['r100']).cpu())
+    gathered_r100 = [t.view(-1) for t in gathered_r100]
+    gathered_r100 = torch.cat(gathered_r100, dim=-1).view(-1)
+    valid_r100 = gathered_result[results['r100']>=0]
+    val_r100 = float(valid_r100.mean())
+    del gathered_r100, valid_r100
+
+    gathered_mr100 = all_gather(torch.tensor(results['mr100']).cpu())
+    gathered_mr100 = [t.view(-1) for t in gathered_mr100]
+    gathered_mr100 = torch.cat(gathered_mr100, dim=-1).view(-1)
+    valid_mr100 = gathered_result[results['mr100']>=0]
+    val_mr100 = float(valid_mr100.mean())
+    del gathered_mr100, valid_mr100
+
+    gathered_zr100 = all_gather(torch.tensor(results['zr100']).cpu())
+    gathered_zr100 = [t.view(-1) for t in gathered_zr100]
+    gathered_zr100 = torch.cat(gathered_zr100, dim=-1).view(-1)
+    valid_zr100 = gathered_result[results['zr100']>=0]
+    val_zr100 = float(valid_zr100.mean())
+    del gathered_zr100, valid_zr100
+
     torch.cuda.empty_cache()
-    return val_result
+    return val_r100, val_mr100, val_zr100
 
 def run_test(cfg, model, distributed, logger, writer):
     if distributed:
@@ -432,12 +456,12 @@ def main():
     # save overloaded model config in the output directory
     save_config(cfg, output_config_path)
 
-    cfg.eval_mode = 'test'
     model = train(cfg, args.local_rank, args.distributed, logger, writer)
 
     if not args.skip_test:
         run_test(cfg, model, args.distributed, logger, writer)
 
+    print(cfg.OUTPUT_DIR)
 
 if __name__ == "__main__":
     main()

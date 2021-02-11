@@ -183,12 +183,17 @@ def do_vg_evaluation(
 
 
     logger.info(result_str)
-    writer.add_scalar('val/{}_mr20'.format(mode), mr20, cfg.iter)
-    
+
     if "relations" in iou_types:
         if output_folder:
             torch.save(result_dict, os.path.join(output_folder, 'result_dict.pytorch'))
-        return float(np.mean(result_dict[mode + '_recall'][100]))
+
+        results={}
+        results['r100'] = float(np.mean(result_dict[mode + '_recall'][100]))
+        results['mr100'] = float(np.mean(result_dict[mode + '_mean_recall'][100]))
+        results['zr100'] = float(np.mean(result_dict[mode + '_zeroshot_recall'][100]))
+
+        return results
     elif "bbox" in iou_types:
         return float(mAp)
     else:

@@ -62,7 +62,7 @@ class SGraphPredictor(nn.Module):
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
-                                                   rib_scale=2,
+                                                   rib_scale=4,
                                                    power=1,
                                                    cfg=config)
 
@@ -204,7 +204,7 @@ class SGraphPredictor(nn.Module):
         subj_att_dists = subj_dists.split(num_rels, dim=0)
         obj_att_dists = obj_dists.split(num_rels, dim=0)
 
-        u_type = 'sum'
+        u_type = 'avg_v0'
         u_obj_dists = []
         for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
 
