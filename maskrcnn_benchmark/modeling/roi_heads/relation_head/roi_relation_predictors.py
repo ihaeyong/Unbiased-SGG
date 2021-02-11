@@ -62,7 +62,7 @@ class SGraphPredictor(nn.Module):
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
-                                                   rib_scale=4,
+                                                   rib_scale=2,
                                                    power=1,
                                                    cfg=config)
 
@@ -221,7 +221,7 @@ class SGraphPredictor(nn.Module):
             elif u_type == 'avg_v0':
                 logit = (logit + mean_subj + mean_obj) / 3
             elif u_type == 'avg_v1':
-                alpha = 0.1
+                alpha = 0.4
                 logit = logit + alpha * (mean_subj + mean_obj) / 2
 
             u_obj_dists.append(logit)
