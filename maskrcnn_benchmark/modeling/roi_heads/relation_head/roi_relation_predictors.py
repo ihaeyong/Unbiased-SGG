@@ -89,14 +89,17 @@ class SGraphPredictor(nn.Module):
         self.non_vis_dists = nn.Linear(self.embed_dim * 2,
                                        self.num_rel_cls, bias=True)
 
-        self.vis_att_dists = nn.Linear(self.pooling_dim + 256,
-                                        self.num_obj_cls, bias=True)
-        
+        self.vis_subj_dists = nn.Linear(self.pooling_dim + 256,
+                                       self.num_obj_cls, bias=True)
+        self.vis_obj_dists = nn.Linear(self.pooling_dim + 256,
+                                       self.num_obj_cls, bias=True)
+
         # initialize layer parameters
         layer_init(self.vis_dists, xavier=True)
         layer_init(self.vis_ctx_dists, xavier=True)
         layer_init(self.non_vis_dists, xavier=True)
-        layer_init(self.vis_att_dists, xavier=True)
+        layer_init(self.vis_subj_dists, xavier=True)
+        layer_init(self.vis_obj_dists, xavier=True)
 
         if self.pooling_dim != config.MODEL.ROI_BOX_HEAD.MLP_HEAD_DIM:
             self.union_single_not_match = True
@@ -189,39 +192,46 @@ class SGraphPredictor(nn.Module):
         union_features = self.feature_extractor.forward_without_pool(union_features)
 
         # ========== update object logit message passing =============
-        with torch.no_grad():
-            u_features = union_features
         obj_per_dists = obj_dists.split(num_objs, dim=0)
-        u_subj, u_obj = prod_rep.split(256, dim=1)
+        with torch.no_grad():
+            u_features = union_features.clone().detach()
+            u_subj, u_obj = prod_rep.clone().detach().split(256, dim=1)
 
-        subj_dists = self.vis_att_dists(torch.cat((u_features, u_subj), dim=-1))
-        obj_dists = self.vis_att_dists(torch.cat((u_features, u_obj), dim=-1))
+        subj_att_dists = self.vis_subj_dists(torch.cat((u_features, u_subj), dim=-1))
+        obj_att_dists = self.vis_obj_dists(torch.cat((u_features,u_obj), dim=-1))
 
-        subj_att_dists = subj_dists.split(num_rels, dim=0)
-        obj_att_dists = obj_dists.split(num_rels, dim=0)
+        subj_att_dists = subj_att_dists.split(num_rels, dim=0)
+        obj_att_dists = obj_att_dists.split(num_rels, dim=0)
 
-        u_type = 'avg_v1'
+        u_type = 'avg_v0'
         u_obj_dists = []
         for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
 
             M = logit.size(0)
             N = subj.size(0)
-            subj_mask = torch.zeros(M, N).cuda(logit.get_device())
-            obj_mask = torch.zeros_like(subj_mask)
-            subj_mask.scatter_(0,pair_idx[:,0][None],1)
-            obj_mask.scatter_(0,pair_idx[:,1][None],1)
+            if False:
+                subj_mask = torch.zeros(M, N).cuda(logit.get_device())
+                obj_mask = torch.zeros_like(subj_mask)
+                subj_mask.scatter_(0,pair_idx[:,0][None],1)
+                obj_mask.scatter_(0,pair_idx[:,1][None],1)
+                subj_mask = subj_mask / subj_mask.sum(1, True)
+                obj_mask = obj_mask / obj_mask.sum(1, True)
+            else:
+                subj_mask = torch.matmul(logit, subj.transpose(0,1))
+                obj_mask = torch.matmul(logit, obj.transpose(0,1))
 
-            subj_mask = subj_mask / subj_mask.sum(1, True)
-            obj_mask = obj_mask / obj_mask.sum(1, True)
-            mean_subj = torch.mm(subj_mask, subj)
-            mean_obj = torch.mm(obj_mask, obj)
+                subj_mask = F.softmax(subj_mask, 1)
+                obj_mask = F.softmax(obj_mask, 1)
+
+            mean_subj = torch.matmul(subj_mask, subj)
+            mean_obj = torch.matmul(obj_mask, obj)
 
             if u_type == 'sum':
                 logit = logit + mean_subj + mean_obj
             elif u_type == 'avg_v0':
                 logit = (logit + mean_subj + mean_obj) / 3
             elif u_type == 'avg_v1':
-                alpha = 0.1
+                alpha = 1.0
                 logit = logit + alpha * (mean_subj + mean_obj) / 2
 
             u_obj_dists.append(logit)

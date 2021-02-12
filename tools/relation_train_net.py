@@ -32,6 +32,7 @@ from maskrcnn_benchmark.utils.miscellaneous import mkdir, save_config
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
 
 from tensorboardX import SummaryWriter
+from six.moves import cPickle as pickle #for performance
 
 # See if we can use apex.DistributedDataParallel instead of the torch default,
 # and enable mixed-precision via apex.amp
@@ -120,7 +121,7 @@ def train(cfg, local_rank, distributed, logger, writer):
     debug_print(logger, 'end dataloader')
     checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
 
-    if cfg.SOLVER.PRE_VAL:
+    if cfg.SOLVER.PRE_VAL and False:
         logger.info("Validate before training")
         run_val(cfg, model, val_data_loaders, distributed, logger, writer)
 
@@ -237,16 +238,40 @@ def train(cfg, local_rank, distributed, logger, writer):
         if iteration == max_iter:
             checkpointer.save("model_final", **arguments)
 
+
+        # mode
+        if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
+            if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL:
+                mode = 'predcls'
+            else:
+                mode = 'sgcls'
+        else:
+            mode = 'sgdet'
+
         val_result = None # used for scheduler updating
         if cfg.SOLVER.TO_VAL and iteration % cfg.SOLVER.VAL_PERIOD == 0:
             logger.info("Start validating")
 
-            cfg.merge_from_list(['LOG.ITER', iteration])
+            cfg.merge_from_list(['LOG.ITER', str(iteration)])
             cfg.merge_from_list(['LOG.MODE', 'val'])
             val_result = run_val(cfg, model, val_data_loaders, distributed,
                                logger, writer)
 
             logger.info("Validation Result: %.4f" % val_result)
+
+            logs_name = cfg.OUTPUT_DIR + "/{}_{}_{}_logs.pkl".format(cfg.LOG.MODE,
+                                                                     mode,
+                                                                     cfg.LOG.ITER)
+
+            with open(logs_name, 'rb') as f:
+                results = pickle.load(f)
+
+            writer.add_scalar('{}/{}/r100'.format(cfg.LOG.MODE, mode),
+                              float(results['r100']), int(cfg.LOG.ITER))
+            writer.add_scalar('{}/{}/mr100'.format(cfg.LOG.MODE, mode),
+                              float(results['mr100']), int(cfg.LOG.ITER))
+            writer.add_scalar('{}/{}/zr100'.format(cfg.LOG.MODE, mode),
+                              float(results['zr100']), int(cfg.LOG.ITER))
 
         # scheduler should be called after optimizer.step() in pytorch>=1.1.0
         # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
@@ -262,9 +287,23 @@ def train(cfg, local_rank, distributed, logger, writer):
 
                 logger.info("======== TEST : {} ============".format(iteration))
                 cfg.merge_from_list(['LOG.MODE', 'test'])
-                cfg.merge_from_list(['LOG.ITER', iteration])
+                cfg.merge_from_list(['LOG.ITER', str(iteration)])
                 run_test(cfg, model, distributed, logger, writer)
                 logger.info("===============================")
+
+                logs_name = cfg.OUTPUT_DIR + "/{}_{}_{}_logs.pkl".format(cfg.LOG.MODE,
+                                                                         mode,
+                                                                         cfg.LOG.ITER)
+                with open(logs_name, 'rb') as f:
+                    results = pickle.load(f)
+
+                writer.add_scalar('{}/{}/r100'.format(cfg.LOG.MODE, mode),
+                                  float(results['r100']), int(cfg.LOG.ITER))
+                writer.add_scalar('{}/{}/mr100'.format(cfg.LOG.MODE, mode),
+                                  float(results['mr100']), int(cfg.LOG.ITER))
+                writer.add_scalar('{}/{}/zr100'.format(cfg.LOG.MODE, mode),
+                                  float(results['zr100']), int(cfg.LOG.ITER))
+
 
     total_training_time = time.time() - start_training_time
     total_time_str = str(datetime.timedelta(seconds=total_training_time))
@@ -403,7 +442,6 @@ def main():
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     cfg.freeze()
-
     output_dir = cfg.OUTPUT_DIR
     if output_dir:
         mkdir(output_dir)
@@ -436,6 +474,29 @@ def main():
     if not args.skip_test:
         cfg.merge_from_list(['LOG.MODE', 'test'])
         run_test(cfg, model, args.distributed, logger, writer)
+
+
+        # mode
+        if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
+            if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL:
+                mode = 'predcls'
+            else:
+                mode = 'sgcls'
+        else:
+            mode = 'sgdet'
+
+        logs_name = cfg.OUTPUT_DIR + "/{}_{}_{}_logs.pkl".format(cfg.LOG.MODE,
+                                                                 mode,
+                                                                 cfg.LOG.ITER)
+        with open(logs_name, 'rb') as f:
+            results = pickle.load(f)
+
+        writer.add_scalar('{}/{}/r100'.format(cfg.LOG.MODE, mode),
+                          float(results['r100']), int(cfg.LOG.ITER))
+        writer.add_scalar('{}/{}/mr100'.format(cfg.LOG.MODE, mode),
+                          float(results['mr100']), int(cfg.LOG.ITER))
+        writer.add_scalar('{}/{}/zr100'.format(cfg.LOG.MODE, mode),
+                          float(results['zr100']), int(cfg.LOG.ITER))
 
     print(cfg.OUTPUT_DIR)
 
