@@ -14,6 +14,8 @@ from maskrcnn_benchmark.structures.boxlist_ops import boxlist_iou
 from maskrcnn_benchmark.utils.miscellaneous import intersect_2d, argsort_desc, bbox_overlaps
 from maskrcnn_benchmark.data.datasets.evaluation.vg.sgg_eval import SGRecall, SGNoGraphConstraintRecall, SGZeroShotRecall, SGNGZeroShotRecall, SGPairAccuracy, SGMeanRecall, SGNGMeanRecall, SGAccumulateRecall
 
+from six.moves import cPickle as pickle #for performance
+
 def do_vg_evaluation(
         cfg,
         dataset,
@@ -189,12 +191,19 @@ def do_vg_evaluation(
     results['mr100'] = float(np.mean(result_dict[mode + '_mean_recall'][100]))
     results['zr100'] = float(np.mean(result_dict[mode + '_zeroshot_recall'][100]))
 
-    writer.add_scalar('{}/{}/r100'.format(cfg.LOG.MODE, mode),
-                      results['r100'], int(cfg.LOG.ITER))
-    writer.add_scalar('{}/{}/mr100'.format(cfg.LOG.MODE, mode),
-                      results['mr100'], int(cfg.LOG.ITER))
-    writer.add_scalar('{}/{}/zr100'.format(cfg.LOG.MODE, mode),
-                      results['zr100'], int(cfg.LOG.ITER))
+    logs_name = cfg.OUTPUT_DIR + "/{}_{}_{}_logs.pkl".format(cfg.LOG.MODE,
+                                                             mode,
+                                                             cfg.LOG.ITER)
+    with open(logs_name, 'wb') as f:
+        pickle.dump(results, f)
+
+    if False:
+        writer.add_scalar('{}/{}/r100'.format(cfg.LOG.MODE, mode),
+                          results['r100'], int(cfg.LOG.ITER))
+        writer.add_scalar('{}/{}/mr100'.format(cfg.LOG.MODE, mode),
+                          results['mr100'], int(cfg.LOG.ITER))
+        writer.add_scalar('{}/{}/zr100'.format(cfg.LOG.MODE, mode),
+                          results['zr100'], int(cfg.LOG.ITER))
 
     if "relations" in iou_types:
         if output_folder:
