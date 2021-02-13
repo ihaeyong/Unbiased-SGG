@@ -282,7 +282,8 @@ def train(cfg, local_rank, distributed, logger, writer):
                 break
         else:
             scheduler.step()
-
+            
+        if cfg.SOLVER.TO_VAL and iteration % cfg.SOLVER.VAL_PERIOD == 0:
             if optimizer.param_groups[-1]["lr"] < 2e-3:
 
                 logger.info("======== TEST : {} ============".format(iteration))
@@ -356,7 +357,7 @@ def run_val(cfg, model, val_data_loaders, distributed, logger, writer):
     gathered_result = all_gather(torch.tensor(results).cpu())
     gathered_result = [t.view(-1) for t in gathered_result]
     gathered_result = torch.cat(gathered_result, dim=-1).view(-1)
-    valid_result = gathered_result[results>=0]
+    valid_result = gathered_result[gathered_result>=0]
     val_result = float(valid_result.mean())
     del gathered_result, valid_result
 
