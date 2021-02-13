@@ -282,7 +282,7 @@ def train(cfg, local_rank, distributed, logger, writer):
                 break
         else:
             scheduler.step()
-            
+
         if cfg.SOLVER.TO_VAL and iteration % cfg.SOLVER.VAL_PERIOD == 0:
             if optimizer.param_groups[-1]["lr"] < 2e-3:
 

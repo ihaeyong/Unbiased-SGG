@@ -216,6 +216,9 @@ class SGraphPredictor(nn.Module):
         obj_att_dists = obj_att_dists.split(num_rels, dim=0)
 
         u_type = 'avg_v1'
+        alpha = 0.02
+        beta = 1.0
+        
         u_obj_dists = []
         for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
 
@@ -232,8 +235,8 @@ class SGraphPredictor(nn.Module):
                 subj_mask = torch.matmul(logit, subj.transpose(0,1))
                 obj_mask = torch.matmul(logit, obj.transpose(0,1))
 
-                subj_mask = F.softmax(subj_mask, 1)
-                obj_mask = F.softmax(obj_mask, 1)
+                subj_mask = F.softmax(subj_mask / beta, 1)
+                obj_mask = F.softmax(obj_mask / beta, 1)
 
             mean_subj = torch.matmul(subj_mask, subj)
             mean_obj = torch.matmul(obj_mask, obj)
@@ -243,7 +246,6 @@ class SGraphPredictor(nn.Module):
             elif u_type == 'avg_v0':
                 logit = (logit + mean_subj + mean_obj) / 3
             elif u_type == 'avg_v1':
-                alpha = 0.4
                 logit = logit + alpha * (mean_subj + mean_obj) / 2
 
             u_obj_dists.append(logit)
