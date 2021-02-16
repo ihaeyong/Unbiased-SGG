@@ -120,10 +120,6 @@ class SGraphPredictor(nn.Module):
             # convey statistics into FrequencyBias to avoid loading again
             self.freq_bias = FrequencyBias(config, statistics)
 
-        if self.fusion_type == 'gate':
-            self.ctx_gate_fc = nn.Linear(self.hidden_dim, self.num_rel_cls)
-            layer_init(self.ctx_gate_fc, xavier=True)
-
         self.geomtric = True
         if self.geomtric:
             geo_dim = 128
@@ -131,8 +127,7 @@ class SGraphPredictor(nn.Module):
             self.geo_dists = nn.Linear(geo_dim, self.num_rel_cls, bias=True)
             layer_init(self.geo_dists, xavier=True)
 
-        self.post_cat_for_gate = False
-        if self.post_cat_for_gate:
+        if self.fusion_type[:4] == 'gate':
             self.post_cat = nn.Linear(256 * 2, self.pooling_dim)
             layer_init(self.post_cat, xavier=True)
 
@@ -253,7 +248,7 @@ class SGraphPredictor(nn.Module):
         obj_dists = torch.cat(u_obj_dists, dim=0)
 
         # use union box and mask convolution
-        if self.post_cat_for_gate :
+        if self.fusion_type[:4] == 'gate' :
             ctx_gate = self.post_cat(prod_rep)
             union_features = ctx_gate * union_features
 
@@ -299,21 +294,7 @@ class SGraphPredictor(nn.Module):
         ctx_dists = self.vis_ctx_dists(ctx_rep)
         geo_dists = self.geo_dists(geo_emb)
 
-        if self.fusion_type == 'gate':
-            ctx_gate_dists = self.ctx_gate_fc(ctx_rep)
-            union_dists = ctx_dists * torch.sigmoid(vis_dists + freq_dists + emb_dists + ctx_gate_dists)
-
-        elif self.fusion_type == 'geo':
-            #
-            freq_bias = torch.sigmoid(freq_dists)
-            union_dists = geo_dists
-
-        elif self.fusion_type == 'freq_geo':
-            #
-            freq_bias = torch.sigmoid(freq_dists)
-            union_dists = geo_dists + freq_dists
-
-        elif self.fusion_type == 'sum':
+        if self.fusion_type == 'sum':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
             freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
             union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
@@ -328,7 +309,7 @@ class SGraphPredictor(nn.Module):
             freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
             union_dists = vis_dists + ctx_dists + freq_dists + torch.sigmoid(emb_dists) + geo_dists
 
-        elif self.fusion_type == 'sum_v3':
+        elif self.fusion_type == 'sum_v3' or self.fusion_type == 'gate_v3':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
             freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
             union_dists = vis_dists + ctx_dists + torch.sigmoid(freq_dists) + emb_dists + geo_dists
@@ -367,99 +348,6 @@ class SGraphPredictor(nn.Module):
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
             freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
             union_dists = vis_dists + ctx_dists + torch.sigmoid(freq_dists) + emb_dists + torch.sigmoid(geo_dists)
-
-        elif self.fusion_type == 'sum_softmax':
-            # 11.6, 15.5, 17.3 ( 1.8, 2.2) 53.7, 60.5, 62.9
-            freq_bias = torch.sigmoid(freq_dists + emb_dists)
-            union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
-
-        elif self.fusion_type == 'sum_softmax_v1':
-            # 9.9, 15.1, 17.2 (7.6, 10.5) 47.3, 58.3, 62.1
-            freq_bias = torch.sigmoid(freq_dists + emb_dists)
-            union_dists = torch.sigmoid(vis_dists + ctx_dists) + torch.sigmoid(
-                freq_dists + emb_dists + geo_dists)
-
-        elif self.fusion_type == 'sum_softmax_v2':
-            # 6.0, 8.4, 10.1 (7.0, 10.6) 44.5, 55.2, 59.9
-            freq_bias = torch.sigmoid(freq_dists + emb_dists)
-            union_dists = torch.sigmoid(vis_dists + ctx_dists) + torch.sigmoid(
-                freq_dists) + torch.sigmoid(emb_dists) + torch.sigmoid(geo_dists)
-
-        elif self.fusion_type == 'sum_softmax_v3':
-            # 7.5, 10. 6, 12.7 ( 8.4, 11.4)  46.7, 56.2, 59.9
-            freq_bias = torch.sigmoid(freq_dists + emb_dists)
-            union_dists = torch.sigmoid(vis_dists) + torch.sigmoid(ctx_dists) + torch.sigmoid(
-                freq_dists) + torch.sigmoid(emb_dists) + torch.sigmoid(geo_dists)
-
-        elif self.fusion_type == 'sum_softmax_v4': # vs, sum_softmax
-            # 16.3, 20.6, 22.2 (2.7, 4.2) 56.55, 63.6, 65.7
-            freq_bias = torch.sigmoid(freq_dists) + torch.sigmoid(emb_dists)
-            union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
-
-        elif self.fusion_type == 'sum_softmax_v41': # vs, sum_softmax
-            # 13.6, 17.7, 19.3 (2.7, 4.2) 56.55, 63.6, 65.7
-            freq_bias = torch.sigmoid(freq_dists) + torch.sigmoid(
-                emb_dists) + torch.sigmoid(geo_dists)
-            union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
-
-        elif self.fusion_type == 'sum_softmax_v42': # vs, sum_softmax
-            # 16.3, 20.6, 22.2 (2.7, 4.2) 56.55, 63.6, 65.7
-            freq_bias = torch.sigmoid(freq_dists + emb_dists) + torch.sigmoid(geo_dists)
-            union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
-
-        elif self.fusion_type == 'sum_softmax_v5': # vs, sum_softmax_v1
-            # 
-            freq_bias = torch.sigmoid(freq_dists) + torch.sigmoid(emb_dists)
-            union_dists = torch.sigmoid(vis_dists + ctx_dists) + torch.sigmoid(
-                freq_dists + emb_dists + geo_dists)
-
-        elif self.fusion_type == 'sum_softmax_v6': # vs, sum_softmax_v2
-            # 6.9, 10.1, 12.5 (8.9, 12.5) 47.8, 58.4, 62.7
-            freq_bias = torch.sigmoid(freq_dists) + torch.sigmoid(emb_dists)
-            union_dists = torch.sigmoid(vis_dists + ctx_dists) + torch.sigmoid(
-                freq_dists) + torch.sigmoid(emb_dists) + torch.sigmoid(geo_dists)
-
-        elif self.fusion_type == 'sum_softmax_v7': # vs, sum_softmax_v3
-            # 7.8, 10.6, 12.2  (9.2, 12.2) 49.4, 58.9, 62.6
-            freq_bias = torch.sigmoid(freq_dists) + torch.sigmoid(emb_dists)
-            union_dists = torch.sigmoid(vis_dists) + torch.sigmoid(ctx_dists) + torch.sigmoid(
-                freq_dists) + torch.sigmoid(emb_dists) + torch.sigmoid(geo_dists)
-
-        elif self.fusion_type == 'gate_sum':
-            alpha = torch.sigmoid(freq_dists + emb_dists)
-            union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists)
-
-        elif self.fusion_type == 'gate_geo_sum':
-            alpha = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists + geo_dists)
-
-        elif self.fusion_type == 'gate_geo_sum_v1':
-            alpha = torch.sigmoid(freq_dists)
-            union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists + geo_dists)
-
-        elif self.fusion_type == 'gate_geo_sum_v2':
-            alpha = torch.sigmoid(freq_dists + emb_dists)
-            union_dists = alpha * (vis_dists + ctx_dists) + (1.0 - alpha) * (freq_dists + emb_dists + geo_dists)
-
-        elif self.fusion_type == 'gate_geo_sum_v3':
-            alpha = torch.sigmoid(freq_dists + emb_dists)
-            beta = torch.sigmoid(geo_dists)
-            union_dists = (alpha+beta)*(vis_dists+ctx_dists)+(1.0-alpha)*(freq_dists+emb_dists)+(1.0-beta)*geo_dists
-
-        elif self.fusion_type == 'gate_geo_sum_v4':
-            alpha = torch.sigmoid(freq_dists + emb_dists)
-            beta = torch.sigmoid(geo_dists)
-            union_dists = (alpha*beta)*(vis_dists+ctx_dists)+(1.0-alpha)*(freq_dists+emb_dists)+(1.0-beta)*geo_dists
-
-        elif self.fusion_type == 'gate_geo_sum_v5':
-            alpha = torch.sigmoid(freq_dists + emb_dists)
-            beta = torch.sigmoid(geo_dists)
-            union_dists = ctx_dists * (torch.sigmoid(vis_dists) + alpha + beta)
-
-        elif self.fusion_type == 'gate_geo_sum_v6':
-            alpha = torch.sigmoid(freq_dists + emb_dists)
-            beta = torch.sigmoid(geo_dists)
-            union_dists = vis_dists * (torch.sigmoid(ctx_dists) + alpha + beta)
 
         else:
             print('invalid fusion type')
