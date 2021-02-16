@@ -211,7 +211,7 @@ class SGraphPredictor(nn.Module):
         obj_att_dists = obj_att_dists.split(num_rels, dim=0)
 
         u_type = 'avg_v1'
-        alpha = 0.02
+        alpha = 0.01
         beta = 1.0
         
         u_obj_dists = []
