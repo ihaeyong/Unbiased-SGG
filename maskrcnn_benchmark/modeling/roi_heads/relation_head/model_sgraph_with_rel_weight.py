@@ -212,7 +212,7 @@ class RelWeight(nn.Module):
 
         if skew_v > 0.9 :
             beta = 1.0 - ent_v * 1.0
-        elif skew_v < -0.9:
+        elif skew_v < -0.9 :
             beta = 1.0 - ent_v * 1.0
         else:
             beta = 0.0
