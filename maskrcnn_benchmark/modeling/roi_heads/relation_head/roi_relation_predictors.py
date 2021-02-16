@@ -194,6 +194,11 @@ class SGraphPredictor(nn.Module):
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
 
+        # use union box and mask convolution
+        if self.fusion_type[:4] == 'gate' :
+            ctx_gate = self.post_cat(prod_rep)
+            union_features = ctx_gate * union_features
+
         # ========== update object logit message passing =============
         obj_per_dists = obj_dists.split(num_objs, dim=0)
         with torch.no_grad():
@@ -211,7 +216,7 @@ class SGraphPredictor(nn.Module):
         obj_att_dists = obj_att_dists.split(num_rels, dim=0)
 
         u_type = 'avg_v1'
-        alpha = 0.01
+        alpha = 0.02
         beta = 1.0
         
         u_obj_dists = []
@@ -248,7 +253,7 @@ class SGraphPredictor(nn.Module):
         obj_dists = torch.cat(u_obj_dists, dim=0)
 
         # use union box and mask convolution
-        if self.fusion_type[:4] == 'gate' :
+        if self.fusion_type[:4] == 'gate' and False:
             ctx_gate = self.post_cat(prod_rep)
             union_features = ctx_gate * union_features
 
