@@ -16,11 +16,19 @@ class UnionRegionAttention(nn.Module):
     if None of geo, cat and appr was specified, only upconvolution is used.
     """
 
-    def __init__(self, obj_dim=256, rib_scale = 1, power=1, cfg=None):
+    def __init__(self,
+                 obj_dim=256,
+                 rib_scale = 1,
+                 embedding=False,
+                 geometric=False,
+                 cfg=None):
         super(UnionRegionAttention, self).__init__()
 
-        self.power = power
+        self.power = 1
         self.rib_scale = rib_scale
+        self.embedding = embedding
+        self.geometric = geometric
+        self.ch = 1
 
         subjobj_upconv = [
             nn.ConvTranspose2d(obj_dim * 2, 32, 3, bias=False),
@@ -34,38 +42,48 @@ class UnionRegionAttention(nn.Module):
             nn.ReLU(inplace=True),
         ]
 
-        subjobj_emb_upconv = [
-            nn.ConvTranspose2d(200 * 2, 32, 3, bias=False),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(32, 16, 3, bias=False),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(16, 8, 3, bias=False),
-            nn.BatchNorm2d(8),
-            nn.ReLU(inplace=True),
-        ]
+        if self.embedding:
+            subjobj_emb_upconv = [
+                nn.ConvTranspose2d(200 * 2, 32, 3, bias=False),
+                nn.BatchNorm2d(32),
+                nn.ReLU(inplace=True),
+                nn.ConvTranspose2d(32, 16, 3, bias=False),
+                nn.BatchNorm2d(16),
+                nn.ReLU(inplace=True),
+                nn.ConvTranspose2d(16, 8, 3, bias=False),
+                nn.BatchNorm2d(8),
+                nn.ReLU(inplace=True),
+            ]
 
-        subjobj_geo_upconv = [
-            nn.ConvTranspose2d(128, 32, 3, bias=False),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(32, 16, 3, bias=False),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(16, 8, 3, bias=False),
-            nn.BatchNorm2d(8),
-            nn.ReLU(inplace=True),
-        ]
+        if self.geometric:
+            subjobj_geo_upconv = [
+                nn.ConvTranspose2d(128, 32, 3, bias=False),
+                nn.BatchNorm2d(32),
+                nn.ReLU(inplace=True),
+                nn.ConvTranspose2d(32, 16, 3, bias=False),
+                nn.BatchNorm2d(16),
+                nn.ReLU(inplace=True),
+                nn.ConvTranspose2d(16, 8, 3, bias=False),
+                nn.BatchNorm2d(8),
+                nn.ReLU(inplace=True),
+            ]
 
         self.subjobj_upconv = nn.Sequential(*subjobj_upconv)
-        self.subjobj_emb_upconv = nn.Sequential(*subjobj_emb_upconv)
-        self.subjobj_geo_upconv = nn.Sequential(*subjobj_geo_upconv)
+
+        if self.embedding:
+            self.subjobj_emb_upconv = nn.Sequential(*subjobj_emb_upconv)
+            self.subjobj_emb_upconv.apply(seq_init)
+            self.ch += 1
+
+        if self.geometric:
+            self.subjobj_geo_upconv = nn.Sequential(*subjobj_geo_upconv)
+            self.subjobj_geo_upconv.apply(seq_init)
+            self.ch += 1
 
         if self.rib_scale == 1:
 
             subjobj_mask = [
-                nn.Conv2d(8*3, 8, 1, stride=1, bias=False),
+                nn.Conv2d(8*self.ch, 8, 1, stride=1, bias=False),
                 nn.BatchNorm2d(3),
                 nn.ReLU(inplace=True),
                 nn.Conv2d(8, 3, 1, stride=1, bias=False),
@@ -95,7 +113,7 @@ class UnionRegionAttention(nn.Module):
 
         if self.rib_scale == 2:
             subjobj_mask = [
-                nn.ConvTranspose2d(8*3, 8, 3, stride=2, padding=1, dilation=2,
+                nn.ConvTranspose2d(8*self.ch, 8, 3, stride=2, padding=1, dilation=2,
                                    bias=False),
                 nn.BatchNorm2d(8),
                 nn.Conv2d(8, 3, 1, stride=1, dilation=1, bias=False),
@@ -129,7 +147,7 @@ class UnionRegionAttention(nn.Module):
         if self.rib_scale == 4:
 
             subjobj_mask = [
-                nn.ConvTranspose2d(24, 8, 3, stride=2, padding=1,dilation=1,bias=False),
+                nn.ConvTranspose2d(8 * self.ch, 8, 3, stride=2, padding=1,dilation=1,bias=False),
                 nn.BatchNorm2d(8),
                 nn.ConvTranspose2d(8, 3, 3, stride=2, padding=1, bias=False),
                 nn.BatchNorm2d(3),
@@ -168,7 +186,7 @@ class UnionRegionAttention(nn.Module):
         if self.rib_scale == 5:
 
             subjobj_mask = [
-                nn.ConvTranspose2d(8*3,8,3,stride=2,padding=1,dilation=2,bias=False),
+                nn.ConvTranspose2d(8*self.ch,8,3,stride=2,padding=1,dilation=2,bias=False),
                 nn.BatchNorm2d(8),
                 nn.ConvTranspose2d(8,3,3,stride=2,padding=1,bias=False),
                 nn.BatchNorm2d(3),
@@ -222,8 +240,6 @@ class UnionRegionAttention(nn.Module):
 
         # init weight
         self.subjobj_upconv.apply(seq_init)
-        self.subjobj_emb_upconv.apply(seq_init)
-        self.subjobj_geo_upconv.apply(seq_init)
         self.subjobj_mask.apply(seq_init)
         self.union_upconv.apply(seq_init)
         self.union_downconv.apply(seq_init)
@@ -248,7 +264,9 @@ class UnionRegionAttention(nn.Module):
         #x = F.max_pool2d(x, 4)
         return x
 
-    def forward(self, union_fmap, subjobj_fmap, subjobj_embed, geo_embed,
+    def forward(self, union_fmap, subjobj_fmap,
+                subjobj_embed=None,
+                geo_embed=None,
                 rel_labels=None):
         """
         Input:
@@ -260,17 +278,23 @@ class UnionRegionAttention(nn.Module):
         """
         batch = union_fmap.size(0)
 
-        subjobj_upconv = self.subjobj_upconv(subjobj_fmap[:,:,None,None])
-        subjobj_emb_upconv = self.subjobj_emb_upconv(subjobj_embed[:,:,None,None])
-        subjobj_geo_upconv = self.subjobj_geo_upconv(geo_embed[:,:,None,None])
+        subjobj_upconv = []
+        subjobj_rep = self.subjobj_upconv(subjobj_fmap[:,:,None,None])
+        subjobj_upconv.append(subjobj_rep)
+
+        if self.embedding:
+            subjobj_emb = self.subjobj_emb_upconv(subjobj_embed[:,:,None,None])
+            subjobj_upconv.append(subjobj_emb)
+
+        if self.geometric:
+            subjobj_geo = self.subjobj_geo_upconv(geo_embed[:,:,None,None])
+            subjobj_upconv.append(subjobj_geo)
 
         # -----union_upconv---------------------
         union_fmap = self.union_upconv(union_fmap)
         residual = union_fmap
 
-        subjobj_upconv = torch.cat((subjobj_upconv,
-                                    subjobj_emb_upconv,
-                                    subjobj_geo_upconv), 1)
+        subjobj_upconv = torch.cat(subjobj_upconv, 1)
         mask = self.subjobj_mask(subjobj_upconv)
 
         # ----graph ----------------------------

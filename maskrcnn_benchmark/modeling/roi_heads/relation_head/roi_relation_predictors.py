@@ -59,11 +59,14 @@ class SGraphPredictor(nn.Module):
         else:
             self.context_layer = SpectralContext(config, obj_classes, rel_classes, in_channels)
 
+        self.geometric = False
+        self.embedding = False
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
                                                    rib_scale=2,
-                                                   power=1,
+                                                   embedding=self.embedding,
+                                                   geometric=self.geometric,
                                                    cfg=config)
 
         # box feature rois pooling
@@ -86,8 +89,10 @@ class SGraphPredictor(nn.Module):
         self.vis_ctx_dists = nn.Linear(self.hidden_dim,
                                        self.num_rel_cls, bias=True)
 
-        self.non_vis_dists = nn.Linear(self.embed_dim * 2,
-                                       self.num_rel_cls, bias=True)
+        if self.embedding:
+            self.non_vis_dists = nn.Linear(self.embed_dim * 2,
+                                           self.num_rel_cls, bias=True)
+            layer_init(self.non_vis_dists, xavier=True)
 
         if False:
             self.vis_subj_dists = nn.Linear(self.pooling_dim + 256,
@@ -98,11 +103,10 @@ class SGraphPredictor(nn.Module):
             self.vis_att_dists = nn.Linear(self.pooling_dim + 256,
                                            self.num_obj_cls, bias=True)
 
-
         # initialize layer parameters
         layer_init(self.vis_dists, xavier=True)
         layer_init(self.vis_ctx_dists, xavier=True)
-        layer_init(self.non_vis_dists, xavier=True)
+
         if False:
             layer_init(self.vis_subj_dists, xavier=True)
             layer_init(self.vis_obj_dists, xavier=True)
@@ -120,8 +124,7 @@ class SGraphPredictor(nn.Module):
             # convey statistics into FrequencyBias to avoid loading again
             self.freq_bias = FrequencyBias(config, statistics)
 
-        self.geomtric = True
-        if self.geomtric:
+        if self.geometric:
             geo_dim = 128
             self.geo_embed = Geometric(out_features=geo_dim)
             self.geo_dists = nn.Linear(geo_dim, self.num_rel_cls, bias=True)
@@ -175,7 +178,8 @@ class SGraphPredictor(nn.Module):
         pair_pred = cat(pair_preds, dim=0)
 
         # geometric embedding
-        if self.geomtric:
+        geo_embed = None
+        if self.geometric:
             geo_embed = self.geo_embed(proposals, rel_pair_idxs)
 
         # relational message passing
@@ -195,7 +199,7 @@ class SGraphPredictor(nn.Module):
         union_features = self.feature_extractor.forward_without_pool(union_features)
 
         # use union box and mask convolution
-        if self.fusion_type[:4] == 'gate' :
+        if self.fusion_type[:4] == 'gate' and False:
             ctx_gate = self.post_cat(prod_rep)
             union_features = ctx_gate * union_features
 
@@ -215,51 +219,35 @@ class SGraphPredictor(nn.Module):
         subj_att_dists = subj_att_dists.split(num_rels, dim=0)
         obj_att_dists = obj_att_dists.split(num_rels, dim=0)
 
-        u_type = 'avg_v1'
         alpha = 0.02
-        beta = 1.0
-        
         u_obj_dists = []
         for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
 
             M = logit.size(0)
             N = subj.size(0)
-            if False:
-                subj_mask = torch.zeros(M, N).cuda(logit.get_device())
-                obj_mask = torch.zeros_like(subj_mask)
-                subj_mask.scatter_(0,pair_idx[:,0][None],1)
-                obj_mask.scatter_(0,pair_idx[:,1][None],1)
-                subj_mask = subj_mask / subj_mask.sum(1, True)
-                obj_mask = obj_mask / obj_mask.sum(1, True)
-            else:
-                subj_mask = torch.matmul(logit, subj.transpose(0,1))
-                obj_mask = torch.matmul(logit, obj.transpose(0,1))
 
-                subj_mask = F.softmax(subj_mask / beta, 1)
-                obj_mask = F.softmax(obj_mask / beta, 1)
+            subj_mask = torch.matmul(logit, subj.transpose(0,1))
+            obj_mask = torch.matmul(logit, obj.transpose(0,1))
+
+            subj_mask = F.softmax(subj_mask / 1.0, 1)
+            obj_mask = F.softmax(obj_mask / 1.0, 1)
 
             mean_subj = torch.matmul(subj_mask, subj)
             mean_obj = torch.matmul(obj_mask, obj)
 
-            if u_type == 'sum':
-                logit = logit + mean_subj + mean_obj
-            elif u_type == 'avg_v0':
-                logit = (logit + mean_subj + mean_obj) / 3
-            elif u_type == 'avg_v1':
-                logit = logit + alpha * (mean_subj + mean_obj) / 2
+            logit = logit + alpha * (mean_subj + mean_obj) / 2
 
             u_obj_dists.append(logit)
 
         obj_dists = torch.cat(u_obj_dists, dim=0)
 
-        # use union box and mask convolution
-        if self.fusion_type[:4] == 'gate' and False:
-            ctx_gate = self.post_cat(prod_rep)
-            union_features = ctx_gate * union_features
+        # use embedding
+        embed_bias = None
+        if self.embedding:
+            embed_bias = self.non_vis_dists(prod_emb)
 
         # use frequence bias
         if self.use_bias:
-            embed_bias = self.non_vis_dists(prod_emb)
             freq_bias = self.freq_bias.index_with_labels(pair_pred)
 
         # sum of non-vis/visual dists
@@ -297,22 +285,24 @@ class SGraphPredictor(nn.Module):
 
         vis_dists = self.vis_dists(vis_rep)
         ctx_dists = self.vis_ctx_dists(ctx_rep)
-        geo_dists = self.geo_dists(geo_emb)
+
+        if self.geometric:
+            geo_dists = self.geo_dists(geo_emb)
 
         if self.fusion_type == 'sum':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
             freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
             union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
 
-        elif self.fusion_type == 'sum_v1':
+        elif self.fusion_type == 'sum_v1' or self.fusion_type == 'gate_v1':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
-            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + torch.sigmoid(geo_dists)
+            freq_bias = torch.sigmoid(freq_dists)
+            union_dists = vis_dists + ctx_dists + freq_bias
 
-        elif self.fusion_type == 'sum_v2':
+        elif self.fusion_type == 'sum_v2' or self.fusion_type == 'gate_v2':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
-            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = vis_dists + ctx_dists + freq_dists + torch.sigmoid(emb_dists) + geo_dists
+            freq_bias = torch.sigmoid(freq_dists + emb_dists)
+            union_dists = vis_dists + ctx_dists + torch.sigmoid(freq_dists) + emb_dists
 
         elif self.fusion_type == 'sum_v3' or self.fusion_type == 'gate_v3':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2

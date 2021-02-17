@@ -19,7 +19,7 @@ if [ $2 == "sgcls" ]; then
            MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 0 \
            MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 1 \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
-           MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE gate_v3 \
+           MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum_v1 \
            SOLVER.IMS_PER_BATCH 12 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
@@ -28,11 +28,11 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/mask_bf_iba_b1.0_a0.02_sig0.03_obj2.3_rel0.9_scale2_gate_v3-sgcls
+           OUTPUT_DIR ./checkpoints/mask_a0.02_sig0.03_obj2.3_rel0.9_scale2_sum_v1-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10050 \
+           --master_port $5 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -44,7 +44,7 @@ elif [ $2 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 0 \
            MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 1 \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
-           MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum_v3 \
+           MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum_v1 \
            SOLVER.IMS_PER_BATCH 12 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
@@ -52,11 +52,11 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/mask2048_sigmoid0.03_obj2.3_scale4_sigma3_sum_v3-predcls
+           OUTPUT_DIR ./checkpoints/mask_a0.02_sig0.03_obj2.3_rel0.9_scale2_sum_v1-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \
-           --master_port 10060 \
+           --master_port $5 \
            --nproc_per_node=$1 \
            tools/relation_train_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -68,7 +68,7 @@ elif [ $2 == "sgdet" ]; then
            MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER 0 \
            MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 1 \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
-           MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum_v3 \
+           MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum_v1 \
            SOLVER.IMS_PER_BATCH 8 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
@@ -76,5 +76,5 @@ elif [ $2 == "sgdet" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/mask_subjobj_avg_v0_sig0.04_obj2.3_scale4_sum_v3-sgdet
+           OUTPUT_DIR ./checkpoints/mask_a0.02_sig0.03_obj2.3_rel0.9_scale2_sum_v1-sgdet
 fi
