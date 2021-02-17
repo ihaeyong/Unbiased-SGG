@@ -162,11 +162,32 @@ class SGraphPredictor(nn.Module):
         obj_preds = obj_preds.split(num_objs, dim=0)
 
         prod_reps = []
+        prod_do_reps = []
         prod_embs = []
         pair_preds = []
+
+        d_type = 'obj'
         for pair_idx, obj_rep, obj_emb, obj_pred in zip(rel_pair_idxs, obj_reps, obj_embs, obj_preds):
+
             prod_reps.append( torch.cat((obj_rep[pair_idx[:,0]],
                                          obj_rep[pair_idx[:,1]]), dim=-1) )
+
+
+            if d_type == 'subj':
+                prod_do_reps.append(
+                    torch.cat((torch.rand_like(obj_rep[pair_idx[:,0]]),
+                               obj_rep[pair_idx[:,1]]), dim=-1) )
+
+            elif d_type == 'obj':
+                prod_do_reps.append(
+                    torch.cat((obj_rep[pair_idx[:,0]],
+                               torch.rand_like(obj_rep[pair_idx[:,1]])), dim=-1) )
+
+            elif d_type == 'subjobj':
+                prod_do_reps.append(
+                    torch.cat((torch.rand_like(obj_rep[pair_idx[:,0]]),
+                               torch.rand_like(obj_rep[pair_idx[:,1]])), dim=-1) )
+
             prod_embs.append( torch.cat((obj_emb[pair_idx[:,0]],
                                          obj_emb[pair_idx[:,1]]), dim=-1) )
             pair_preds.append( torch.stack((obj_pred[pair_idx[:,0]],
@@ -174,6 +195,7 @@ class SGraphPredictor(nn.Module):
 
         # prod_rep [:,512], prod_emb [:,400], pair_rep[:,2]
         prod_rep = cat(prod_reps, dim=0)
+        prod_do_rep = cat(prod_do_reps, dim=0)
         prod_emb = cat(prod_embs, dim=0)
         pair_pred = cat(pair_preds, dim=0)
 
@@ -186,11 +208,21 @@ class SGraphPredictor(nn.Module):
         if self.rel_ctx_layer > 0:
             if self.training :
                 rel_labels = torch.cat(rel_labels)
+
+                bg_idx = np.where(rel_labels.cpu() == 0)[0]
+                fg_idx = np.where(rel_labels.cpu() > 0)[0]
+
+                prod_rep_ = torch.zeros_like(prod_rep)
+
+                prod_rep_[bg_idx, :] = prod_do_rep[bg_idx, :]
+                prod_rep_[fg_idx, :] = prod_do_rep[fg_idx, :]
+
             else:
                 rel_labels = None
+                prod_rep_ = prod_rep
 
             union_features = self.rel_sg_msg(
-                union_features, prod_rep, prod_emb, geo_embed, rel_labels)
+                union_features, prod_rep_, prod_emb, geo_embed, rel_labels)
 
             # information bottlenecks
             iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 1e-2
