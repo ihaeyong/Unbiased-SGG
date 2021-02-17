@@ -28,7 +28,7 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/do_obj_a0.02_sig0.03_obj2.3_rel0.9_scale2_sum_v1-sgcls
+           OUTPUT_DIR ./checkpoints/do_subjobj_mean_a0.02_sig0.03_obj2.3_rel0.9_scale2_sum_v1-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
@@ -52,7 +52,7 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/do_subj_a0.02_sig0.03_obj2.3_rel0.9_scale2_sum_v1-predcls
+           OUTPUT_DIR ./checkpoints/do_subjobj_mean_a0.02_sig0.03_obj2.3_rel0.9_scale2_sum_v1-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \

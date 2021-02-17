@@ -5,6 +5,7 @@ import torch
 from maskrcnn_benchmark.modeling import registry
 from torch import nn
 from torch.nn import functional as F
+from torch.autograd import Variable
 
 from maskrcnn_benchmark.layers import smooth_l1_loss, kl_div_loss, entropy_loss, Label_Smoothing_Regression
 from maskrcnn_benchmark.modeling.utils import cat
@@ -23,6 +24,8 @@ from .model_sgraph_with_vratt import UnionRegionAttention
 from .model_sgraph_with_cl import SupConLoss, NpairLoss
 
 from maskrcnn_benchmark.modeling.roi_heads.box_head.roi_box_feature_extractors import make_roi_box_feature_extractor
+
+from maskrcnn_benchmark.modeling.utils import cat
 
 from .model_sgraph_with_geom import Geometric
 
@@ -134,6 +137,16 @@ class SGraphPredictor(nn.Module):
             self.post_cat = nn.Linear(256 * 2, self.pooling_dim)
             layer_init(self.post_cat, xavier=True)
 
+        # mean object representation
+        self.register_buffer('obj_mean', torch.zeros(151, 256))
+        self.average_ratio = 0.005
+
+    def moving_avg(self, holder, input):
+
+        with torch.no_grad():
+            holder = holder * (1 - self.average_ratio) + self.average_ratio * input
+        return holder
+
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
                 union_features, logger=None):
         """
@@ -157,6 +170,24 @@ class SGraphPredictor(nn.Module):
             obj_dists, obj_preds, obj_ctx_rep, obj_ctx_emb, link_loss = self.context_layer(
                 roi_features, proposals, self.freq_bias, rel_pair_idxs, rel_labels, logger)
 
+
+        # mean object representation
+        device = obj_ctx_rep.get_device()
+        if self.training:
+            obj_labels = cat([proposal.get_field("labels") for proposal in proposals], dim=0)
+            obj_size = obj_ctx_rep.size(0)
+            classes = Variable(torch.arange(151)).long().cuda(device)
+            obj_mask = obj_labels.unsqueeze(1).expand(obj_size, 151)
+            obj_mask = obj_mask.eq(classes.expand(obj_size, 151)).float()
+
+            obj_mask = obj_mask * obj_mask.sum(0)[None,:].expand(obj_size, 151)
+            obj_mask = 1.0 / obj_mask.max(1)[0]
+
+            self.obj_mean[obj_labels] = self.moving_avg(
+                self.obj_mean[obj_labels], obj_ctx_rep * obj_mask[:,None])
+        else:
+            obj_labels = obj_preds
+
         obj_reps = obj_ctx_rep.split(num_objs, dim=0)
         obj_embs = obj_ctx_emb.split(num_objs, dim=0)
         obj_preds = obj_preds.split(num_objs, dim=0)
@@ -166,7 +197,7 @@ class SGraphPredictor(nn.Module):
         prod_embs = []
         pair_preds = []
 
-        d_type = 'obj'
+        d_type = 'subjobj_mean'
         for pair_idx, obj_rep, obj_emb, obj_pred in zip(rel_pair_idxs, obj_reps, obj_embs, obj_preds):
 
             prod_reps.append( torch.cat((obj_rep[pair_idx[:,0]],
@@ -188,6 +219,27 @@ class SGraphPredictor(nn.Module):
                     torch.cat((torch.rand_like(obj_rep[pair_idx[:,0]]),
                                torch.rand_like(obj_rep[pair_idx[:,1]])), dim=-1) )
 
+            elif d_type == 'subj_mean':
+                subj_mu = Variable(self.obj_mean[obj_labels[pair_idx[:,0]]]).cuda(device)
+                obj_do = torch.rand_like(obj_rep[pair_idx[:,0]])
+
+                prod_do_reps.append(
+                    torch.cat((subj_mu, obj_do), dim=-1) )
+
+            elif d_type == 'obj_mean':
+                subj_do = torch.rand_like(obj_rep[pair_idx[:,0]])
+                obj_mu = Variable(self.obj_mean[obj_labels[pair_idx[:,1]]]).cuda(device)
+
+                prod_do_reps.append(
+                    torch.cat((subj_do, obj_mu), dim=-1) )
+
+            elif d_type == 'subjobj_mean':
+                subj_mu = Variable(self.obj_mean[obj_labels[pair_idx[:,0]]]).cuda(device)
+                obj_mu = Variable(self.obj_mean[obj_labels[pair_idx[:,1]]]).cuda(device)
+
+                prod_do_reps.append(
+                    torch.cat((subj_mu, obj_mu), dim=-1) )
+
             prod_embs.append( torch.cat((obj_emb[pair_idx[:,0]],
                                          obj_emb[pair_idx[:,1]]), dim=-1) )
             pair_preds.append( torch.stack((obj_pred[pair_idx[:,0]],
@@ -195,7 +247,7 @@ class SGraphPredictor(nn.Module):
 
         # prod_rep [:,512], prod_emb [:,400], pair_rep[:,2]
         prod_rep = cat(prod_reps, dim=0)
-        prod_do_rep = cat(prod_do_reps, dim=0)
+        prod_do_rep = cat(prod_do_reps, dim=0).half()
         prod_emb = cat(prod_embs, dim=0)
         pair_pred = cat(pair_preds, dim=0)
 
