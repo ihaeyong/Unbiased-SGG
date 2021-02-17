@@ -63,11 +63,11 @@ class SGraphPredictor(nn.Module):
             self.context_layer = SpectralContext(config, obj_classes, rel_classes, in_channels)
 
         self.geometric = False
-        self.embedding = False
+        self.embedding = True
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
-                                                   rib_scale=2,
+                                                   rib_scale=4,
                                                    embedding=self.embedding,
                                                    geometric=self.geometric,
                                                    cfg=config)
