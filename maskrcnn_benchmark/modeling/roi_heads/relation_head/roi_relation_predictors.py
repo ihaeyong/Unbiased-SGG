@@ -62,8 +62,8 @@ class SGraphPredictor(nn.Module):
         else:
             self.context_layer = SpectralContext(config, obj_classes, rel_classes, in_channels)
 
-        self.geometric = False
-        self.embedding = True
+        self.geometric = True
+        self.embedding = False
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
@@ -377,6 +377,11 @@ class SGraphPredictor(nn.Module):
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
             freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
             union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
+
+        elif self.fusion_type == 'sum_v0' or self.fusion_type == 'gate_v0':
+            # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
+            freq_bias = torch.sigmoid(freq_dists + geo_dists)
+            union_dists = vis_dists + ctx_dists + torch.sigmoid(freq_dists) + geo_dists
 
         elif self.fusion_type == 'sum_v1' or self.fusion_type == 'gate_v1':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
