@@ -64,7 +64,8 @@ class SGraphPredictor(nn.Module):
 
         self.geometric = config.MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC
         self.embedding = config.MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING
-        self.obj_context = self.geometric = config.MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT
+        self.obj_context = config.MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT
+
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
@@ -252,6 +253,7 @@ class SGraphPredictor(nn.Module):
             geo_embed = self.geo_embed(proposals, rel_pair_idxs)
 
         # relational message passing
+        iba_loss = None
         if self.rel_ctx_layer > 0:
             if self.training :
                 rel_labels = torch.cat(rel_labels)
