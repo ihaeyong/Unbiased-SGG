@@ -64,7 +64,7 @@ class SGraphPredictor(nn.Module):
 
         self.geometric = config.MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC
         self.embedding = config.MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING
-        self.obj_context = self.geometric = config.MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT
+        self.obj_context = config.MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
@@ -301,7 +301,7 @@ class SGraphPredictor(nn.Module):
 
                 M = logit.size(0)
                 N = subj.size(0)
-                
+
                 subj_mask = torch.matmul(logit, subj.transpose(0,1))
                 obj_mask = torch.matmul(logit, obj.transpose(0,1))
 
