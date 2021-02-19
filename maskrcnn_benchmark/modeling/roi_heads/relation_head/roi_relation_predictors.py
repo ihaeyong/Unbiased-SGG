@@ -65,7 +65,7 @@ class SGraphPredictor(nn.Module):
         self.geometric = config.MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC
         self.embedding = config.MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING
         self.obj_context = config.MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT
-        
+
         # init contextual relation
         if self.rel_ctx_layer > 0:
             self.rel_sg_msg = UnionRegionAttention(obj_dim=256,
@@ -297,7 +297,7 @@ class SGraphPredictor(nn.Module):
             subj_att_dists = subj_att_dists.split(num_rels, dim=0)
             obj_att_dists = obj_att_dists.split(num_rels, dim=0)
 
-            alpha = 0.02
+            alpha = 0.1
             u_obj_dists = []
             for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
 
