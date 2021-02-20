@@ -134,8 +134,10 @@ class SGraphPredictor(nn.Module):
             layer_init(self.post_cat, xavier=True)
 
         # mean object representation
-        self.register_buffer('obj_mean', torch.zeros(151, 256))
-        self.average_ratio = 0.005
+        self.d_type = True
+        if self.d_type:
+            self.register_buffer('obj_mean', torch.zeros(151, 256))
+            self.average_ratio = 0.005
 
     def moving_avg(self, holder, input):
 
@@ -189,47 +191,17 @@ class SGraphPredictor(nn.Module):
         obj_preds = obj_preds.split(num_objs, dim=0)
 
         prod_reps = []
-        prod_do_reps = []
         prod_embs = []
         pair_preds = []
 
-        d_type = 'subjobj_mean'
+        prod_do_reps = []
         for pair_idx, obj_rep, obj_emb, obj_pred in zip(rel_pair_idxs, obj_reps, obj_embs, obj_preds):
 
             prod_reps.append( torch.cat((obj_rep[pair_idx[:,0]],
                                          obj_rep[pair_idx[:,1]]), dim=-1) )
 
 
-            if d_type == 'subj':
-                prod_do_reps.append(
-                    torch.cat((torch.rand_like(obj_rep[pair_idx[:,0]]),
-                               obj_rep[pair_idx[:,1]]), dim=-1) )
-
-            elif d_type == 'obj':
-                prod_do_reps.append(
-                    torch.cat((obj_rep[pair_idx[:,0]],
-                               torch.rand_like(obj_rep[pair_idx[:,1]])), dim=-1) )
-
-            elif d_type == 'subjobj':
-                prod_do_reps.append(
-                    torch.cat((torch.rand_like(obj_rep[pair_idx[:,0]]),
-                               torch.rand_like(obj_rep[pair_idx[:,1]])), dim=-1) )
-
-            elif d_type == 'subj_mean':
-                subj_mu = Variable(self.obj_mean[obj_labels[pair_idx[:,0]]]).cuda(device)
-                obj_do = torch.rand_like(obj_rep[pair_idx[:,0]])
-
-                prod_do_reps.append(
-                    torch.cat((subj_mu, obj_do), dim=-1) )
-
-            elif d_type == 'obj_mean':
-                subj_do = torch.rand_like(obj_rep[pair_idx[:,0]])
-                obj_mu = Variable(self.obj_mean[obj_labels[pair_idx[:,1]]]).cuda(device)
-
-                prod_do_reps.append(
-                    torch.cat((subj_do, obj_mu), dim=-1) )
-
-            elif d_type == 'subjobj_mean':
+            if self.d_type:
                 subj_mu = Variable(self.obj_mean[obj_labels[pair_idx[:,0]]]).cuda(device)
                 obj_mu = Variable(self.obj_mean[obj_labels[pair_idx[:,1]]]).cuda(device)
 
@@ -243,9 +215,11 @@ class SGraphPredictor(nn.Module):
 
         # prod_rep [:,512], prod_emb [:,400], pair_rep[:,2]
         prod_rep = cat(prod_reps, dim=0)
-        prod_do_rep = cat(prod_do_reps, dim=0).half()
         prod_emb = cat(prod_embs, dim=0)
         pair_pred = cat(pair_preds, dim=0)
+
+        if self.d_type :
+            prod_do_rep = cat(prod_do_reps, dim=0).half()
 
         # geometric embedding
         geo_embed = None
@@ -258,13 +232,14 @@ class SGraphPredictor(nn.Module):
             if self.training :
                 rel_labels = torch.cat(rel_labels)
 
-                bg_idx = np.where(rel_labels.cpu() == 0)[0]
-                fg_idx = np.where(rel_labels.cpu() > 0)[0]
-
-                prod_rep_ = torch.zeros_like(prod_rep)
-
-                prod_rep_[bg_idx, :] = prod_do_rep[bg_idx, :]
-                prod_rep_[fg_idx, :] = prod_do_rep[fg_idx, :]
+                if self.d_type :
+                    bg_idx = np.where(rel_labels.cpu() == 0)[0]
+                    fg_idx = np.where(rel_labels.cpu() > 0)[0]
+                    prod_rep_ = torch.zeros_like(prod_rep)
+                    prod_rep_[bg_idx, :] = prod_do_rep[bg_idx, :]
+                    prod_rep_[fg_idx, :] = prod_do_rep[fg_idx, :]
+                else:
+                    prod_rep_ = prod_rep
 
             else:
                 rel_labels = None
@@ -297,7 +272,7 @@ class SGraphPredictor(nn.Module):
             subj_att_dists = subj_att_dists.split(num_rels, dim=0)
             obj_att_dists = obj_att_dists.split(num_rels, dim=0)
 
-            alpha = 0.1
+            alpha = 0.05
             u_obj_dists = []
             for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
 
