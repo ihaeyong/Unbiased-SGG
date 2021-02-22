@@ -134,7 +134,7 @@ class SGraphPredictor(nn.Module):
             layer_init(self.post_cat, xavier=True)
 
         # mean object representation
-        self.d_type = True
+        self.d_type = False
         if self.d_type:
             self.register_buffer('obj_mean', torch.zeros(151, 256))
             self.average_ratio = 0.005
@@ -171,7 +171,7 @@ class SGraphPredictor(nn.Module):
 
         # mean object representation
         device = obj_ctx_rep.get_device()
-        if self.training:
+        if self.training and self.d_type:
             obj_labels = cat([proposal.get_field("labels") for proposal in proposals], dim=0)
             obj_size = obj_ctx_rep.size(0)
             classes = Variable(torch.arange(151)).long().cuda(device)
@@ -249,8 +249,8 @@ class SGraphPredictor(nn.Module):
                 union_features, prod_rep_, prod_emb, geo_embed, rel_labels)
 
             # information bottlenecks
-            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 1e-2
-
+            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 2e-2
+            
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
 
@@ -272,7 +272,7 @@ class SGraphPredictor(nn.Module):
             subj_att_dists = subj_att_dists.split(num_rels, dim=0)
             obj_att_dists = obj_att_dists.split(num_rels, dim=0)
 
-            alpha = 0.05
+            alpha = 0.03
             u_obj_dists = []
             for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
 
