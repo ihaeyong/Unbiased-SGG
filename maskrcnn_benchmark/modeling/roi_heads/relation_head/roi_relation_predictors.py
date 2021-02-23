@@ -119,6 +119,7 @@ class SGraphPredictor(nn.Module):
         else:
             self.union_single_not_match = False
 
+        self.freq_bias = None
         if self.use_bias:
             # convey statistics into FrequencyBias to avoid loading again
             self.freq_bias = FrequencyBias(config, statistics)
@@ -250,7 +251,7 @@ class SGraphPredictor(nn.Module):
 
             # information bottlenecks
             iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 2e-2
-            
+
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
 
@@ -301,6 +302,7 @@ class SGraphPredictor(nn.Module):
             embed_bias = self.non_vis_dists(prod_emb)
 
         # use frequence bias
+        freq_bias = None
         if self.use_bias:
             freq_bias = self.freq_bias.index_with_labels(pair_pred)
 
@@ -345,8 +347,8 @@ class SGraphPredictor(nn.Module):
 
         if self.fusion_type == 'sum':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
-            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = vis_dists + ctx_dists + freq_dists + emb_dists + geo_dists
+            freq_bias = torch.sigmoid(vis_dists + ctx_dists)
+            union_dists = vis_dists + ctx_dists
 
         elif self.fusion_type == 'sum_v0' or self.fusion_type == 'gate_v0':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2

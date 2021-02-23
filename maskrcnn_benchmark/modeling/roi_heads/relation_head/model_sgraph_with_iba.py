@@ -256,12 +256,12 @@ class PerSampleBottleneck(AttributionBottleneck):
             r_norm = r_p.sample()
 
         # Get sampling parameters
-        if self.training and True:
+        if self.training and False:
             eps = self.gaussian(lamb, rel_labels, 1e-8)
         else:
             eps = 0.0
 
-        if True:
+        if False:
             noise_var = (1-(lamb + eps)/2.0)**2
         else:
             noise_var = (1-lamb)**2
