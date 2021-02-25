@@ -84,7 +84,7 @@ class UnionRegionAttention(nn.Module):
 
             subjobj_mask = [
                 nn.Conv2d(8*self.ch, 8, 1, stride=1, bias=False),
-                nn.BatchNorm2d(3),
+                nn.BatchNorm2d(8),
                 nn.ReLU(inplace=True),
                 nn.Conv2d(8, 3, 1, stride=1, bias=False),
                 nn.BatchNorm2d(3),
