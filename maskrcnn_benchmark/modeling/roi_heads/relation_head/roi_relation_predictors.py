@@ -250,7 +250,7 @@ class SGraphPredictor(nn.Module):
                 union_features, prod_rep_, prod_emb, geo_embed, rel_labels)
 
             # information bottlenecks
-            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 2e-2
+            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 1e-2
 
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
@@ -289,7 +289,7 @@ class SGraphPredictor(nn.Module):
                 mean_subj = torch.matmul(subj_mask, subj)
                 mean_obj = torch.matmul(obj_mask, obj)
 
-                logit = logit + alpha * (mean_subj + mean_obj) / 2
+                logit = logit + alpha * (mean_subj + mean_obj)
                 u_obj_dists.append(logit)
 
             obj_dists = torch.cat(u_obj_dists, dim=0)
