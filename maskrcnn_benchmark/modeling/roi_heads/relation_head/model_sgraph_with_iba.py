@@ -158,12 +158,13 @@ class PerSampleBottleneck(AttributionBottleneck):
         self.std = nn.Sequential(
             nn.Conv2d(channel,channel,1,1),)
 
+        e_type = 'prop'
         # predicate proportion
-        if False:
+        if e_type == 'prior':
             self.pred_prop = np.array(pred_prop)
             self.pred_prop = np.concatenate(([1], self.pred_prop), 0)
             self.pred_prop[0] = 1.0 - self.pred_prop[1:-1].sum()
-        else:
+        elif e_type == 'inv_prop':
             fg_rel = np.load('./datasets/vg/fg_matrix.npy')
             bg_rel = np.load('./datasets/vg/bg_matrix.npy')
             fg_rel[:,:,0] = bg_rel
@@ -174,7 +175,22 @@ class PerSampleBottleneck(AttributionBottleneck):
 
             # pred margin
             pred_margin = 1.0 / np.sqrt(np.sqrt(pred_freq))
-            max_m = 1e-7
+            max_m = 1e-9
+            self.pred_margin = pred_margin * (max_m / pred_margin.max())
+
+        elif e_type == 'prop':
+
+            fg_rel = np.load('./datasets/vg/fg_matrix.npy')
+            bg_rel = np.load('./datasets/vg/bg_matrix.npy')
+            fg_rel[:,:,0] = bg_rel
+            pred_freq = fg_rel.sum(0).sum(0)
+
+            # pred prop
+            self.pred_prop = pred_freq / pred_freq.max()
+
+            # pred margin
+            pred_margin = np.sqrt(np.sqrt(pred_freq))
+            max_m = 0.04
             self.pred_margin = pred_margin * (max_m / pred_margin.max())
 
         self.buffer_capacity = None
@@ -194,7 +210,7 @@ class PerSampleBottleneck(AttributionBottleneck):
         bg_idx = np.where(rel_labels.cpu() == 0)[0]
         fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
-        randn = torch.randn_like(ins)
+        rand = torch.rand_like(ins)
         eps = torch.zeros_like(ins)
         n_type = "pred_avg_margin_sigmoid"
 
@@ -232,9 +248,9 @@ class PerSampleBottleneck(AttributionBottleneck):
 
         elif n_type is "pred_avg_margin_sigmoid":
             stddev = self.pred_margin[rel_labels.cpu()][:,None,None,None]
-            stddev = torch.FloatTensor(stddev).cuda(randn.get_device())
+            stddev = torch.FloatTensor(stddev).cuda(rand.get_device())
 
-            eps = torch.sigmoid(ins + randn * stddev)
+            eps = torch.sigmoid(ins + rand * stddev)
 
         return eps
 
