@@ -23,7 +23,7 @@ if [ $2 == "sgcls" ]; then
            MODEL.ROI_RELATION_HEAD.RIB_SCALE 2 \
            MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC True \
            MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING True \
-           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT False \
+           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT True \
            SOLVER.IMS_PER_BATCH 12 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
@@ -32,7 +32,7 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/iba0.02_s2_sum_v3-sgcls
+           OUTPUT_DIR ./checkpoints/sum0.02_iba0.02_s2_sum_v3-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
@@ -49,10 +49,10 @@ elif [ $2 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 1 \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum_v3 \
-           MODEL.ROI_RELATION_HEAD.RIB_SCALE 2 \
+           MODEL.ROI_RELATION_HEAD.RIB_SCALE 1 \
            MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC True \
            MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING True \
-           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT False \
+           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT True \
            SOLVER.IMS_PER_BATCH 12 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
@@ -60,7 +60,7 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/iba0.02_s2_sum_v3-predcls
+           OUTPUT_DIR ./checkpoints/sum0.03_iba0.02_s1_sum_v3-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \
@@ -80,7 +80,7 @@ elif [ $2 == "sgdet" ]; then
            MODEL.ROI_RELATION_HEAD.RIB_SCALE 2 \
            MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC True \
            MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING True \
-           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT False \
+           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT True \
            SOLVER.IMS_PER_BATCH 8 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
@@ -88,6 +88,5 @@ elif [ $2 == "sgdet" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/iba0.02_s2_sum_v3-sgdet
-    
+           OUTPUT_DIR ./checkpoints/sum0.03_iba0.02_s1_sum_v3-sgdet
 fi
