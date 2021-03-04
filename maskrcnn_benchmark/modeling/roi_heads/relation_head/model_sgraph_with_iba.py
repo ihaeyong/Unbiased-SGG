@@ -158,7 +158,7 @@ class PerSampleBottleneck(AttributionBottleneck):
         self.std = nn.Sequential(
             nn.Conv2d(channel,channel,1,1),)
 
-        e_type = 'prop'
+        e_type = 'inv_prop'
         # predicate proportion
         if e_type == 'prior':
             self.pred_prop = np.array(pred_prop)
@@ -175,7 +175,7 @@ class PerSampleBottleneck(AttributionBottleneck):
 
             # pred margin
             pred_margin = 1.0 / np.sqrt(np.sqrt(pred_freq))
-            max_m = 1e-9
+            max_m = 0.03
             self.pred_margin = pred_margin * (max_m / pred_margin.max())
 
         elif e_type == 'prop':
@@ -189,8 +189,8 @@ class PerSampleBottleneck(AttributionBottleneck):
             self.pred_prop = pred_freq / pred_freq.max()
 
             # pred margin
-            pred_margin = np.sqrt(np.sqrt(pred_freq))
-            max_m = 0.04
+            pred_margin = np.power(pred_freq, 1/4)
+            max_m = 0.03
             self.pred_margin = pred_margin * (max_m / pred_margin.max())
 
         self.buffer_capacity = None
@@ -272,12 +272,12 @@ class PerSampleBottleneck(AttributionBottleneck):
             r_norm = r_p.sample()
 
         # Get sampling parameters
-        if self.training and False :
+        if self.training and True :
             eps = self.gaussian(lamb, rel_labels, 1e-8)
         else:
             eps = 0.0
 
-        if False:
+        if True:
             noise_var = (1-(lamb + eps)/2.0)**2
         else:
             noise_var = (1-lamb)**2
