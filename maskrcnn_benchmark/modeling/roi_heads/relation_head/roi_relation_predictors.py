@@ -306,7 +306,7 @@ class SGraphPredictor(nn.Module):
             subj_att_dists = subj_att_dists.split(num_rels, dim=0)
             obj_att_dists = obj_att_dists.split(num_rels, dim=0)
 
-            alpha = 0.02
+            alpha = 0.001
             u_obj_dists = []
             for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
 
