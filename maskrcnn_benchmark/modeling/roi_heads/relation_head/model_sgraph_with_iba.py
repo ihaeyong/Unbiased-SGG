@@ -174,7 +174,7 @@ class PerSampleBottleneck(AttributionBottleneck):
             self.pred_prop = pred_freq / pred_freq.max()
 
             # pred margin
-            pred_margin = 1.0 / np.sqrt(np.sqrt(pred_freq))
+            pred_margin = 1.0 / np.power(pred_freq, 1/2)
             max_m = 0.03
             self.pred_margin = pred_margin * (max_m / pred_margin.max())
 
@@ -189,8 +189,9 @@ class PerSampleBottleneck(AttributionBottleneck):
             self.pred_prop = pred_freq / pred_freq.max()
 
             # pred margin
-            pred_margin = np.power(pred_freq, 1/4)
-            max_m = 0.03
+            pred_margin = np.power(pred_freq, 1/2)
+            max_m = 0.01
+
             self.pred_margin = pred_margin * (max_m / pred_margin.max())
 
         self.buffer_capacity = None

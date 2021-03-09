@@ -33,6 +33,7 @@ from .model_sgraph_with_geom import Geometric
 class SGraphPredictor(nn.Module):
     def __init__(self, config, in_channels):
         super(SGraphPredictor, self).__init__()
+        self.cfg = config
         self.attribute_on = config.MODEL.ATTRIBUTE_ON
         self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
         self.num_att_cls = config.MODEL.ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES
@@ -100,13 +101,13 @@ class SGraphPredictor(nn.Module):
             layer_init(self.non_vis_dists, xavier=True)
 
         if self.obj_context:
-            self.vis_subj_dists = nn.Linear(self.pooling_dim + 256,
+            self.vis_att_dists = nn.Linear(self.pooling_dim + 256,
                                             self.num_obj_cls, bias=True)
-            self.vis_obj_dists = nn.Linear(self.pooling_dim + 256,
-                                           self.num_obj_cls, bias=True)
+            #self.vis_obj_dists = nn.Linear(self.pooling_dim + 256,
+            #                               self.num_obj_cls, bias=True)
 
-            layer_init(self.vis_subj_dists, xavier=True)
-            layer_init(self.vis_obj_dists, xavier=True)
+            layer_init(self.vis_att_dists, xavier=True)
+            #layer_init(self.vis_obj_dists, xavier=True)
 
         # initialize layer parameters
         layer_init(self.vis_dists, xavier=True)
@@ -140,11 +141,36 @@ class SGraphPredictor(nn.Module):
             self.register_buffer('obj_mean', torch.zeros(151, 256))
             self.average_ratio = 0.005
 
+        # save feature maps
+        self.val_b = 0
+
     def moving_avg(self, holder, input):
 
         with torch.no_grad():
             holder = holder * (1 - self.average_ratio) + self.average_ratio * input
         return holder
+
+    def save_rib_fmap(self, fmap=None, rib_fmap=None, masks=None, rel_inds=None):
+        save_dir = self.cfg.OUTPUT_DIR + "/rib/"
+
+        try:
+            os.stat(save_dir)
+        except:
+            os.mkdir(save_dir)
+
+        if fmap is not None:
+            np.save(save_dir + '{}_fmap.npy'.format(self.val_b), fmap[0].data.cpu().numpy())
+
+        if rib_fmap is not None:
+            np.save(save_dir + '{}_rib_fmap.npy'.format(self.val_b), rib_fmap.data.cpu().numpy())
+
+        if masks is not None:
+            np.save(save_dir + '{}_mask.npy'.format(self.val_b), masks.data.cpu().numpy())
+
+        if rel_inds is not None:
+            np.save(save_dir + '{}_inds.npy'.format(self.val_b), torch.cat(rel_inds).cpu().numpy())
+
+        self.val_b += 1
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features,
                 union_features, logger=None):
@@ -168,7 +194,6 @@ class SGraphPredictor(nn.Module):
         else:
             obj_dists, obj_preds, obj_ctx_rep, obj_ctx_emb, link_loss = self.context_layer(
                 roi_features, proposals, self.freq_bias, rel_pair_idxs, rel_labels, logger)
-
 
         # mean object representation
         device = obj_ctx_rep.get_device()
@@ -246,11 +271,19 @@ class SGraphPredictor(nn.Module):
                 rel_labels = None
                 prod_rep_ = prod_rep
 
+
             union_features = self.rel_sg_msg(
                 union_features, prod_rep_, prod_emb, geo_embed, rel_labels)
 
             # information bottlenecks
             iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 2e-2
+
+            if not self.training and self.cfg.RIB_FMAP_SAVE:
+                vratt_masks = self.rel_sg_msg.get_vratt_masks()
+                vratt_fmaps = self.rel_sg_msg.get_vratt_fmaps()
+                self.save_rib_fmap(rib_fmap=vratt_fmaps,
+                                   masks=vratt_masks,
+                                   rel_inds=rel_pair_idxs)
 
         # rois pooling
         union_features = self.feature_extractor.forward_without_pool(union_features)
@@ -267,8 +300,8 @@ class SGraphPredictor(nn.Module):
             u_subj, u_obj = prod_rep.clone().detach().split(256, dim=1)
 
         if self.obj_context :
-            subj_att_dists = self.vis_subj_dists(torch.cat((u_features, u_subj), dim=-1))
-            obj_att_dists = self.vis_obj_dists(torch.cat((u_features, u_obj), dim=-1))
+            subj_att_dists = self.vis_att_dists(torch.cat((u_features, u_subj), dim=-1))
+            obj_att_dists = self.vis_att_dists(torch.cat((u_features, u_obj), dim=-1))
 
             subj_att_dists = subj_att_dists.split(num_rels, dim=0)
             obj_att_dists = obj_att_dists.split(num_rels, dim=0)
@@ -289,7 +322,7 @@ class SGraphPredictor(nn.Module):
                 mean_subj = torch.matmul(subj_mask, subj)
                 mean_obj = torch.matmul(obj_mask, obj)
 
-                logit = logit + alpha * (mean_subj + mean_obj)
+                logit = logit + alpha * (mean_subj + mean_obj)/2
                 u_obj_dists.append(logit)
 
             obj_dists = torch.cat(u_obj_dists, dim=0)

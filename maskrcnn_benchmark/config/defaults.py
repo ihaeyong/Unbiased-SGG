@@ -599,6 +599,7 @@ _C.TEST.CUSTUM_PATH = '.'
 _C.OUTPUT_DIR = "."
 _C.DETECTED_SGG_DIR = "."
 _C.GLOVE_DIR = "."
+_C.RIB_FMAP_SAVE = False
 
 _C.PATHS_CATALOG = os.path.join(os.path.dirname(__file__), "paths_catalog.py")
 _C.PATHS_DATA = os.path.join(os.path.dirname(__file__), "../data/datasets")

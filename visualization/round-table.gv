@@ -1,0 +1,15 @@
+digraph {
+	graph [dpi=300 rankdir=TB rotate=0 size="4,2"]
+	node [fontsize=20 height=0.1]
+	edge [fontsize=20]
+	house [color=green shape=rectangle]
+	train [color=green shape=rectangle]
+	tree [color=green shape=rectangle]
+	window [color=green shape=rectangle]
+	windshield [color=green shape=rectangle]
+	windshield -> train [label=on color=green]
+	window -> train [label=on color=green]
+	train -> window [label=has color=green]
+	house -> train [label=near color=green]
+	tree -> house [label=near color=green]
+}

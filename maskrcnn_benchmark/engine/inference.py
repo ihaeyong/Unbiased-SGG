@@ -15,13 +15,14 @@ from ..utils.comm import synchronize
 from ..utils.timer import Timer, get_time_str
 from .bbox_aug import im_detect_bbox_aug
 
+import numpy as np
 
 def compute_on_dataset(model, data_loader, device, synchronize_gather=True, timer=None):
     model.eval()
     results_dict = {}
     cpu_device = torch.device("cpu")
     torch.cuda.empty_cache()
-    for _, batch in enumerate(tqdm(data_loader)):
+    for val_b, batch in enumerate(tqdm(data_loader)):
         with torch.no_grad():
             images, targets, image_ids = batch
             targets = [target.to(device) for target in targets]

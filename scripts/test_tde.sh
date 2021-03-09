@@ -32,7 +32,7 @@ if [ $2 == "sgcls" ]; then
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
-           --master_port 10023 \
+           --master_port $5 \
            --nproc_per_node=$1 \
            tools/relation_test_net.py \
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
@@ -45,11 +45,16 @@ elif [ $2 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER 1 \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum_v3 \
+           MODEL.ROI_RELATION_HEAD.RIB_SCALE 2 \
+           MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC True \
+           MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING True \
+           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT False \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
            GLOVE_DIR ./datasets/glove \
-           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/obj_spectrum_gcn_sum_v3_0.7-predcls \
-           OUTPUT_DIR ./checkpoints/rel_cl_batch_skew0.9_mask_1.0_false_sum_v3-predcls
+           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/iba0.02_s2_inv_prop0.03_power0.5_sum_v3-predcls \
+           OUTPUT_DIR ./checkpoints/iba0.02_s2_inv_prop0.03_power0.5_sum_v3-predcls\
+           RIB_FMAP_SAVE True
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \

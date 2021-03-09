@@ -2,6 +2,8 @@
 """
 Implements the Generalized R-CNN framework
 """
+import os
+import numpy as np
 
 import torch
 from torch import nn
@@ -29,6 +31,30 @@ class GeneralizedRCNN(nn.Module):
         self.backbone = build_backbone(cfg)
         self.rpn = build_rpn(cfg, self.backbone.out_channels)
         self.roi_heads = build_roi_heads(cfg, self.backbone.out_channels)
+
+        self.val_b = 0
+
+    def save_rib_fmap(self, fmap=None, rib_fmap=None, masks=None, rel_inds=None):
+        save_dir = self.cfg.OUTPUT_DIR + "/rib/"
+
+        try:
+            os.stat(save_dir)
+        except:
+            os.mkdir(save_dir)
+
+        if fmap is not None:
+            np.save(save_dir + '{}_fmap.npy'.format(self.val_b), fmap[0].data.cpu().numpy())
+
+        if rib_fmap is not None:
+            np.save(save_dir + '{}_rib_fmap.npy'.format(self.val_b), rib_fmap.data.cpu().numpy())
+
+        if masks is not None:
+            np.save(save_dir + '{}_mask.npy'.format(self.val_b), masks.data.cpu().numpy())
+
+        if rel_inds is not None:
+            np.save(save_dir + '{}_inds.npy'.format(self.val_b), torch.cat(rel_inds).cpu().numpy())
+
+        self.val_b += 1
 
     def forward(self, images, targets=None, logger=None):
         """
@@ -63,5 +89,8 @@ class GeneralizedRCNN(nn.Module):
                 # During the relationship training stage, the rpn_head should be fixed, and no loss. 
                 losses.update(proposal_losses)
             return losses
+
+        if not self.training and self.cfg.RIB_FMAP_SAVE :
+            self.save_rib_fmap(fmap=features)
 
         return result

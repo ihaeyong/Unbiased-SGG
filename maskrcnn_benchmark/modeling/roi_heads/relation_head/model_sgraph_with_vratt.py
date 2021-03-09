@@ -30,6 +30,8 @@ class UnionRegionAttention(nn.Module):
         self.geometric = geometric
         self.ch = 1
 
+        self.cfg = cfg
+
         subjobj_upconv = [
             nn.ConvTranspose2d(obj_dim * 2, 32, 3, bias=False),
             nn.BatchNorm2d(32),
@@ -264,6 +266,12 @@ class UnionRegionAttention(nn.Module):
         #x = F.max_pool2d(x, 4)
         return x
 
+    def get_vratt_masks(self):
+        return self.vratt_masks
+
+    def get_vratt_fmaps(self):
+        return self.vratt_fmaps
+
     def forward(self, union_fmap, subjobj_fmap,
                 subjobj_embed=None,
                 geo_embed=None,
@@ -322,6 +330,11 @@ class UnionRegionAttention(nn.Module):
 
         if self.r_type:
             union_fmap = residual + union_fmap # b,128,N,N
+
+
+        if not self.training and self.cfg.RIB_FMAP_SAVE:
+            self.vratt_masks = mask
+            self.vratt_fmaps = union_fmap
 
         # -----union_downconv------------------
         union_fmap = self.union_downconv(union_fmap.contiguous())

@@ -9,7 +9,12 @@ dist/
 
 # ipython/jupyter notebooks
 #*.ipynb
-**/.ipynb_checkpoints/
+visualization/URA/
+visualization/results/
+visualization/gt_boxes/
+visualization/*.ipynb_checkpoints/
+
+
 
 # checkpoint
 checkpoint/
