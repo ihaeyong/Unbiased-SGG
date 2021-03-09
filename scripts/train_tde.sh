@@ -88,6 +88,6 @@ elif [ $2 == "sgdet" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/avg0.001_s2_p0.03_pw0.5_sum_v3-sgdet
+           OUTPUT_DIR ./checkpoints/avg0.003_s2_p0.03_pw0.5_sum_v3-sgdet
 
 fi

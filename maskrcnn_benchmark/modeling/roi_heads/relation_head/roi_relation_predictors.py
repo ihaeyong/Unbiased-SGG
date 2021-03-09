@@ -101,13 +101,13 @@ class SGraphPredictor(nn.Module):
             layer_init(self.non_vis_dists, xavier=True)
 
         if self.obj_context:
-            self.vis_att_dists = nn.Linear(self.pooling_dim + 256,
+            self.vis_subj_dists = nn.Linear(self.pooling_dim + 256,
                                             self.num_obj_cls, bias=True)
-            #self.vis_obj_dists = nn.Linear(self.pooling_dim + 256,
-            #                               self.num_obj_cls, bias=True)
+            self.vis_obj_dists = nn.Linear(self.pooling_dim + 256,
+                                           self.num_obj_cls, bias=True)
 
-            layer_init(self.vis_att_dists, xavier=True)
-            #layer_init(self.vis_obj_dists, xavier=True)
+            layer_init(self.vis_subj_dists, xavier=True)
+            layer_init(self.vis_obj_dists, xavier=True)
 
         # initialize layer parameters
         layer_init(self.vis_dists, xavier=True)
@@ -300,13 +300,13 @@ class SGraphPredictor(nn.Module):
             u_subj, u_obj = prod_rep.clone().detach().split(256, dim=1)
 
         if self.obj_context :
-            subj_att_dists = self.vis_att_dists(torch.cat((u_features, u_subj), dim=-1))
-            obj_att_dists = self.vis_att_dists(torch.cat((u_features, u_obj), dim=-1))
+            subj_att_dists = self.vis_subj_dists(torch.cat((u_features, u_subj), dim=-1))
+            obj_att_dists = self.vis_obj_dists(torch.cat((u_features, u_obj), dim=-1))
 
             subj_att_dists = subj_att_dists.split(num_rels, dim=0)
             obj_att_dists = obj_att_dists.split(num_rels, dim=0)
 
-            alpha = 0.001
+            alpha = 0.03
             u_obj_dists = []
             for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
 
@@ -322,7 +322,7 @@ class SGraphPredictor(nn.Module):
                 mean_subj = torch.matmul(subj_mask, subj)
                 mean_obj = torch.matmul(obj_mask, obj)
 
-                logit = logit + alpha * (mean_subj + mean_obj)/2
+                logit = logit + alpha * (mean_subj + mean_obj)
                 u_obj_dists.append(logit)
 
             obj_dists = torch.cat(u_obj_dists, dim=0)

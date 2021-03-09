@@ -12,6 +12,8 @@ dist/
 visualization/URA/
 visualization/results/
 visualization/gt_boxes/
+visualization/pred_boxes/
+
 visualization/*.ipynb_checkpoints/
 
 
