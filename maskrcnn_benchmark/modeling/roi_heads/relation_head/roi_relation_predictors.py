@@ -687,7 +687,9 @@ class MotifPredictor(nn.Module):
         rel_dists = self.rel_compress(prod_rep)
 
         if self.use_bias:
-            rel_dists = rel_dists + self.freq_bias.index_with_labels(pair_pred.long())
+            freq = self.freq_bias.index_with_labels(pair_pred.long())
+            rel_dists = rel_dists + freq
+            freq_bias = torch.sigmoid(freq)
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
@@ -700,7 +702,7 @@ class MotifPredictor(nn.Module):
             att_dists = att_dists.split(num_objs, dim=0)
             return (obj_dists, att_dists), rel_dists, add_losses
         else:
-            return obj_dists, rel_dists, add_losses
+            return obj_dists, rel_dists, add_losses, freq_bias
 
 
 @registry.ROI_RELATION_PREDICTOR.register("VCTreePredictor")
