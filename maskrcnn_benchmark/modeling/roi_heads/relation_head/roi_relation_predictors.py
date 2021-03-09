@@ -971,7 +971,11 @@ class CausalAnalysisPredictor(nn.Module):
         if self.spatial_for_vision:
             post_ctx_rep = post_ctx_rep * self.spt_emb(pair_bbox)
 
-        rel_dists, freq_bias = self.calculate_logits(union_features, post_ctx_rep, pair_pred, use_label_dist=False)
+        if self.training:
+            rel_dists, freq_bias = self.calculate_logits(union_features, post_ctx_rep, pair_pred, use_label_dist=False)
+        else:
+            rel_dists = self.calculate_logits(union_features, post_ctx_rep, pair_pred, use_label_dist=False)
+            freq_bias = None
         rel_dist_list = rel_dists.split(num_rels, dim=0)
 
         add_losses = {}
@@ -1062,7 +1066,10 @@ class CausalAnalysisPredictor(nn.Module):
 
         freq_bias = torch.sigmoid(frq_dists)
 
-        return union_dists, freq_bias
+        if self.training:
+            return union_dists, freq_bias
+        else:
+            return union_dists
 
     def fusion(self, x, y):
         return F.relu(x + y) - (x - y) ** 2
