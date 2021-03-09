@@ -403,41 +403,6 @@ class SGraphPredictor(nn.Module):
             freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
             union_dists = vis_dists + ctx_dists + torch.sigmoid(freq_dists) + emb_dists + geo_dists
 
-        elif self.fusion_type == 'sum_v4':
-            # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
-            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = vis_dists + torch.sigmoid(ctx_dists) + freq_dists + emb_dists + geo_dists
-
-        elif self.fusion_type == 'sum_v5':
-            # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
-            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = torch.sigmoid(vis_dists) + ctx_dists + freq_dists + emb_dists + geo_dists
-
-        elif self.fusion_type == 'sum_v6':
-            # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
-            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = vis_dists + ctx_dists + freq_dists + torch.sigmoid(emb_dists) + torch.sigmoid(geo_dists)
-
-        elif self.fusion_type == 'sum_v7':
-            # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
-            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = vis_dists + ctx_dists + torch.sigmoid(freq_dists) + torch.sigmoid(emb_dists) + torch.sigmoid(geo_dists)
-
-        elif self.fusion_type == 'sum_v8':
-            # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
-            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = vis_dists + ctx_dists + freq_bias
-
-        elif self.fusion_type == 'sum_v9':
-            # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
-            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = vis_dists + ctx_dists + torch.sigmoid(freq_dists) + torch.sigmoid(emb_dists) + geo_dists
-
-        elif self.fusion_type == 'sum_v10':
-            # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
-            freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
-            union_dists = vis_dists + ctx_dists + torch.sigmoid(freq_dists) + emb_dists + torch.sigmoid(geo_dists)
-
         else:
             print('invalid fusion type')
 
@@ -1006,7 +971,7 @@ class CausalAnalysisPredictor(nn.Module):
         if self.spatial_for_vision:
             post_ctx_rep = post_ctx_rep * self.spt_emb(pair_bbox)
 
-        rel_dists = self.calculate_logits(union_features, post_ctx_rep, pair_pred, use_label_dist=False)
+        rel_dists, freq_bias = self.calculate_logits(union_features, post_ctx_rep, pair_pred, use_label_dist=False)
         rel_dist_list = rel_dists.split(num_rels, dim=0)
 
         add_losses = {}
@@ -1060,7 +1025,7 @@ class CausalAnalysisPredictor(nn.Module):
                 pass
             rel_dist_list = rel_dists.split(num_rels, dim=0)
 
-        return obj_dist_list, rel_dist_list, add_losses
+        return obj_dist_list, rel_dist_list, add_losses, freq_bias
 
     def moving_average(self, holder, input):
         assert len(input.shape) == 2
@@ -1095,7 +1060,9 @@ class CausalAnalysisPredictor(nn.Module):
         else:
             print('invalid fusion type')
 
-        return union_dists
+        freq_bias = torch.sigmoid(frq_dists)
+
+        return union_dists, freq_bias
 
     def fusion(self, x, y):
         return F.relu(x + y) - (x - y) ** 2

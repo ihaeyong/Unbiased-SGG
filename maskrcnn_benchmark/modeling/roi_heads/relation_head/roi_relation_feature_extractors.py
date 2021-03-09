@@ -45,9 +45,7 @@ class RelationFeatureExtractor(nn.Module):
 
 
         # only union visual features
-        self.only_vis_features = True
-
-        if self.only_vis_features is False:
+        if self.cfg.MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB:
             # union rectangle size
             self.rect_size = resolution * 4 -1
             self.rect_conv = nn.Sequential(*[
@@ -71,7 +69,7 @@ class RelationFeatureExtractor(nn.Module):
             union_proposal = boxlist_union(head_proposal, tail_proposal)
             union_proposals.append(union_proposal)
 
-            if self.only_vis_features is False:
+            if self.cfg.MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB:
                 # use range to construct rectangle, sized (rect_size, rect_size)
                 num_rel = len(rel_pair_idx)
                 dummy_x_range = torch.arange(self.rect_size, device=device).view(1, 1, -1).expand(num_rel, self.rect_size, self.rect_size)
@@ -91,9 +89,10 @@ class RelationFeatureExtractor(nn.Module):
                 rect_input = torch.stack((head_rect, tail_rect), dim=1) # (num_rel, 4, rect_size, rect_size)
                 rect_inputs.append(rect_input)
 
-                # rectangle feature. size (total_num_rel, in_channels, POOLER_RESOLUTION, POOLER_RESOLUTION)
-                rect_inputs = torch.cat(rect_inputs, dim=0)
-                rect_features = self.rect_conv(rect_inputs)
+        # rectangle feature. size (total_num_rel, in_channels, POOLER_RESOLUTION, POOLER_RESOLUTION)
+        if self.cfg.MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB:
+            rect_inputs = torch.cat(rect_inputs, dim=0)
+            rect_features = self.rect_conv(rect_inputs)
 
         # union visual feature. size (total_num_rel, in_channels, POOLER_RESOLUTION, POOLER_RESOLUTION)
         union_vis_features = self.feature_extractor.pooler(x, union_proposals)
@@ -104,7 +103,7 @@ class RelationFeatureExtractor(nn.Module):
             spatial_features = self.spatial_fc(rect_features.view(rect_features.size(0), -1))
             union_features = (region_features, spatial_features)
         else:
-            if self.only_vis_features:
+            if not self.cfg.MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB:
                 union_features = union_vis_features
             else:
                 union_features = union_vis_features + rect_features
