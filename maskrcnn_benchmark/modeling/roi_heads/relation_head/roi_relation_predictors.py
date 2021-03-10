@@ -507,7 +507,7 @@ class TransformerPredictor(nn.Module):
 
         # use frequence bias
         if self.use_bias:
-            freq_dists = self.freq_bias.index_with_labels(pair_pred)
+            freq_dists = self.freq_bias.index_with_labels(pair_pred.long())
             freq_bias = torch.sigmoid(freq_dists)
             if True:
                 # proposed by haeyong
