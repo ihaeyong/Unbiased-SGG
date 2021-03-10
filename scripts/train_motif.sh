@@ -17,6 +17,7 @@ if [ $2 == "sgcls" ]; then
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB True \
            SOLVER.IMS_PER_BATCH 12 \
+           SOLVER.BASE_LR 0.01 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
            SOLVER.MAX_ITER 70000 \
@@ -38,6 +39,7 @@ elif [ $2 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB True \
            SOLVER.IMS_PER_BATCH 12 \
+           SOLVER.BASE_LR 0.01 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
            SOLVER.VAL_PERIOD 2000 \
@@ -58,6 +60,7 @@ elif [ $2 == "sgdet" ]; then
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB True \
            SOLVER.IMS_PER_BATCH 8 \
+           SOLVER.BASE_LR 0.01 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
            SOLVER.VAL_PERIOD 2000 \
