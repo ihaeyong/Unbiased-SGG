@@ -13,7 +13,7 @@ if [ $2 == "sgcls" ]; then
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
            MODEL.ROI_RELATION_HEAD.USE_GT_BOX True \
            MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL False \
-           MODEL.ROI_RELATION_HEAD.PREDICTOR MotifPredictor \
+           MODEL.ROI_RELATION_HEAD.PREDICTOR VCTreePredictor \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB True \
            SOLVER.IMS_PER_BATCH 12 \
@@ -24,7 +24,7 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/motifs-sgcls
+           OUTPUT_DIR ./checkpoints/vctree-sigmoid-sgcls
     
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
@@ -34,7 +34,7 @@ elif [ $2 == "predcls" ]; then
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
            MODEL.ROI_RELATION_HEAD.USE_GT_BOX True \
            MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL True \
-           MODEL.ROI_RELATION_HEAD.PREDICTOR MotifPredictor \
+           MODEL.ROI_RELATION_HEAD.PREDICTOR VCTreePredictor \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB True \
            SOLVER.IMS_PER_BATCH 12 \
@@ -44,7 +44,7 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/motifs-predcls
+           OUTPUT_DIR ./checkpoints/vctree-sigmoid-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \
@@ -54,9 +54,9 @@ elif [ $2 == "sgdet" ]; then
            --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" \
            MODEL.ROI_RELATION_HEAD.USE_GT_BOX False \
            MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL False \
-           MODEL.ROI_RELATION_HEAD.PREDICTOR MotifPredictor \
-           MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
+           MODEL.ROI_RELATION_HEAD.PREDICTOR VCTreePredictor \
            MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB True \
+           MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            SOLVER.IMS_PER_BATCH 8 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
@@ -64,6 +64,6 @@ elif [ $2 == "sgdet" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/motifs-sgdet
+           OUTPUT_DIR ./checkpoints/vctree-sigmoid-sgdet
 
 fi

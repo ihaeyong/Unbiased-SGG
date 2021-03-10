@@ -507,7 +507,13 @@ class TransformerPredictor(nn.Module):
 
         # use frequence bias
         if self.use_bias:
-            rel_dists = rel_dists + self.freq_bias.index_with_labels(pair_pred)
+            freq_dists = self.freq_bias.index_with_labels(pair_pred)
+            freq_bias = torch.sigmoid(freq_dists)
+            if True:
+                # proposed by haeyong
+                rel_dists = rel_dists + freq_bias
+            else:
+                rel_dists = rel_dists + freq_dists
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
@@ -518,7 +524,7 @@ class TransformerPredictor(nn.Module):
             att_dists = att_dists.split(num_objs, dim=0)
             return (obj_dists, att_dists), rel_dists, add_losses
         else:
-            return obj_dists, rel_dists, add_losses
+            return obj_dists, rel_dists, add_losses, freq_bias
 
 
 @registry.ROI_RELATION_PREDICTOR.register("IMPPredictor")
@@ -578,7 +584,13 @@ class IMPPredictor(nn.Module):
                 pair_preds.append( torch.stack((obj_pred[pair_idx[:,0]], obj_pred[pair_idx[:,1]]), dim=1) )
             pair_pred = cat(pair_preds, dim=0)
 
-            rel_dists = rel_dists + self.freq_bias.index_with_labels(pair_pred.long())
+            freq_dists = self.freq_bias.index_with_labels(pair_pred.long())
+            freq_bias = torch.sigmoid(freq_dists)
+            if True:
+                # proposed by haeyong
+                rel_dists = rel_dists + freq_bias
+            else:
+                rel_dists = rel_dists + freq_dists
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
@@ -587,7 +599,7 @@ class IMPPredictor(nn.Module):
         # because in decoder_rnn, preds has been through a nms stage
         add_losses = {}
 
-        return obj_dists, rel_dists, add_losses
+        return obj_dists, rel_dists, add_losses, freq_bias
 
 
 @registry.ROI_RELATION_PREDICTOR.register("MotifPredictor")
@@ -687,9 +699,14 @@ class MotifPredictor(nn.Module):
         rel_dists = self.rel_compress(prod_rep)
 
         if self.use_bias:
-            freq = self.freq_bias.index_with_labels(pair_pred.long())
-            rel_dists = rel_dists + freq
-            freq_bias = torch.sigmoid(freq)
+            freq_dists = self.freq_bias.index_with_labels(pair_pred.long())
+
+            freq_bias = torch.sigmoid(freq_dists)
+            if True:
+                # proposed by haeyong
+                rel_dists = rel_dists + freq_bias
+            else:
+                rel_dists = rel_dists + freq_dists
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
@@ -802,7 +819,13 @@ class VCTreePredictor(nn.Module):
         #uni_dists = self.uni_compress(self.drop(union_features))
         frq_dists = self.freq_bias.index_with_labels(pair_pred.long())
 
-        rel_dists = ctx_dists + frq_dists
+        freq_bias = torch.sigmoid(frq_dists)
+        if True:
+            # proposed by haeyong
+            rel_dists = ctx_dists + freq_bias
+        else:
+            rel_dists = ctx_dists + frq_dists
+
         #rel_dists = ctx_dists + uni_gate * uni_dists + frq_gate * frq_dists
 
         obj_dists = obj_dists.split(num_objs, dim=0)
@@ -819,7 +842,7 @@ class VCTreePredictor(nn.Module):
                 binary_loss.append(F.binary_cross_entropy_with_logits(bi_pred, bi_gt))
             add_losses["binary_loss"] = sum(binary_loss) / len(binary_loss)
 
-        return obj_dists, rel_dists, add_losses
+        return obj_dists, rel_dists, add_losses, freq_bias
 
 
 @registry.ROI_RELATION_PREDICTOR.register("CausalAnalysisPredictor")
