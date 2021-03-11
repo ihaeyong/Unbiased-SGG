@@ -254,6 +254,10 @@ class SGraphPredictor(nn.Module):
 
         # relational message passing
         iba_loss = None
+
+        if True:
+            residual = union_features
+
         if self.rel_ctx_layer > 0:
             if self.training :
                 rel_labels = torch.cat(rel_labels)
@@ -286,6 +290,9 @@ class SGraphPredictor(nn.Module):
                                    rel_inds=rel_pair_idxs)
 
         # rois pooling
+        if True:
+            union_features = union_features + residual
+
         union_features = self.feature_extractor.forward_without_pool(union_features)
 
         # use union box and mask convolution
