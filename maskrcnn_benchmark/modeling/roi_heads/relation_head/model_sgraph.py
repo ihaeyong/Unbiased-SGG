@@ -165,7 +165,7 @@ class SpectralContext(nn.Module):
 
         encoder_rep = self.lin_obj_h(decoder_inp)
 
-        return obj_dists, obj_preds, encoder_rep, perm, inv_perm, ls_transposed, link_loss
+        return obj_dists, obj_preds, encoder_rep, perm, inv_perm, ls_transposed, decoder_inp
 
     def decoder(self, obj_fmap, obj_labels, boxes_per_cls):
 
@@ -243,7 +243,7 @@ class SpectralContext(nn.Module):
             boxes_per_cls = cat([proposal.get_field('boxes_per_cls') for proposal in proposals], dim=0) # comes from post process of box_head
 
         # object level contextual feature
-        obj_dists,obj_preds,obj_ctx,perm,inv_perm,ls_transposed,link_loss=self.obj_stx(
+        obj_dists,obj_preds,obj_ctx,perm,inv_perm,ls_transposed, obj_reps = self.obj_stx(
             obj_pre_rep, proposals, freq_bias, rel_pair_idxs,
             obj_labels=obj_labels,
             rel_labels=rel_labels,
@@ -270,5 +270,5 @@ class SpectralContext(nn.Module):
             self.untreated_obj_feat = self.moving_average(self.untreated_obj_feat, obj_pre_rep)
             self.untreated_ctx_feat = self.moving_average(self.untreated_ctx_feat, obj_ctx)
 
-        return obj_dists, obj_preds, edge_ctx, edge_obj, link_loss
+        return obj_dists, obj_preds, edge_ctx, edge_obj, obj_reps
 

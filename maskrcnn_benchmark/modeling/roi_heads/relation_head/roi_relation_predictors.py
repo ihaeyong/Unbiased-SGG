@@ -101,13 +101,13 @@ class SGraphPredictor(nn.Module):
             layer_init(self.non_vis_dists, xavier=True)
 
         if self.obj_context:
-            self.vis_subj_dists = nn.Linear(self.pooling_dim + 256,
+            self.vis_att_dists = nn.Linear(self.pooling_dim,
                                             self.num_obj_cls, bias=True)
-            self.vis_obj_dists = nn.Linear(self.pooling_dim + 256,
-                                           self.num_obj_cls, bias=True)
+            #self.vis_obj_dists = nn.Linear(self.pooling_dim,
+            #                               self.num_obj_cls, bias=True)
 
-            layer_init(self.vis_subj_dists, xavier=True)
-            layer_init(self.vis_obj_dists, xavier=True)
+            layer_init(self.vis_att_dists, xavier=True)
+            #layer_init(self.vis_obj_dists, xavier=True)
 
         # initialize layer parameters
         layer_init(self.vis_dists, xavier=True)
@@ -192,7 +192,7 @@ class SGraphPredictor(nn.Module):
             obj_dists, obj_preds, att_dists, edge_ctx = self.context_layer(
                 roi_features, proposals, logger)
         else:
-            obj_dists, obj_preds, obj_ctx_rep, obj_ctx_emb, link_loss = self.context_layer(
+            obj_dists, obj_preds, obj_ctx_rep, obj_ctx_emb, obj_per_reps = self.context_layer(
                 roi_features, proposals, self.freq_bias, rel_pair_idxs, rel_labels, logger)
 
         # mean object representation
@@ -302,11 +302,12 @@ class SGraphPredictor(nn.Module):
 
         # ========== update object logit message passing =============
         obj_per_dists = obj_dists.split(num_objs, dim=0)
+        obj_per_reps = obj_per_reps.split(num_objs, dim=0)
         with torch.no_grad():
             u_features = union_features.clone().detach()
             u_subj, u_obj = prod_rep.clone().detach().split(256, dim=1)
 
-        if self.obj_context :
+        if self.obj_context and False:
             subj_att_dists = self.vis_subj_dists(torch.cat((u_features, u_subj), dim=-1))
             obj_att_dists = self.vis_obj_dists(torch.cat((u_features, u_obj), dim=-1))
 
@@ -333,6 +334,28 @@ class SGraphPredictor(nn.Module):
                 u_obj_dists.append(logit)
 
             obj_dists = torch.cat(u_obj_dists, dim=0)
+
+
+        elif self.obj_context:
+
+            union_reps = u_features.split(num_rels, dim=0)
+
+            alpha = 1.0
+            u_obj_dists = []
+            for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps ):
+
+                mask = torch.matmul(rep, union.transpose(0,1))
+                mask = F.softmax(mask / 1.0, 1)
+                mean_obj = torch.matmul(mask, union)
+
+                obj_att_dists = self.vis_att_dists(mean_obj)
+
+                logit = logit + alpha * obj_att_dists
+
+                u_obj_dists.append(logit)
+
+            obj_dists = torch.cat(u_obj_dists, dim=0)
+
         else:
             None
 
@@ -363,9 +386,6 @@ class SGraphPredictor(nn.Module):
 
         if rel_cl_loss is not None:
             add_losses['rel_cl_loss'] = rel_cl_loss
-
-        if link_loss is not None:
-            add_losses['link_loss'] = link_loss
 
         if iba_loss is not None:
             add_losses['iba_loss'] = iba_loss
