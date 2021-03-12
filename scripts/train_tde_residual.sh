@@ -23,7 +23,7 @@ if [ $2 == "sgcls" ]; then
            MODEL.ROI_RELATION_HEAD.RIB_SCALE 2 \
            MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC True \
            MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING True \
-           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT False \
+           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT True \
            SOLVER.IMS_PER_BATCH 12 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
@@ -32,7 +32,7 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/reg_s2_p0.03_pw0.5_obj2.2_sum_v3-sgcls
+           OUTPUT_DIR ./checkpoints/reg_mps_s2_p0.03_pw0.5_obj2.3_sum_v3-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
@@ -52,7 +52,7 @@ elif [ $2 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.RIB_SCALE 2 \
            MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC True \
            MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING True \
-           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT False \
+           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT True \
            SOLVER.IMS_PER_BATCH 12 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
@@ -60,7 +60,7 @@ elif [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/reg_s2_p0.03_pw0.5_obj2.2_sum_v3-predcls
+           OUTPUT_DIR ./checkpoints/reg_mps_s2_p0.03_pw0.5_obj2.3_sum_v3-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \
@@ -80,7 +80,7 @@ elif [ $2 == "sgdet" ]; then
            MODEL.ROI_RELATION_HEAD.RIB_SCALE 2 \
            MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC True \
            MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING True \
-           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT False \
+           MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT True \
            SOLVER.IMS_PER_BATCH 8 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
@@ -88,6 +88,6 @@ elif [ $2 == "sgdet" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/reg_s2_p0.03_pw0.5_obj2.2_sum_v3-sgdet
+           OUTPUT_DIR ./checkpoints/reg_mps_s2_p0.03_pw0.5_obj2.3_sum_v3-sgdet
 
 fi
