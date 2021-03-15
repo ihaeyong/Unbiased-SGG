@@ -344,11 +344,12 @@ class SGraphPredictor(nn.Module):
             u_obj_dists = []
             for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps ):
 
-                mask = torch.matmul(rep, union.transpose(0,1))
-                mask = F.softmax(mask / 1.0, 1)
-                mean_obj = torch.matmul(mask, union) + rep
+                for j in range(2):
+                    mask = torch.matmul(rep, union.transpose(0,1))
+                    mask = F.softmax(mask / 1.0, 1)
+                    rep = torch.matmul(mask, union) + rep
 
-                obj_att_dists = self.vis_att_dists(mean_obj)
+                obj_att_dists = self.vis_att_dists(rep)
 
                 logit = logit + alpha * obj_att_dists
 
