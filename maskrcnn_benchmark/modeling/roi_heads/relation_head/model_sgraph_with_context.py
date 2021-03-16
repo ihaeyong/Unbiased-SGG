@@ -125,6 +125,7 @@ class EncoderLayer(nn.Module):
             n_head, d_model, d_k, d_v, dropout=dropout)
 
     def forward(self, enc_input, rel_input, non_pad_mask=None, slf_attn_mask=None):
+        
         enc_output, enc_slf_attn = self.slf_attn(
             enc_input, rel_input, rel_input, mask=slf_attn_mask)
 

@@ -108,17 +108,18 @@ class SGraphPredictor(nn.Module):
 
             layer_init(self.vis_att_dists, xavier=True)
 
-            n_layers = 2
-            n_head = 8
-            d_k = 512
-            d_v = 512
-            d_model = 4096
-            d_inner = 4096 # non-use
-            #self.vis_encoder = TransformerEncoder(n_layers, n_head, d_k, d_v, d_model, d_inner)
+            if False:
+                n_layers = 1
+                n_head = 4
+                d_k = 512
+                d_v = 512
+                d_model = 4096
+                d_inner = 4096 # non-use
+                #self.vis_encoder = TransformerEncoder(n_layers, n_head, d_k, d_v, d_model, d_inner)
 
-            self.layer_stack = nn.ModuleList([
-                EncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=0.1)
-                for _ in range(n_layers)])
+                self.layer_stack = nn.ModuleList([
+                    EncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=0.1)
+                    for _ in range(n_layers)])
 
         # initialize layer parameters
         layer_init(self.vis_dists, xavier=True)
@@ -347,10 +348,10 @@ class SGraphPredictor(nn.Module):
             obj_dists = torch.cat(u_obj_dists, dim=0)
 
 
-        elif self.obj_context and False:
+        elif self.obj_context :
             union_reps = u_features.split(num_rels, dim=0)
 
-            alpha = 0.1
+            alpha = 0.03
             u_obj_dists = []
             for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps ):
 
@@ -367,19 +368,21 @@ class SGraphPredictor(nn.Module):
 
             obj_dists = torch.cat(u_obj_dists, dim=0)
 
-        elif self.obj_context:
+        elif self.obj_context and False:
 
             union_reps = u_features.split(num_rels, dim=0)
 
-            alpha = 0.1
+            alpha = 0.03
             u_obj_dists = []
             for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps ):
 
                 enc_output = rep[None]
                 rel_output = union[None]
-                for enc_layer in self.layer_stack:
-                    enc_output, enc_slf_attn = enc_layer(
-                        enc_output, rel_output)
+
+                for j in range(2):
+                    for enc_layer in self.layer_stack:
+                        enc_output, enc_slf_attn = enc_layer(
+                            enc_output, rel_output)
 
                 obj_att_dists = self.vis_att_dists(enc_output[0])
 
@@ -388,7 +391,7 @@ class SGraphPredictor(nn.Module):
                 u_obj_dists.append(logit)
 
             obj_dists = torch.cat(u_obj_dists, dim=0)
-            
+
         else:
             None
 
