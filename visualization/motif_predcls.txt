@@ -1,0 +1,50 @@
+above:0.6892
+across:0.3333
+against:0.1774
+along:0.3150
+and:0.2337
+at:0.7186
+attached to:0.4418
+behind:0.7085
+belonging to:0.4199
+between:0.1875
+carrying:0.8039
+covered in:0.4970
+covering:0.4126
+eating:0.7414
+flying in:0.0000
+for:0.3197
+from:0.0282
+growing on:0.1602
+hanging from:0.4572
+has:0.9033
+holding:0.8538
+in:0.7732
+in front of:0.5166
+laying on:0.7691
+looking at:0.5286
+lying on:0.5605
+made of:0.0625
+mounted on:0.2507
+near:0.6569
+of:0.8857
+on:0.9251
+on back of:0.3924
+over:0.3927
+painted on:0.2787
+parked on:0.8493
+part of:0.2078
+playing:0.0341
+riding:0.9304
+says:0.0000
+sitting on:0.8246
+standing on:0.7165
+to:0.3975
+under:0.6427
+using:0.5743
+walking in:0.3286
+walking on:0.8784
+watching:0.5861
+wearing:0.9693
+wears:0.9054
+with:0.6693
