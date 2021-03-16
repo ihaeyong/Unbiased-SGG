@@ -272,3 +272,98 @@ class SpectralContext(nn.Module):
 
         return obj_dists, obj_preds, edge_ctx, edge_obj, obj_reps
 
+
+
+
+class PostSpectralContext(nn.Module):
+    """
+    Modified from neural-motifs to encode contexts for each objects
+    """
+    def __init__(self, config, obj_classes):
+        super(PostSpectralContext, self).__init__()
+        self.cfg = config
+        self.obj_classes = obj_classes
+        self.num_obj_classes = len(obj_classes)
+
+        # mode
+        if self.cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
+            if self.cfg.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL:
+                self.mode = 'predcls'
+            else:
+                self.mode = 'sgcls'
+        else:
+            self.mode = 'sgdet'
+
+        # object & relation context
+        self.dropout_rate = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_DROPOUT_RATE
+        self.hidden_dim = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM
+        self.nms_thresh = self.cfg.TEST.RELATION.LATER_NMS_PREDICTION_THRES
+
+        # relation context
+        self.out_obj = nn.Linear(self.hidden_dim * 8, len(self.obj_classes))
+        # initialize layers
+        layer_init(self.out_obj, xavier=True)
+
+    def decoder(self, obj_fmap, obj_labels, boxes_per_cls):
+
+        if self.mode == 'predcls' and not self.training:
+            obj_dists2 = Variable(to_onehot(obj_labels.data, len(self.obj_classes)))
+        else:
+            obj_dists2 = self.out_obj(obj_fmap)
+
+        # Do NMS here as a post-processing step
+        if self.mode == 'sgdet' and not self.training and boxes_per_cls is not None:
+            is_overlap = nms_overlaps(boxes_per_cls).view(
+                boxes_per_cls.size(0), boxes_per_cls.size(0),
+                boxes_per_cls.size(1)
+            ).cpu().numpy() >= self.nms_thresh
+
+            out_dists_sampled = F.softmax(obj_dists2,1).cpu().numpy()
+            out_dists_sampled[:,0] = 0
+
+            out_commitments = torch.zeros(obj_dists2.shape[0]).cuda(
+                obj_dists2.get_device()).long()
+
+            for i in range(out_commitments.size(0)):
+                box_ind, cls_ind = np.unravel_index(
+                    out_dists_sampled.argmax(), out_dists_sampled.shape)
+                out_commitments[int(box_ind)] = int(cls_ind)
+                out_dists_sampled[is_overlap[box_ind,:,cls_ind], cls_ind] = 0.0
+                out_dists_sampled[box_ind] = -1.0 # This way we won't re-sample
+
+            obj_preds = out_commitments
+
+        elif self.mode == 'sgcls':
+            obj_preds = (
+                obj_labels
+                if obj_labels is not None else obj_dists2[:, 1:].max(1)[1] + 1)
+        else:
+            obj_preds = (
+                obj_labels
+                if not self.training else obj_dists2[:, 1:].max(1)[1] + 1)
+
+        return obj_dists2, obj_preds
+
+    def forward(self, x, proposals):
+
+        # labels will be used in DecoderRNN during training (for nms)
+        if self.training or self.cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
+            obj_labels = cat([proposal.get_field("labels") for proposal in proposals], dim=0)
+        else:
+            obj_labels = None
+
+        assert proposals[0].mode == 'xyxy'
+
+        batch_size = x.shape[0]
+        boxes_per_cls = None
+        if self.mode == 'sgdet' and not self.training:
+            boxes_per_cls = cat([proposal.get_field('boxes_per_cls') for proposal in proposals], dim=0) # comes from post process of box_head
+
+        # obj. predictions
+        obj_dists, obj_preds = self.decoder(
+            x,
+            obj_labels=obj_labels if obj_labels is not None else None,
+            boxes_per_cls=boxes_per_cls if boxes_per_cls is not None else None,)
+
+        return obj_dists
+
