@@ -103,11 +103,14 @@ class SGraphPredictor(nn.Module):
             layer_init(self.non_vis_dists, xavier=True)
 
         if self.obj_context:
-            #self.vis_att_dists = nn.Linear(self.pooling_dim,
-            #                                self.num_obj_cls, bias=True)
-            #layer_init(self.vis_att_dists, xavier=True)
 
-            self.post_ctx_layer = PostSpectralContext(config, obj_classes)
+            if True:
+                self.vis_att_dists = nn.Linear(self.pooling_dim,
+                                               self.num_obj_cls, bias=True)
+                layer_init(self.vis_att_dists, xavier=True)
+
+            else:
+                self.post_ctx_layer = PostSpectralContext(config, obj_classes)
 
             if False:
                 n_layers = 1
@@ -369,21 +372,40 @@ class SGraphPredictor(nn.Module):
             obj_dists = torch.cat(u_obj_dists, dim=0)
 
 
-
         elif self.obj_context :
             union_reps = u_features.split(num_rels, dim=0)
+
+            alpha = 0.03
+            u_obj_reps = []
+            for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps ):
+
+                for j in range(2):
+                    mask = torch.matmul(rep, union.transpose(0,1))
+                    mask = F.softmax(mask / 1.0, 1)
+                    rep = torch.relu(torch.matmul(mask, union)) + rep
+
+                u_obj_reps.append(rep)
+
+            obj_reps = cat(u_obj_reps, dim=0)
+            
+            obj_att_dists = self.vis_att_dists(obj_reps)
+            obj_dists = obj_dists + alpha * obj_att_dists
+
+        elif self.obj_context and False :
+            union_reps = u_features.split(num_rels, dim=0)
             ctx_obj_reps = []
-            alpha = 0.01
+            alpha = 0.02
             for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps):
 
                 for j in range(2):
                     mask = torch.matmul(rep, union.transpose(0,1))
                     mask = F.softmax(mask / 1.0, 1)
-                    rep = torch.matmul(mask, union) + rep
+                    rep = torch.relu(torch.matmul(mask, union)) + rep
+                    #rep = torch.matmul(mask, union) + rep
 
                 ctx_obj_reps.append(rep)
 
-            post_obj_reps = torch.cat(ctx_obj_reps, dim=0)
+            post_obj_reps = cat(ctx_obj_reps)
             post_obj_dists = self.post_ctx_layer(post_obj_reps, proposals)
             obj_dists = obj_dists + alpha * post_obj_dists
 
