@@ -301,14 +301,18 @@ class PostSpectralContext(nn.Module):
 
         # relation context
         self.out_obj = nn.Linear(self.hidden_dim * 8, len(self.obj_classes))
+        self.obj_ctx = nn.Linear(self.hidden_dim * 8, self.hidden_dim * 8)
+        self.layer_norm = nn.LayerNorm(self.hidden_dim * 8)
+
         # initialize layers
         layer_init(self.out_obj, xavier=True)
+        layer_init(self.obj_ctx, xavier=True)
 
         self.alpha = 0.02
 
     def decoder(self, obj_fmap, obj_labels, boxes_per_cls):
 
-        if self.mode == 'predcls' and not self.training:
+        if self.mode == 'predcls' and not self.training and False :
             obj_dists2 = Variable(to_onehot(obj_labels.data, len(self.obj_classes)))
         else:
             obj_dists2 = self.out_obj(obj_fmap) * self.alpha
@@ -360,6 +364,10 @@ class PostSpectralContext(nn.Module):
         boxes_per_cls = None
         if self.mode == 'sgdet' and not self.training:
             boxes_per_cls = cat([proposal.get_field('boxes_per_cls') for proposal in proposals], dim=0) # comes from post process of box_head
+
+        # object contextual information
+        x = self.obj_ctx(x)
+        x = self.layer_norm(x)
 
         # obj. predictions
         obj_dists, obj_preds = self.decoder(

@@ -104,7 +104,7 @@ class SGraphPredictor(nn.Module):
 
         if self.obj_context:
 
-            if True:
+            if False:
                 self.vis_att_dists = nn.Linear(self.pooling_dim,
                                                self.num_obj_cls, bias=True)
                 layer_init(self.vis_att_dists, xavier=True)
@@ -325,7 +325,7 @@ class SGraphPredictor(nn.Module):
 
         if self.obj_context and False:
             union_reps = u_features.split(num_rels, dim=0)
-            
+
             alpha = 0.02
             u_obj_reps = []
             for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps ):
@@ -342,7 +342,7 @@ class SGraphPredictor(nn.Module):
             obj_att_dists = self.vis_att_dists(obj_reps)
             obj_dists = obj_dists + alpha * obj_att_dists
 
-        elif self.obj_context and False :
+        elif self.obj_context and True :
             union_reps = u_features.split(num_rels, dim=0)
 
             ctx_obj_reps = []
