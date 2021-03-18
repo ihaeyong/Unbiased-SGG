@@ -304,12 +304,14 @@ class PostSpectralContext(nn.Module):
         # initialize layers
         layer_init(self.out_obj, xavier=True)
 
+        self.alpha = 0.02
+
     def decoder(self, obj_fmap, obj_labels, boxes_per_cls):
 
         if self.mode == 'predcls' and not self.training:
             obj_dists2 = Variable(to_onehot(obj_labels.data, len(self.obj_classes)))
         else:
-            obj_dists2 = self.out_obj(obj_fmap)
+            obj_dists2 = self.out_obj(obj_fmap) * self.alpha
 
         # Do NMS here as a post-processing step
         if self.mode == 'sgdet' and not self.training and boxes_per_cls is not None:

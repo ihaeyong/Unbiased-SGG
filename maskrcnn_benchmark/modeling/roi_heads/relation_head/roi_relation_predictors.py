@@ -324,58 +324,9 @@ class SGraphPredictor(nn.Module):
             u_subj, u_obj = prod_rep.clone().detach().split(256, dim=1)
 
         if self.obj_context and False:
-            subj_att_dists = self.vis_subj_dists(torch.cat((u_features, u_subj), dim=-1))
-            obj_att_dists = self.vis_obj_dists(torch.cat((u_features, u_obj), dim=-1))
-
-            subj_att_dists = subj_att_dists.split(num_rels, dim=0)
-            obj_att_dists = obj_att_dists.split(num_rels, dim=0)
-
-            alpha = 0.03
-            u_obj_dists = []
-            for logit, subj, obj, pair_idx in zip(obj_per_dists, subj_att_dists, obj_att_dists, rel_pair_idxs):
-
-                M = logit.size(0)
-                N = subj.size(0)
-
-                subj_mask = torch.matmul(logit, subj.transpose(0,1))
-                obj_mask = torch.matmul(logit, obj.transpose(0,1))
-
-                subj_mask = F.softmax(subj_mask / 1.0, 1)
-                obj_mask = F.softmax(obj_mask / 1.0, 1)
-
-                mean_subj = torch.matmul(subj_mask, subj)
-                mean_obj = torch.matmul(obj_mask, obj)
-
-                logit = logit + alpha * (mean_subj + mean_obj)
-                u_obj_dists.append(logit)
-
-            obj_dists = torch.cat(u_obj_dists, dim=0)
-
-
-        elif self.obj_context and False:
             union_reps = u_features.split(num_rels, dim=0)
-
-            alpha = 0.03
-            u_obj_dists = []
-            for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps ):
-
-                for j in range(2):
-                    mask = torch.matmul(rep, union.transpose(0,1))
-                    mask = F.softmax(mask / 1.0, 1)
-                    rep = torch.matmul(mask, union) + rep
-
-                obj_att_dists = self.vis_att_dists(rep)
-                logit = logit + alpha * obj_att_dists
-
-                u_obj_dists.append(logit)
-
-            obj_dists = torch.cat(u_obj_dists, dim=0)
-
-
-        elif self.obj_context :
-            union_reps = u_features.split(num_rels, dim=0)
-
-            alpha = 0.03
+            
+            alpha = 0.02
             u_obj_reps = []
             for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps ):
 
@@ -387,51 +338,26 @@ class SGraphPredictor(nn.Module):
                 u_obj_reps.append(rep)
 
             obj_reps = cat(u_obj_reps, dim=0)
-            
+
             obj_att_dists = self.vis_att_dists(obj_reps)
             obj_dists = obj_dists + alpha * obj_att_dists
 
         elif self.obj_context and False :
             union_reps = u_features.split(num_rels, dim=0)
+
             ctx_obj_reps = []
-            alpha = 0.02
             for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps):
 
                 for j in range(2):
                     mask = torch.matmul(rep, union.transpose(0,1))
                     mask = F.softmax(mask / 1.0, 1)
                     rep = torch.relu(torch.matmul(mask, union)) + rep
-                    #rep = torch.matmul(mask, union) + rep
 
                 ctx_obj_reps.append(rep)
 
             post_obj_reps = cat(ctx_obj_reps)
             post_obj_dists = self.post_ctx_layer(post_obj_reps, proposals)
-            obj_dists = obj_dists + alpha * post_obj_dists
-
-        elif self.obj_context and False:
-
-            union_reps = u_features.split(num_rels, dim=0)
-
-            alpha = 0.03
-            u_obj_dists = []
-            for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps ):
-
-                enc_output = rep[None]
-                rel_output = union[None]
-
-                for j in range(2):
-                    for enc_layer in self.layer_stack:
-                        enc_output, enc_slf_attn = enc_layer(
-                            enc_output, rel_output)
-
-                obj_att_dists = self.vis_att_dists(enc_output[0])
-
-                logit = logit + alpha * obj_att_dists
-
-                u_obj_dists.append(logit)
-
-            obj_dists = torch.cat(u_obj_dists, dim=0)
+            obj_dists = obj_dists + post_obj_dists
 
         else:
             None

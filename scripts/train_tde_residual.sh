@@ -82,6 +82,7 @@ elif [ $2 == "sgdet" ]; then
            MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING True \
            MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT True \
            SOLVER.IMS_PER_BATCH 8 \
+           SOLVER.BASE_LR 0.0001\
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
            SOLVER.VAL_PERIOD 2000 \
