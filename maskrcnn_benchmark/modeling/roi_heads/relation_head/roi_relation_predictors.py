@@ -103,14 +103,7 @@ class SGraphPredictor(nn.Module):
             layer_init(self.non_vis_dists, xavier=True)
 
         if self.obj_context:
-
-            if False:
-                self.vis_att_dists = nn.Linear(self.pooling_dim,
-                                               self.num_obj_cls, bias=True)
-                layer_init(self.vis_att_dists, xavier=True)
-
-            else:
-                self.post_ctx_layer = PostSpectralContext(config, obj_classes)
+            self.post_ctx_layer = PostSpectralContext(config, obj_classes)
 
             if False:
                 n_layers = 1
@@ -270,10 +263,6 @@ class SGraphPredictor(nn.Module):
 
         # relational message passing
         iba_loss = None
-
-        if True:
-            residual = union_features
-
         if self.rel_ctx_layer > 0:
             if self.training :
                 rel_labels = torch.cat(rel_labels)
@@ -291,9 +280,12 @@ class SGraphPredictor(nn.Module):
                 rel_labels = None
                 prod_rep_ = prod_rep
 
-
+            residual = union_features
             union_features = self.rel_sg_msg(
                 union_features, prod_rep_, prod_emb, geo_embed, rel_labels)
+
+            # skip connection
+            union_features = union_features + residual
 
             # information bottlenecks
             iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 2e-2
@@ -304,10 +296,6 @@ class SGraphPredictor(nn.Module):
                 self.save_rib_fmap(rib_fmap=vratt_fmaps,
                                    masks=vratt_masks,
                                    rel_inds=rel_pair_idxs)
-
-        # rois pooling
-        if True:
-            union_features = union_features + residual
 
         union_features = self.feature_extractor.forward_without_pool(union_features)
 
@@ -323,26 +311,7 @@ class SGraphPredictor(nn.Module):
             u_features = union_features.clone().detach()
             u_subj, u_obj = prod_rep.clone().detach().split(256, dim=1)
 
-        if self.obj_context and False:
-            union_reps = u_features.split(num_rels, dim=0)
-
-            alpha = 0.02
-            u_obj_reps = []
-            for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps ):
-
-                for j in range(2):
-                    mask = torch.matmul(rep, union.transpose(0,1))
-                    mask = F.softmax(mask / 1.0, 1)
-                    rep = torch.relu(torch.matmul(mask, union)) + rep
-
-                u_obj_reps.append(rep)
-
-            obj_reps = cat(u_obj_reps, dim=0)
-
-            obj_att_dists = self.vis_att_dists(obj_reps)
-            obj_dists = obj_dists + alpha * obj_att_dists
-
-        elif self.obj_context and True :
+        if self.obj_context :
             union_reps = u_features.split(num_rels, dim=0)
 
             ctx_obj_reps = []
@@ -358,7 +327,6 @@ class SGraphPredictor(nn.Module):
             post_obj_reps = cat(ctx_obj_reps)
             post_obj_dists = self.post_ctx_layer(post_obj_reps, proposals)
             obj_dists = obj_dists + post_obj_dists
-
         else:
             None
 
