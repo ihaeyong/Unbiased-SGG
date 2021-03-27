@@ -10,7 +10,7 @@ from maskrcnn_benchmark.modeling.box_coder import BoxCoder
 from maskrcnn_benchmark.modeling.matcher import Matcher
 from maskrcnn_benchmark.structures.boxlist_ops import boxlist_iou
 from maskrcnn_benchmark.modeling.utils import cat
-from .model_sgraph_with_rel_weight import RelWeight, ObjWeight, LDAMLoss
+from .model_sgraph_with_rel_weight import RelWeight, ObjWeight, LDAMLoss, RelSample
 
 class RelationLossComputation(object):
     """
@@ -48,7 +48,7 @@ class RelationLossComputation(object):
         self.obj_type = 'weight'
         self.gamma = 0.02
 
-        self.weight = 'batchweight'
+        self.weight = 'ce'
 
         cls_num_list = np.load('./datasets/vg/obj_freq.npy')
         #cls_num_list[0] = 0 # no samples
@@ -56,6 +56,7 @@ class RelationLossComputation(object):
 
         self.obj_weight = ObjWeight(obj_prop, temp=1e0)
         self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
+        self.rel_sample = RelSample(predicate_proportion, temp=1e0)
 
         if self.use_label_smoothing:
             self.criterion_loss = Label_Smoothing_Regression(e=0.01)
@@ -72,8 +73,7 @@ class RelationLossComputation(object):
                 self.criterion_rel_loss = nn.CrossEntropyLoss()
 
 
-    def __call__(self, proposals, rel_labels, relation_logits, refine_logits,
-                 freq_bias):
+    def __call__(self, proposals, rel_labels, relation_logits, refine_logits, freq_bias):
         """
         Computes the loss for relation triplet.
         This requires that the subsample method has been called beforehand.
@@ -128,6 +128,16 @@ class RelationLossComputation(object):
                 loss_relation = F.cross_entropy(relation_logits,
                                                 rel_labels.long(),
                                                 rel_weight)
+
+        elif self.weight == 'batchsample':
+
+            rel_labels = self.rel_sample(relation_logits,
+                                         freq_bias,
+                                         rel_labels,
+                                         rel_covar,
+                                         self.gamma)
+
+            loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
 
         else:
             loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())

@@ -9,9 +9,11 @@ from torch.autograd import Variable
 from maskrcnn_benchmark.modeling.utils import cat
 from .utils_motifs import obj_edge_vectors, center_x, sort_by_score, to_onehot, get_dropout_mask, nms_overlaps, encode_box_info
 
-from .utils_relation import layer_init
+from .utils_relation import layer_init, seq_init
 
 from .model_sgraph_with_context import SpectralMessage
+
+from torch.autograd import Variable, grad
 
 class SpectralContext(nn.Module):
     """
@@ -377,3 +379,148 @@ class PostSpectralContext(nn.Module):
 
         return obj_dists
 
+
+
+
+class RelTransform(nn.Module):
+    """
+    Transform relational features into closes to ones closed to foregrounds
+    """
+
+    def __init__(self, cfg):
+        super(RelTransform, self).__init__()
+
+        # configure
+        self.cfg = cfg
+
+        # predicate inverse proportion
+        fg_rel = np.load('./datasets/vg/fg_matrix.npy')
+        bg_rel = np.load('./datasets/vg/bg_matrix.npy')
+        fg_rel[:,:,0] = bg_rel
+        pred_freq = fg_rel.sum(0).sum(0)
+
+        # pred inverse proportion
+        pred_inv_prop = 1.0 / np.power(pred_freq, 1/2)
+        max_m = 0.03
+        self.pred_inv_prop = pred_inv_prop * (max_m / pred_inv_prop.max())
+
+        self.mse_loss = nn.MSELoss() #nn.CrossEntropyLoss()
+        self.ce_loss = nn.CrossEntropyLoss()
+        self.max_iter = 1
+        self.rand_start = True
+        self.step_size = 0.5
+
+        # transfer
+        enc_transf = [
+            nn.Linear(4096, 4096 // 2, bias=True),
+            nn.BatchNorm1d(4096 // 2),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096 // 2, 4096 // 4, bias=True),
+            nn.BatchNorm1d(4096 // 4),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096 // 4, 4096 // 8, bias=True),
+            nn.BatchNorm1d(4096 // 8),
+            nn.ReLU(inplace=True),
+        ]
+
+        dec_transf = [
+            nn.Linear(4096 // 8, 4096 // 4, bias=True),
+            nn.BatchNorm1d(4096 // 4),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096 // 4, 4096 // 2, bias=True),
+            nn.BatchNorm1d(4096 // 2),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096 // 2, 4096, bias=True),
+        ]
+
+        self.enc_transf = nn.Sequential(*enc_transf)
+        self.dec_transf = nn.Sequential(*dec_transf)
+        self.enc_transf.apply(seq_init)
+        self.dec_transf.apply(seq_init)
+
+        self.rel_logits = nn.Linear(4096, 51, bias=True)
+        layer_init(self.rel_logits, xavier=True)
+
+    def random_perturb(self, inputs, attack, eps=0.5):
+
+        if attack == 'inf':
+            r_inputs = 2 * (torch.rand_like(inputs) - 0.5) * eps
+        elif attack == 'randn':
+            r_inputs = torch.randn_like(inputs) * inputs.max(1)[0][:,None]
+        elif attack == 'l2':
+            r_inputs = (torch.rand_like(inputs) - 0.5).renorm(p=2, dim=1, maxnorm=eps)
+        elif attack == 'zero':
+            r_inputs = torch.zeros_like(inputs)
+
+        return r_inputs
+
+    def make_step(self, grad, attack='l2', step_size=0.1):
+
+        if attack == 'l2':
+            grad_norm = torch.norm(grad, dim=1).view(-1, 1)
+            scaled_grad = grad / (grad_norm + 1e-10)
+            step = step_size * scaled_grad
+
+        elif attack == 'inf':
+            step = step_size * torch.sign(grad)
+
+        elif attack == 'none':
+            step = step_size * grad
+
+        return step
+
+    def forward(self, union_features, rel_mean, rel_covar, freq_bias, rel_labels):
+
+        # for inverse frequency
+        freq_bias = 1 - torch.sigmoid(freq_bias)
+        rel_covar = F.softmax(rel_covar, 1)
+
+        # index of backgrounds / foregrounds
+        bg_idx = np.where(rel_labels.cpu() == 0)[0]
+        fg_idx = np.where(rel_labels.cpu() > 0)[0]
+
+        # set target relational labels
+        if False:
+            topk_prob, topk_idx = freq_bias.topk(1, largest=True)
+            mask = topk_prob[bg_idx, 0] < 0.3
+            rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.float()
+        else:
+            topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
+
+            if False:
+                prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
+            else:
+                prob = torch.gather(rel_covar[bg_idx,], 1, topk_idx[bg_idx,])
+
+            mask = torch.bernoulli(prob)
+            mask_rel_labels = topk_idx[bg_idx] * mask
+            rel_labels[bg_idx] = mask_rel_labels[:,0].long()
+
+        # relational dict
+        rel_dict = rel_mean[rel_labels[bg_idx]]
+        rel_reps = union_features[bg_idx]
+
+        # transformation
+        if self.rand_start :
+            noise = self.random_perturb(rel_reps, attack='zero')
+            rel_reps = rel_reps + noise
+            #rel_reps = torch.clamp(rel_reps, 0, 1)
+
+        for _ in range(self.max_iter):
+            # transformation of relational features
+            enc_reps = self.enc_transf(rel_reps)
+            rel_reps = self.dec_transf(enc_reps)
+            rel_logits = self.rel_logits(rel_reps)
+
+            # tranformation loss
+            mse_loss = self.mse_loss(rel_reps, rel_dict)
+            ce_loss = self.ce_loss(rel_logits, mask_rel_labels[:,0].long())
+
+            loss = ce_loss + mse_loss
+
+            grad, = torch.autograd.grad(loss, [rel_reps])
+            rel_reps = rel_reps - self.make_step(grad, 'none', self.step_size)
+
+        union_features[bg_idx] = rel_reps.half()
+
+        return union_features, rel_labels

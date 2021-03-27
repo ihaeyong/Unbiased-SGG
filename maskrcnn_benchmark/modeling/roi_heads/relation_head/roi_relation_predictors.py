@@ -19,7 +19,7 @@ from .model_transformer import TransformerContext
 from .utils_relation import layer_init, get_box_info, get_box_pair_info
 from maskrcnn_benchmark.data import get_dataset_statistics
 
-from .model_sgraph import SpectralContext, PostSpectralContext
+from .model_sgraph import SpectralContext, PostSpectralContext, RelTransform
 from .model_sgraph_with_vratt import UnionRegionAttention
 from .model_sgraph_with_cl import SupConLoss, NpairLoss
 
@@ -102,6 +102,10 @@ class SGraphPredictor(nn.Module):
                                            self.num_rel_cls, bias=True)
             layer_init(self.non_vis_dists, xavier=True)
 
+
+        # relational tranformer
+        self.rel_transform = RelTransform(config)
+
         if self.obj_context:
             self.post_ctx_layer = PostSpectralContext(config, obj_classes)
 
@@ -148,7 +152,9 @@ class SGraphPredictor(nn.Module):
         self.d_type = False
         if self.d_type:
             self.register_buffer('obj_mean', torch.zeros(151, 256))
-            self.average_ratio = 0.005
+
+        self.register_buffer('rel_mean', torch.zeros(51, 4096))
+        self.average_ratio = 0.005
 
         # save feature maps
         self.val_b = 0
@@ -288,7 +294,7 @@ class SGraphPredictor(nn.Module):
             union_features = union_features + residual
 
             # information bottlenecks
-            iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 2e-2
+            #iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 2e-2
 
             if not self.training and self.cfg.RIB_FMAP_SAVE:
                 vratt_masks = self.rel_sg_msg.get_vratt_masks()
@@ -340,6 +346,29 @@ class SGraphPredictor(nn.Module):
         if self.use_bias:
             freq_bias = self.freq_bias.index_with_labels(pair_pred)
 
+
+        #=========== rel mean =========================================
+        if self.training:
+            rel_labels = cat(rel_labels)
+            rel_size = union_features.size(0)
+            classes = Variable(torch.arange(51)).long().cuda(device)
+            rel_mask = rel_labels.unsqueeze(1).expand(rel_size, 51)
+            rel_mask = rel_mask.eq(classes.expand(rel_size, 51)).float()
+
+            rel_mask = rel_mask * rel_mask.sum(0)[None,:].expand(rel_size, 51)
+            rel_mask = 1.0 / rel_mask.max(1)[0]
+
+            self.rel_mean[rel_labels] = self.moving_avg(
+                self.rel_mean[rel_labels], union_features * rel_mask[:,None])
+
+            rel_covar = torch.matmul(union_features, self.rel_mean.transpose(0,1))
+            union_features, rel_labels = self.rel_transform(union_features,
+                                                            self.rel_mean,
+                                                            rel_covar,
+                                                            freq_bias,
+                                                            rel_labels)
+            rel_labels = rel_labels.split(num_rels, dim=0)
+
         # sum of non-vis/visual dists
         rel_dists, vis_dists, ctx_dists, freq_bias = self.rel_logits(union_features,
                                                                      prod_rep,
@@ -365,7 +394,7 @@ class SGraphPredictor(nn.Module):
             att_dists = att_dists.split(num_objs, dim=0)
             return (obj_dists, att_dists), rel_dists, add_losses
         else:
-            return obj_dists, rel_dists, add_losses, freq_bias
+            return obj_dists, rel_dists, add_losses, freq_bias, rel_labels
 
 
     def rel_logits(self, vis_rep, ctx_rep, geo_emb, emb_dists, freq_dists):

@@ -183,3 +183,51 @@ class RelWeight(nn.Module):
 
         return  rel_weight, rel_margin
 
+
+class RelSample(nn.Module):
+    """
+    None dim means that not to use that sub module.
+    if None of geo, cat and appr was specified, only upconvolution is used.
+    """
+
+    def __init__(self, predicate_proportion, temp=1):
+        super(RelSample, self).__init__()
+
+        self.pred_prop = np.array(predicate_proportion)
+        self.pred_prop = np.concatenate(([1], self.pred_prop), 0)
+        self.pred_prop[0] = 1.0 - self.pred_prop[1:-1].sum()
+        self.pred_idx = self.pred_prop.argsort()[::-1]
+
+        self.criterion = nn.CrossEntropyLoss()
+
+    def forward(self, rel_logits, freq_bias, rel_labels, rel_covar, gamma=0.01):
+
+
+        bg_idx = np.where(rel_labels.cpu() == 0)[0]
+        fg_idx = np.where(rel_labels.cpu() > 0)[0]
+
+        # scaled mean of logits
+        with torch.no_grad():
+
+            if True :
+                topk_prob, topk_idx = freq_bias.topk(1)
+                mask = topk_prob[bg_idx, 0] > 0.6
+                rel_labels[bg_idx] = topk_idx[bg_idx,0]
+
+                rel_labels[bg_idx] * mask.float()
+
+            elif False :
+                topk_prob, topk_idx = freq_bias.topk(1, largest=False)
+                mask = topk_prob[bg_idx, 0] > 0.9
+                rel_labels[bg_idx] = topk_idx[bg_idx,0]
+
+                rel_labels[bg_idx] * mask.float()
+
+            else:
+                topk_prob, topk_idx = F.softmax(rel_covar,1).topk(1)
+                mask = topk_prob[bg_idx, 0] > 0.9
+                rel_labels[bg_idx] = topk_idx[bg_idx,0]
+
+                rel_labels[bg_idx] * mask.float()
+
+        return  rel_labels
