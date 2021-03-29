@@ -285,7 +285,7 @@ class SGraphPredictor(nn.Module):
                 union_features, prod_rep_, prod_emb, geo_embed, rel_labels)
 
             # skip connection
-            union_features = union_features + residual
+            #union_features = union_features + residual
 
             # information bottlenecks
             iba_loss = self.rel_sg_msg.iba.buffer_capacity.mean() * 2e-2
@@ -317,7 +317,7 @@ class SGraphPredictor(nn.Module):
             ctx_obj_reps = []
             for logit, rep, union in zip(obj_per_dists, obj_per_reps, union_reps):
 
-                for j in range(2):
+                for j in range(1):
                     mask = torch.matmul(rep, union.transpose(0,1))
                     mask = F.softmax(mask / 1.0, 1)
                     rep = torch.relu(torch.matmul(mask, union)) + rep

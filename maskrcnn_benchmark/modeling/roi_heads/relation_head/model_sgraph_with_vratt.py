@@ -118,8 +118,10 @@ class UnionRegionAttention(nn.Module):
                 nn.ConvTranspose2d(8*self.ch, 8, 3, stride=2, padding=1, dilation=2,
                                    bias=False),
                 nn.BatchNorm2d(8),
+                nn.ReLU(inplace=True),
                 nn.Conv2d(8, 3, 1, stride=1, dilation=1, bias=False),
                 nn.BatchNorm2d(3),
+                nn.ReLU(inplace=True),
                 nn.Conv2d(3, 1, 1, stride=1, dilation=1, bias=False),
                 nn.Sigmoid(),
             ]
@@ -129,14 +131,18 @@ class UnionRegionAttention(nn.Module):
                 nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, dilation=2,
                                    bias=False),
                 nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
                 nn.Conv2d(128, 64, 3, stride=1, padding=1, dilation=1, bias=False),
                 nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
             ]
             union_downconv = [
                 nn.Conv2d(64, 128, 3, stride=2, padding=1, dilation=2, bias=False),
                 nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
                 nn.Conv2d(128, 256, 3, stride=1, padding=1, dilation=1, bias=False),
                 nn.BatchNorm2d(256),
+                nn.ReLU(inplace=True),
             ]
 
             self.union_upconv = nn.Sequential(*union_upconv)
