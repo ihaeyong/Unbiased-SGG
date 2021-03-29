@@ -339,13 +339,17 @@ class SGraphPredictor(nn.Module):
         # use embedding
         embed_bias = None
         if self.embedding:
-            embed_bias = self.non_vis_dists(prod_emb)
+            emb_dists = self.non_vis_dists(prod_emb)
+
+        if self.geometric:
+            geo_dists = self.geo_dists(geo_embed)
 
         # use frequence bias
         freq_bias = None
         if self.use_bias:
-            freq_bias = self.freq_bias.index_with_labels(pair_pred)
+            freq_dists = self.freq_bias.index_with_labels(pair_pred)
 
+        freq_bias = freq_dists + emb_dists
 
         #=========== rel mean =========================================
         if self.training:
@@ -366,15 +370,16 @@ class SGraphPredictor(nn.Module):
                                                             self.rel_mean,
                                                             rel_covar,
                                                             freq_bias,
+                                                            geo_dists,
                                                             rel_labels)
             rel_labels = rel_labels.split(num_rels, dim=0)
 
         # sum of non-vis/visual dists
         rel_dists, vis_dists, ctx_dists, freq_bias = self.rel_logits(union_features,
                                                                      prod_rep,
-                                                                     geo_embed,
-                                                                     embed_bias,
-                                                                     freq_bias)
+                                                                     geo_dists,
+                                                                     emb_dists,
+                                                                     freq_dists)
         rel_cl_loss = None
 
         obj_dists = obj_dists.split(num_objs, dim=0)
@@ -397,13 +402,10 @@ class SGraphPredictor(nn.Module):
             return obj_dists, rel_dists, add_losses, freq_bias, rel_labels
 
 
-    def rel_logits(self, vis_rep, ctx_rep, geo_emb, emb_dists, freq_dists):
+    def rel_logits(self, vis_rep, ctx_rep, geo_dists, emb_dists, freq_dists):
 
         vis_dists = self.vis_dists(vis_rep)
         ctx_dists = self.vis_ctx_dists(ctx_rep)
-
-        if self.geometric:
-            geo_dists = self.geo_dists(geo_emb)
 
         if self.fusion_type == 'sum':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2

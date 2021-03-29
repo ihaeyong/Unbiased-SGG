@@ -408,7 +408,8 @@ class RelTransform(nn.Module):
         self.ce_loss = nn.CrossEntropyLoss()
         self.max_iter = 1
         self.rand_start = True
-        self.step_size = 0.5
+        self.rand_end = True
+        self.step_size = 0.1
 
         # transfer
         enc_transf = [
@@ -438,10 +439,15 @@ class RelTransform(nn.Module):
         self.enc_transf.apply(seq_init)
         self.dec_transf.apply(seq_init)
 
-        self.rel_logits = nn.Linear(4096, 51, bias=True)
-        layer_init(self.rel_logits, xavier=True)
+        self.mean = nn.Linear(4096 // 8, 4096 // 8, bias=True)
+        self.std = nn.Linear(4096 // 8, 4096 // 8, bias=True)
+        layer_init(self.mean, xavier=True)
+        layer_init(self.std, xavier=True)
 
-    def random_perturb(self, inputs, attack, eps=0.5):
+        #self.rel_logits = nn.Linear(4096, 51, bias=True)
+        #layer_init(self.rel_logits, xavier=True)
+
+    def rand_perturb(self, inputs, attack, eps=0.5):
 
         if attack == 'inf':
             r_inputs = 2 * (torch.rand_like(inputs) - 0.5) * eps
@@ -469,10 +475,38 @@ class RelTransform(nn.Module):
 
         return step
 
-    def forward(self, union_features, rel_mean, rel_covar, freq_bias, rel_labels):
+    def sample_normal(self, mean, logvar):
+        # Using torch.normal(means,sds) returns a stochastic tensor which we cannot backpropogate through.
+        # Instead we utilize the 'reparameterization trick'.
+        # http://stats.stackexchange.com/a/205336
+        # http://dpkingma.com/wordpress/wp-content/uploads/2015/12/talk_nips_workshop_2015.pdf
+        sd = torch.exp(logvar*0.5)
+        #e = Variable(torch.randn(sd.size()))
+        e = torch.randn_like(sd) # Sample from standard normal
+        z = e.mul(sd).add_(mean)
+
+        return z
+
+    # Loss function
+    def criterion(self, x_out, x_in, z_mu, z_logvar):
+
+        #bce_loss = F.binary_cross_entropy(x_out,x_in,size_average=False)
+        mse_loss = self.mse_loss(x_out, x_in)
+        kld_loss = -0.5 * torch.sum(1 + z_logvar - (z_mu ** 2) - torch.exp(z_logvar))
+        loss = (mse_loss + kld_loss) / x_out.size(0) # normalize by batch size
+
+        return loss
+
+    def forward(self, union_features, rel_mean, rel_covar, freq_bias, geo_dists, rel_labels):
 
         # for inverse frequency
-        freq_bias = 1 - torch.sigmoid(freq_bias)
+        if True :
+            freq_bias = 1 - torch.sigmoid(freq_bias)
+        else:
+            freq_bias = torch.sigmoid(freq_bias)
+
+        freq_bias = freq_bias * torch.sigmoid(geo_dists)
+
         rel_covar = F.softmax(rel_covar, 1)
 
         # index of backgrounds / foregrounds
@@ -482,44 +516,57 @@ class RelTransform(nn.Module):
         # set target relational labels
         if False:
             topk_prob, topk_idx = freq_bias.topk(1, largest=True)
-            mask = topk_prob[bg_idx, 0] < 0.3
+            mask = topk_prob[bg_idx, 0] > 0.5
             rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.float()
         else:
+            freq_bias = F.softmax(freq_bias)
             topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
 
-            if False:
-                prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
-            else:
-                prob = torch.gather(rel_covar[bg_idx,], 1, topk_idx[bg_idx,])
+            prob = torch.gather(rel_covar[bg_idx,], 1, topk_idx[bg_idx,])
 
             mask = torch.bernoulli(prob)
             mask_rel_labels = topk_idx[bg_idx] * mask
             rel_labels[bg_idx] = mask_rel_labels[:,0].long()
 
         # relational dict
-        rel_dict = rel_mean[rel_labels[bg_idx]]
-        rel_reps = union_features[bg_idx]
+        rel_dict = rel_mean[rel_labels[bg_idx]].clone().detach().requires_grad_(True)
+        rel_reps = union_features[bg_idx].clone().detach().requires_grad_(True)
 
         # transformation
-        if self.rand_start :
-            noise = self.random_perturb(rel_reps, attack='zero')
+        if self.rand_start and False :
+            noise = self.rand_perturb(rel_reps, attack='l2')
             rel_reps = rel_reps + noise
-            #rel_reps = torch.clamp(rel_reps, 0, 1)
 
         for _ in range(self.max_iter):
             # transformation of relational features
-            enc_reps = self.enc_transf(rel_reps)
-            rel_reps = self.dec_transf(enc_reps)
-            rel_logits = self.rel_logits(rel_reps)
+            in_reps = rel_reps
+            enc_reps = self.enc_transf(in_reps)
+
+            mean = self.mean(enc_reps)
+            logvar = self.std(enc_reps)
+            z = self.sample_normal(mean, logvar)
+
+            out_reps = self.dec_transf(z)
+            rel_reps = out_reps
+
+            #rel_logits = self.rel_logits(rel_reps)
 
             # tranformation loss
-            mse_loss = self.mse_loss(rel_reps, rel_dict)
-            ce_loss = self.ce_loss(rel_logits, mask_rel_labels[:,0].long())
+            #mse_loss = self.mse_loss(rel_reps, rel_dict)
+            #loss = self.ce_loss(rel_logits, mask_rel_labels[:,0].long())
+            #grad, = torch.autograd.grad(loss, [rel_reps])
+            #rel_reps = rel_reps - self.make_step(grad, 'l2', self.step_size)
 
-            loss = ce_loss + mse_loss
+            loss = self.criterion(out_reps, in_reps, mean, logvar)
+            grad, = torch.autograd.grad(loss, [z])
 
-            grad, = torch.autograd.grad(loss, [rel_reps])
-            rel_reps = rel_reps - self.make_step(grad, 'none', self.step_size)
+            # generate rel_reps
+            z_tilde = z - self.make_step(grad, 'l2', self.step_size)
+            rel_reps = self.dec_transf(z_tilde)
+
+        if self.rand_end and False :
+            noise = self.rand_perturb(rel_reps, attack='l2')
+            rel_reps = rel_reps + noise
 
         union_features[bg_idx] = rel_reps.half()
 
