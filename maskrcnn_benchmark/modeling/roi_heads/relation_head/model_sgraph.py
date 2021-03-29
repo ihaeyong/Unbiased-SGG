@@ -481,7 +481,6 @@ class RelTransform(nn.Module):
         # http://stats.stackexchange.com/a/205336
         # http://dpkingma.com/wordpress/wp-content/uploads/2015/12/talk_nips_workshop_2015.pdf
         sd = torch.exp(logvar*0.5)
-        #e = Variable(torch.randn(sd.size()))
         e = torch.randn_like(sd) # Sample from standard normal
         z = e.mul(sd).add_(mean)
 
@@ -489,8 +488,7 @@ class RelTransform(nn.Module):
 
     # Loss function
     def criterion(self, x_out, x_in, z_mu, z_logvar):
-
-        #bce_loss = F.binary_cross_entropy(x_out,x_in,size_average=False)
+        
         mse_loss = self.mse_loss(x_out, x_in)
         kld_loss = -0.5 * torch.sum(1 + z_logvar - (z_mu ** 2) - torch.exp(z_logvar))
         loss = (mse_loss + kld_loss) / x_out.size(0) # normalize by batch size
@@ -533,10 +531,6 @@ class RelTransform(nn.Module):
         rel_reps = union_features[bg_idx].clone().detach().requires_grad_(True)
 
         # transformation
-        if self.rand_start and False :
-            noise = self.rand_perturb(rel_reps, attack='l2')
-            rel_reps = rel_reps + noise
-
         for _ in range(self.max_iter):
             # transformation of relational features
             in_reps = rel_reps
@@ -552,21 +546,15 @@ class RelTransform(nn.Module):
             #rel_logits = self.rel_logits(rel_reps)
 
             # tranformation loss
-            #mse_loss = self.mse_loss(rel_reps, rel_dict)
             #loss = self.ce_loss(rel_logits, mask_rel_labels[:,0].long())
-            #grad, = torch.autograd.grad(loss, [rel_reps])
-            #rel_reps = rel_reps - self.make_step(grad, 'l2', self.step_size)
-
             loss = self.criterion(out_reps, in_reps, mean, logvar)
             grad, = torch.autograd.grad(loss, [z])
 
             # generate rel_reps
-            z_tilde = z - self.make_step(grad, 'l2', self.step_size)
-            rel_reps = self.dec_transf(z_tilde)
+            z = self.sample_normal(mean, logvar)
+            z = z - self.make_step(grad, 'l2', self.step_size)
 
-        if self.rand_end and False :
-            noise = self.rand_perturb(rel_reps, attack='l2')
-            rel_reps = rel_reps + noise
+            rel_reps = self.dec_transf(z)
 
         union_features[bg_idx] = rel_reps.half()
 
