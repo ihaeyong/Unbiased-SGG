@@ -488,7 +488,7 @@ class RelTransform(nn.Module):
 
     # Loss function
     def criterion(self, x_out, x_in, z_mu, z_logvar):
-        
+
         mse_loss = self.mse_loss(x_out, x_in)
         kld_loss = -0.5 * torch.sum(1 + z_logvar - (z_mu ** 2) - torch.exp(z_logvar))
         loss = (mse_loss + kld_loss) / x_out.size(0) # normalize by batch size
@@ -505,6 +505,7 @@ class RelTransform(nn.Module):
 
         freq_bias = freq_bias * torch.sigmoid(geo_dists)
 
+        freq_bias = F.softmax(freq_bias, 1)
         rel_covar = F.softmax(rel_covar, 1)
 
         # index of backgrounds / foregrounds
@@ -512,12 +513,11 @@ class RelTransform(nn.Module):
         fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
         # set target relational labels
-        if False:
+        if True:
             topk_prob, topk_idx = freq_bias.topk(1, largest=True)
             mask = topk_prob[bg_idx, 0] > 0.5
-            rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.float()
+            rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.long()
         else:
-            freq_bias = F.softmax(freq_bias)
             topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
 
             prob = torch.gather(rel_covar[bg_idx,], 1, topk_idx[bg_idx,])
