@@ -524,8 +524,9 @@ class RelTransform(nn.Module):
                 mask = torch.bernoulli(prob)
                 mask_rel_labels = topk_idx[bg_idx] * mask
                 rel_labels[bg_idx] = mask_rel_labels[:,0].long()
-                
+
                 tf_idx = np.where(mask.cpu() > 0)[0]
+                tf_idx = bg_idx[tf_idx]
 
         # relational dict
         #rel_dict = rel_mean[rel_labels[bg_idx]].clone().detach().requires_grad_(True)
@@ -558,7 +559,7 @@ class RelTransform(nn.Module):
                 grad, = torch.autograd.grad(loss, [z])
 
                 noise = self.rand_perturb(logvar,'l2')
-                logvar[bg_idx[tf_idx]] =  logvar[bg_idx[tf_idx]] + noise[bg_idx[tf_idx]]
+                logvar[tf_idx] =  logvar[tf_idx] + noise[tf_idx].half()
 
                 z = self.sample_normal(mean, logvar)
                 z = z - self.make_step(grad, 'l2', self.step_size)
