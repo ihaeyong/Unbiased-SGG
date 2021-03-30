@@ -444,8 +444,8 @@ class RelTransform(nn.Module):
         layer_init(self.mean, xavier=True)
         layer_init(self.std, xavier=True)
 
-        #self.rel_logits = nn.Linear(4096, 51, bias=True)
-        #layer_init(self.rel_logits, xavier=True)
+        self.rel_logits = nn.Linear(4096, 51, bias=True)
+        layer_init(self.rel_logits, xavier=True)
 
     def rand_perturb(self, inputs, attack, eps=0.5):
 
@@ -543,16 +543,16 @@ class RelTransform(nn.Module):
             out_reps = self.dec_transf(z)
             rel_reps = out_reps
 
-            #rel_logits = self.rel_logits(rel_reps)
+            rel_logits = self.rel_logits(rel_reps)
 
             # tranformation loss
-            #loss_ce = self.ce_loss(rel_logits, rel_labels[bg_idx].long())
-            loss = self.criterion(out_reps, in_reps, mean, logvar)
-            #loss += loss_ce
+            loss_ce = self.ce_loss(rel_logits, rel_labels[bg_idx].long())
+            loss = self.criterion(out_reps, rel_dict, mean, logvar)
+            loss += loss_ce
             grad, = torch.autograd.grad(loss, [z])
 
             # generate rel_reps
-            noise = self.rand_perturb(logvar,'randn')
+            noise = self.rand_perturb(logvar,'l2')
             z = self.sample_normal(mean, logvar+noise)
             z = z - self.make_step(grad, 'l2', self.step_size)
 
