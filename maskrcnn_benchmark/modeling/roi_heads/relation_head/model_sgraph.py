@@ -475,7 +475,7 @@ class RelTransform(nn.Module):
 
         return step
 
-    def sample_normal(self, mean, logvar):
+    def sample_normal(self, mean, logvar, logvar_add=None):
         # Using torch.normal(means,sds) returns a stochastic tensor which we cannot backpropogate through.
         # Instead we utilize the 'reparameterization trick'.
         # http://stats.stackexchange.com/a/205336
@@ -513,8 +513,8 @@ class RelTransform(nn.Module):
         fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
         # set target relational labels
-        if True:
-            topk_prob, topk_idx = freq_bias.topk(1, largest=True)
+        if False :
+            topk_prob, topk_idx = freq_bias.topk(1, largest=False)
             mask = topk_prob[bg_idx, 0] > 0.5
             rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.long()
         else:
@@ -546,12 +546,14 @@ class RelTransform(nn.Module):
             #rel_logits = self.rel_logits(rel_reps)
 
             # tranformation loss
-            #loss = self.ce_loss(rel_logits, mask_rel_labels[:,0].long())
+            #loss_ce = self.ce_loss(rel_logits, rel_labels[bg_idx].long())
             loss = self.criterion(out_reps, in_reps, mean, logvar)
+            #loss += loss_ce
             grad, = torch.autograd.grad(loss, [z])
 
             # generate rel_reps
-            z = self.sample_normal(mean, logvar)
+            noise = self.rand_perturb(logvar,'randn')
+            z = self.sample_normal(mean, logvar+noise)
             z = z - self.make_step(grad, 'l2', self.step_size)
 
             rel_reps = self.dec_transf(z)
