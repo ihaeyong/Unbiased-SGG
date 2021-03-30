@@ -527,8 +527,11 @@ class RelTransform(nn.Module):
             rel_labels[bg_idx] = mask_rel_labels[:,0].long()
 
         # relational dict
-        rel_dict = rel_mean[rel_labels[bg_idx]].clone().detach().requires_grad_(True)
-        rel_reps = union_features[bg_idx].clone().detach().requires_grad_(True)
+        #rel_dict = rel_mean[rel_labels[bg_idx]].clone().detach().requires_grad_(True)
+        #rel_reps = union_features[bg_idx].clone().detach().requires_grad_(True)
+
+        rel_dict = rel_mean[rel_labels].clone().detach().requires_grad_(True)
+        rel_reps = union_features
 
         # transformation
         for _ in range(self.max_iter):
@@ -546,7 +549,8 @@ class RelTransform(nn.Module):
             rel_logits = self.rel_logits(rel_reps)
 
             # tranformation loss
-            loss_ce = self.ce_loss(rel_logits, rel_labels[bg_idx].long())
+            #loss_ce = self.ce_loss(rel_logits, rel_labels[bg_idx].long())
+            loss_ce = self.ce_loss(rel_logits, rel_labels.long())
             loss = self.criterion(out_reps, rel_dict, mean, logvar)
             loss += loss_ce
             grad, = torch.autograd.grad(loss, [z])
@@ -558,6 +562,7 @@ class RelTransform(nn.Module):
 
             rel_reps = self.dec_transf(z)
 
-        union_features[bg_idx] = rel_reps.half()
-
+        #union_features[bg_idx] = rel_reps.half()
+        union_features = rel_reps.half()
+        
         return union_features, rel_labels
