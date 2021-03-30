@@ -514,17 +514,17 @@ class RelTransform(nn.Module):
             # set target relational labels
             if False :
                 topk_prob, topk_idx = freq_bias.topk(1, largest=True)
-                mask = topk_prob[bg_idx, 0] > 0.5
+                #mask = topk_prob[bg_idx, 0] > 0.5
+                mask = torch.bernoulli(topk_prob[bg_idx,0])
+                mask_rel_labels = topk_idx[bg_idx, 0] * mask
                 rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.long()
             elif True:
-                topk_prob, topk_idx = rel_covar.topk(1, largest=True)
-                mask = torch.bernoulli(topk_prob[bg_idx])
-                mask_rel_labels = topk_idx[bg_idx] * mask
+                topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
+                topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
+                mask = torch.bernoulli(topk_prob)
+                mask_rel_labels = topk_idx[bg_idx,] * mask
                 rel_labels[bg_idx] = mask_rel_labels[:,0].long()
 
-                tf_idx = np.where(mask.cpu() > 0)[0]
-                tf_idx = bg_idx[tf_idx]
-                
             elif False:
                 topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
                 prob = torch.gather(rel_covar[bg_idx,], 1, topk_idx[bg_idx,])
@@ -533,8 +533,8 @@ class RelTransform(nn.Module):
                 mask_rel_labels = topk_idx[bg_idx] * mask
                 rel_labels[bg_idx] = mask_rel_labels[:,0].long()
 
-                tf_idx = np.where(mask.cpu() > 0)[0]
-                tf_idx = bg_idx[tf_idx]
+            tf_idx = np.where(mask.cpu() > 0)[0]
+            tf_idx = bg_idx[tf_idx]
 
         # relational dict
         #rel_dict = rel_mean[rel_labels[bg_idx]].clone().detach().requires_grad_(True)
