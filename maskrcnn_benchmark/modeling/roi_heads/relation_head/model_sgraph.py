@@ -406,9 +406,7 @@ class RelTransform(nn.Module):
 
         self.mse_loss = nn.MSELoss() #nn.CrossEntropyLoss()
         self.ce_loss = nn.CrossEntropyLoss()
-        self.max_iter = 1
-        self.rand_start = True
-        self.rand_end = True
+        self.max_iter = 2
         self.step_size = 0.1
 
         # transfer
@@ -508,23 +506,24 @@ class RelTransform(nn.Module):
         freq_bias = F.softmax(freq_bias, 1)
         rel_covar = F.softmax(rel_covar, 1)
 
-        # index of backgrounds / foregrounds
-        bg_idx = np.where(rel_labels.cpu() == 0)[0]
-        fg_idx = np.where(rel_labels.cpu() > 0)[0]
+        if self.training:
+            # index of backgrounds / foregrounds
+            bg_idx = np.where(rel_labels.cpu() == 0)[0]
+            fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
-        # set target relational labels
-        if False :
-            topk_prob, topk_idx = freq_bias.topk(1, largest=False)
-            mask = topk_prob[bg_idx, 0] > 0.5
-            rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.long()
-        else:
-            topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
+            # set target relational labels
+            if False :
+                topk_prob, topk_idx = freq_bias.topk(1, largest=False)
+                mask = topk_prob[bg_idx, 0] > 0.5
+                rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.long()
+            else:
+                topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
 
-            prob = torch.gather(rel_covar[bg_idx,], 1, topk_idx[bg_idx,])
+                prob = torch.gather(rel_covar[bg_idx,], 1, topk_idx[bg_idx,])
 
-            mask = torch.bernoulli(prob)
-            mask_rel_labels = topk_idx[bg_idx] * mask
-            rel_labels[bg_idx] = mask_rel_labels[:,0].long()
+                mask = torch.bernoulli(prob)
+                mask_rel_labels = topk_idx[bg_idx] * mask
+                rel_labels[bg_idx] = mask_rel_labels[:,0].long()
 
         # relational dict
         #rel_dict = rel_mean[rel_labels[bg_idx]].clone().detach().requires_grad_(True)
@@ -546,23 +545,24 @@ class RelTransform(nn.Module):
             out_reps = self.dec_transf(z)
             rel_reps = out_reps
 
-            rel_logits = self.rel_logits(rel_reps)
-
             # tranformation loss
-            #loss_ce = self.ce_loss(rel_logits, rel_labels[bg_idx].long())
-            loss_ce = self.ce_loss(rel_logits, rel_labels.long())
-            loss = self.criterion(out_reps, rel_dict, mean, logvar)
-            loss += loss_ce
-            grad, = torch.autograd.grad(loss, [z])
+            if self.training:
+                rel_logits = self.rel_logits(rel_reps)
 
-            # generate rel_reps
-            noise = self.rand_perturb(logvar,'l2')
-            z = self.sample_normal(mean, logvar+noise)
-            z = z - self.make_step(grad, 'l2', self.step_size)
+                #loss_ce = self.ce_loss(rel_logits, rel_labels[bg_idx].long())
+                loss_ce = self.ce_loss(rel_logits, rel_labels.long())
+                loss = self.criterion(out_reps, rel_dict, mean, logvar)
+                loss += loss_ce
+                grad, = torch.autograd.grad(loss, [z])
 
-            rel_reps = self.dec_transf(z)
+                noise = self.rand_perturb(logvar,'l2')
+
+                z = self.sample_normal(mean, logvar+noise)
+                z = z - self.make_step(grad, 'l2', self.step_size)
+
+                rel_reps = self.dec_transf(z)
 
         #union_features[bg_idx] = rel_reps.half()
         union_features = rel_reps.half()
-        
+
         return union_features, rel_labels

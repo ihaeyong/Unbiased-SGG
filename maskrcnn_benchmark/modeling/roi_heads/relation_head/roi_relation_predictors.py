@@ -365,13 +365,15 @@ class SGraphPredictor(nn.Module):
             self.rel_mean[rel_labels] = self.moving_avg(
                 self.rel_mean[rel_labels], union_features * rel_mask[:,None])
 
-            rel_covar = torch.matmul(union_features, self.rel_mean.transpose(0,1))
-            union_features, rel_labels = self.rel_transform(union_features,
-                                                            self.rel_mean,
-                                                            rel_covar,
-                                                            freq_bias,
-                                                            geo_dists,
-                                                            rel_labels)
+        rel_covar = torch.matmul(union_features, self.rel_mean.transpose(0,1))
+        union_features, rel_labels = self.rel_transform(union_features,
+                                                        self.rel_mean,
+                                                        rel_covar,
+                                                        freq_bias,
+                                                        geo_dists,
+                                                        rel_labels)
+
+        if self.training:
             rel_labels = rel_labels.split(num_rels, dim=0)
 
         # sum of non-vis/visual dists
@@ -381,7 +383,7 @@ class SGraphPredictor(nn.Module):
                                                                      emb_dists,
                                                                      freq_dists)
         rel_cl_loss = None
-
+        
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
 
