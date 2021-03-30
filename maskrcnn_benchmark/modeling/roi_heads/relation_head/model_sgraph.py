@@ -406,7 +406,7 @@ class RelTransform(nn.Module):
 
         self.mse_loss = nn.MSELoss() #nn.CrossEntropyLoss()
         self.ce_loss = nn.CrossEntropyLoss()
-        self.max_iter = 2
+        self.max_iter = 1
         self.step_size = 0.1
 
         # transfer
@@ -513,12 +513,20 @@ class RelTransform(nn.Module):
 
             # set target relational labels
             if False :
-                topk_prob, topk_idx = freq_bias.topk(1, largest=False)
+                topk_prob, topk_idx = freq_bias.topk(1, largest=True)
                 mask = topk_prob[bg_idx, 0] > 0.5
                 rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.long()
-            else:
-                topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
+            elif True:
+                topk_prob, topk_idx = rel_covar.topk(1, largest=True)
+                mask = torch.bernoulli(topk_prob[bg_idx])
+                mask_rel_labels = topk_idx[bg_idx] * mask
+                rel_labels[bg_idx] = mask_rel_labels[:,0].long()
 
+                tf_idx = np.where(mask.cpu() > 0)[0]
+                tf_idx = bg_idx[tf_idx]
+                
+            elif False:
+                topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
                 prob = torch.gather(rel_covar[bg_idx,], 1, topk_idx[bg_idx,])
 
                 mask = torch.bernoulli(prob)
