@@ -498,10 +498,14 @@ class RelTransform(nn.Module):
         # for inverse frequency
         if True :
             freq_bias = 1 - torch.sigmoid(freq_bias)
-        else:
+            freq_bias = freq_bias * torch.sigmoid(geo_dists)
+        elif False :
+            freq_bias = geo_dists
+        elif True:
+            freq_bias = geo_dists * freq_bias
+        elif False:
             freq_bias = torch.sigmoid(freq_bias)
-
-        freq_bias = freq_bias * torch.sigmoid(geo_dists)
+            freq_bias = freq_bias * torch.sigmoid(geo_dists)
 
         freq_bias = F.softmax(freq_bias, 1)
         rel_covar = F.softmax(rel_covar, 1)
@@ -518,6 +522,7 @@ class RelTransform(nn.Module):
                 mask = torch.bernoulli(topk_prob[bg_idx,0])
                 mask_rel_labels = topk_idx[bg_idx, 0] * mask
                 rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.long()
+                
             elif True:
                 topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
                 topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
