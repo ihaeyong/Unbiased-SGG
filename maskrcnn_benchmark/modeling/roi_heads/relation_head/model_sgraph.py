@@ -13,7 +13,10 @@ from .utils_relation import layer_init, seq_init
 
 from .model_sgraph_with_context import SpectralMessage
 
+from .model_sgraph_env import VGEnv
+
 from torch.autograd import Variable, grad
+import torch.optim as optim
 
 class SpectralContext(nn.Module):
     """
@@ -445,6 +448,11 @@ class RelTransform(nn.Module):
         self.rel_logits = nn.Linear(4096, 51, bias=True)
         layer_init(self.rel_logits, xavier=True)
 
+        # initialize agent
+        self.agent = ActorCriticNNAgent(VGNet)
+        # initialize environment
+        self.env = SGEnv(type='train', seed=None)
+
     def rand_perturb(self, inputs, attack, eps=0.5):
 
         if attack == 'inf':
@@ -478,7 +486,7 @@ class RelTransform(nn.Module):
         # Instead we utilize the 'reparameterization trick'.
         # http://stats.stackexchange.com/a/205336
         # http://dpkingma.com/wordpress/wp-content/uploads/2015/12/talk_nips_workshop_2015.pdf
-        sd = torch.exp(logvar*0.5)
+        sd = torch.exp(logvar * 0.5)
         e = torch.randn_like(sd) # Sample from standard normal
         z = e.mul(sd).add_(mean)
 
@@ -496,14 +504,14 @@ class RelTransform(nn.Module):
     def forward(self, union_features, rel_mean, rel_covar, freq_bias, geo_dists, rel_labels):
 
         # for inverse frequency
-        if True :
+        if False :
             freq_bias = 1 - torch.sigmoid(freq_bias)
             freq_bias = freq_bias * torch.sigmoid(geo_dists)
-        elif False :
+        elif True :
             freq_bias = geo_dists
-        elif True:
+        elif False :
             freq_bias = geo_dists * freq_bias
-        elif False:
+        elif False :
             freq_bias = torch.sigmoid(freq_bias)
             freq_bias = freq_bias * torch.sigmoid(geo_dists)
 
@@ -522,11 +530,13 @@ class RelTransform(nn.Module):
                 mask = torch.bernoulli(topk_prob[bg_idx,0])
                 mask_rel_labels = topk_idx[bg_idx, 0] * mask
                 rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.long()
-                
+
             elif True:
                 topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
                 topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
-                mask = torch.bernoulli(topk_prob)
+                bias = torch.ones_like(topk_prob) * 0.1
+                topk_prob = topk_prob - bias
+                mask = torch.bernoulli(torch.clamp(topk_prob, 0,1))
                 mask_rel_labels = topk_idx[bg_idx,] * mask
                 rel_labels[bg_idx] = mask_rel_labels[:,0].long()
 
@@ -542,9 +552,6 @@ class RelTransform(nn.Module):
             tf_idx = bg_idx[tf_idx]
 
         # relational dict
-        #rel_dict = rel_mean[rel_labels[bg_idx]].clone().detach().requires_grad_(True)
-        #rel_reps = union_features[bg_idx].clone().detach().requires_grad_(True)
-
         rel_dict = rel_mean[rel_labels].clone().detach().requires_grad_(True)
         rel_reps = union_features
 
@@ -565,7 +572,6 @@ class RelTransform(nn.Module):
             if self.training:
                 rel_logits = self.rel_logits(rel_reps)
 
-                #loss_ce = self.ce_loss(rel_logits, rel_labels[bg_idx].long())
                 loss_ce = self.ce_loss(rel_logits, rel_labels.long())
                 loss = self.criterion(out_reps, rel_dict, mean, logvar)
                 loss += loss_ce
@@ -579,7 +585,262 @@ class RelTransform(nn.Module):
 
                 rel_reps = self.dec_transf(z)
 
-        #union_features[bg_idx] = rel_reps.half()
         union_features = rel_reps.half()
 
         return union_features, rel_labels
+
+
+
+class RLTransform(nn.Module):
+    """
+    Transform relational features into closes to ones closed to foregrounds
+    """
+
+    def __init__(self, cfg):
+        super(RLTransform, self).__init__()
+
+        # configure
+        self.cfg = cfg
+
+        # initialize agent
+        self.agent = ActorCriticNNAgent(VGNet)
+        # initialize environment
+        self.env = VGEnv(type='train', seed=None)
+
+    def forward(self, union_features, rel_mean, rel_covar, freq_bias, geo_dists, rel_labels):
+
+        device = union_features.get_device()
+        # rewards
+        rewards = []
+        observations = []
+
+        # batch size
+        episodes = union_features.size(0)
+        # play out each episode
+        X = union_features.cpu()
+        if rel_labels is not None:
+            Y = rel_labels.cpu()
+
+        for ep in range(episodes):
+            if rel_labels is not None:
+                observation = self.env.reset(X[ep], Y[ep])
+            else:
+                observation = self.env.reset(X[ep])
+            self.agent.new_episode()
+            total_reward = 0
+
+            done = False
+            while not done:
+                # given env. and observation,agent take a action
+                action, value = self.agent.act(observation, device, self.env)
+                observation, reward, done, info = self.env.step(action, value)
+                self.agent.store_reward(reward)
+
+                total_reward += reward
+
+            rewards.append(total_reward)
+            observation = Variable(torch.tensor(observation)).to(device)
+            observations.append(observation[None,:])
+
+        # adjust agent parameters based on played episodes
+        if rel_labels is not None:
+            self.agent.update(device)
+
+        observations = cat(observations)
+
+        return observations, rel_labels
+
+
+class VGNet(nn.Module):
+    '''
+    A CNN with ReLU activations and a three-headed output, two for the 
+    actor and one for the critic
+    y1 - action distribution
+    y2 - critic's estimate of value
+
+    Input shape:    (batch_size, D_in)
+    Output shape:   (batch_size, 40), (batch_size, 1)
+    '''
+
+    def __init__(self):
+
+        super(VGNet, self).__init__()
+
+        self.out_dir = nn.Linear(4096, 2)
+        self.out_digit = nn.Linear(4096, 51)
+        self.out_critic = nn.Linear(4096, 1)
+
+    def forward(self, x):
+
+        pi1 = self.out_digit(x)
+        pi1 = F.softmax(pi1, dim=-1)
+
+        pi2 = self.out_dir(x)
+        pi2 = F.softmax(pi2, dim=-1)
+
+        # https://discuss.pytorch.org/t/batch-outer-product/4025
+        y1 = torch.bmm(pi1.unsqueeze(2), pi2.unsqueeze(1))
+        y1 = y1.view(-1, 51 * 2)
+
+        y2 = self.out_critic(x)
+
+        if not self.training:
+            y2 = torch.sigmoid(y2)
+
+        return y1, y2
+
+class ActorCriticNNAgent(nn.Module):
+    '''
+    Neural-net agent that trains using the actor-critic algorithm. The critic
+    is a value function that returns expected discounted reward given the
+    state as input. We use advantage defined as
+
+        A = r + g * V(s') - V(s)
+
+    Notation:
+        A - advantage
+        V - value function
+        r - current reward
+        g - discount factor
+        s - current state
+        s' - next state
+    '''
+
+    #def __init__(self, new_network, params=None, obs_to_input=lambda x: x,
+    #             lr=1e-3, df=0.1, alpha=0.5):
+
+    def __init__(self, new_network, params=None, lr=1e-3, df=0.1, alpha=0.5):
+
+        super(ActorCriticNNAgent, self).__init__()
+
+        # model and parameters
+        if params is not None:
+            self.model = new_network(params)
+        else:
+            self.model = new_network()
+        if isinstance(self.model, torch.nn.Module):
+            self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+        self.df = df # discount factor
+        self.alpha = alpha # multiply critic updates by this factor
+
+        # initialize replay history
+        self.replay = []
+
+        # if trainable is changed to false, the model won't be updated
+        self.trainable = True
+
+    def torch_to_numpy(self, tensor):
+        return tensor.data.numpy()
+
+    def numpy_to_torch(self, array):
+        return torch.tensor(array).float()
+
+    def obs_to_input(self, obs):
+        # reshape to (1, 28, 28)
+        return obs[np.newaxis, ...]
+
+    def act(self, x, device, env=None, display=False):
+
+        # feed observation as input to net to get distribution as output
+        x = self.obs_to_input(x)
+        x = self.numpy_to_torch(x)
+        x = Variable(x).cuda(device).requires_grad_(False)
+        y1, y2 = self.model(x)
+
+        pi = self.torch_to_numpy(y1.cpu()).flatten()
+        v  = self.torch_to_numpy(y2.cpu()).squeeze()
+
+        # sample action from distribution
+        pi = pi / pi.sum()
+        a = np.random.choice(np.arange(2*51), p=pi)
+
+        # update current episode in replay with observation and chosen action
+        if self.trainable:
+            self.replay[-1]['observations'].append(x)
+            self.replay[-1]['actions'].append(a)
+
+        return np.array(a), np.array(v)
+
+    def new_episode(self):
+        # start a new episode in replay
+        self.replay.append({'observations': [], 'actions': [], 'rewards': []})
+
+    def store_reward(self, r):
+        # insert 0s for actions that received no reward; end with reward r
+        episode = self.replay[-1]
+        T_no_reward = len(episode['actions']) - len(episode['rewards']) - 1
+        episode['rewards'] += [0.0] * T_no_reward + [r]
+
+    def _calculate_discounted_rewards(self):
+        # calculate and store discounted rewards per episode
+
+        for episode in self.replay:
+
+            R = episode['rewards']
+            R_disc = []
+            R_sum = 0
+            for r in R[::-1]:
+                R_sum = r + self.df * R_sum
+                R_disc.insert(0, R_sum)
+
+            episode['rewards_disc'] = R_disc
+
+    def update(self, device):
+
+        assert(self.trainable)
+
+        episode_losses = torch.tensor(0.0).to(device)
+        N = len(self.replay)
+        self._calculate_discounted_rewards()
+
+        for episode in self.replay:
+
+            O = episode['observations']
+            A = episode['actions']
+            R = self.numpy_to_torch(episode['rewards'])
+            R_disc = self.numpy_to_torch(episode['rewards_disc'])
+            T = len(R_disc)
+
+            # forward pass, Y1 is pi(a | s), Y2 is V(s)
+            #X = self.numpy_to_torch([self.obs_to_input(o) for o in O])
+            X = torch.cat([o for o in O])
+            Y1, Y2 = self.model(X)
+            pi = Y1
+            Vs_curr = Y2.view(-1)
+
+            # log probabilities of selected actions
+            log_prob = torch.log(pi[np.arange(T), A])
+
+            # advantage of selected actions over expected reward given state
+            zero = Variable(torch.tensor([0.])).cuda(device)
+            Vs_next = torch.cat((Vs_curr[1:], zero))
+            adv = R.to(device) + self.df * Vs_next - Vs_curr
+
+            # ignore gradients so the critic isn't affected by actor loss
+            adv = adv.detach()
+
+            # actor loss is -1 * advantage-weighted sum of log likelihood
+            # critic loss is the SE between values and discounted rewards
+            actor_loss = -torch.dot(log_prob, adv)
+            critic_loss = torch.sum((R_disc.to(device) - Vs_curr) ** 2)
+            episode_losses += actor_loss + critic_loss * self.alpha
+
+        # backward pass
+        self.optimizer.zero_grad()
+        loss = episode_losses / N
+        loss.backward()
+        self.optimizer.step()
+
+        # reset the replay history
+        self.replay = []
+
+    def copy(self):
+
+        # create a copy of this agent with frozen weights
+        agent = ActorCriticNNAgent(VGNet)
+        agent.model = copy.deepcopy(self.model)
+        agent.trainable = False
+        for param in agent.model.parameters():
+            param.requires_grad = False
+
+        return agent
