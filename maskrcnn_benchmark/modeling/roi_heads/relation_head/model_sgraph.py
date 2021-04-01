@@ -626,9 +626,9 @@ class RLTransform(nn.Module):
 
             topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
             topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
-            bias = torch.ones_like(topk_prob) * 0.05
+            bias = torch.ones_like(topk_prob) * 1e-3
             topk_prob = topk_prob - bias
-            mask = torch.bernoulli(torch.clamp(topk_prob, 0, 1))
+            mask = torch.bernoulli(torch.clamp(topk_prob, 1e-5, 1.0))
             mask_rel_labels = topk_idx[bg_idx,] * mask
             rel_labels[bg_idx] = mask_rel_labels[:,0].long()
 
@@ -707,10 +707,10 @@ class VGNet(nn.Module):
         self.enc_transf.apply(seq_init)
         self.dec_transf.apply(seq_init)
 
-        self.mean = nn.Linear(4096 // 8, 4096 // 8, bias=True)
-        self.std = nn.Linear(4096 // 8, 4096 // 8, bias=True)
-        layer_init(self.mean, xavier=True)
-        layer_init(self.std, xavier=True)
+        #self.mean = nn.Linear(4096 // 8, 4096 // 8, bias=True)
+        #self.std = nn.Linear(4096 // 8, 4096 // 8, bias=True)
+        #layer_init(self.mean, xavier=True)
+        #layer_init(self.std, xavier=True)
 
         self.out_dir = nn.Linear(4096, 2)
         self.out_digit = nn.Linear(4096, 51)
@@ -723,19 +723,32 @@ class VGNet(nn.Module):
 
         return z
 
+    # Loss function
+    def criterion(self, x_out, x_in, z_mu, z_logvar):
+
+        mse_loss = self.mse_loss(x_out, x_in)
+        kld_loss = -0.5 * torch.sum(1 + z_logvar - (z_mu ** 2) - torch.exp(z_logvar))
+        loss = (mse_loss + kld_loss) / x_out.size(0) # normalize by batch size
+
+        return loss
+
     def forward(self, x, eps):
 
         enc_x = self.enc_transf(x)
-        mean_x = self.mean(enc_x)
-        logvar_x = self.std(enc_x)
+        #mean_x = self.mean(enc_x)
+        #logvar_x = self.std(enc_x)
+        #z = self.sample_normal(mean_x, logvar_x, eps)
+        dec_x = self.dec_transf(enc_x)
 
-        z = self.sample_normal(mean_x, logvar_x, eps)
-        x = self.dec_transf(z)
+        #loss = self.criterion(dec_x, x, mean_x, logvar_x)
+        #grad, = torch.autograd.grad(loss, [z])
+        #z = self.sample_normal(mean, logvar)
+        #z = z - self.make_step(grad, 'l2', self.step_size)
 
-        pi1 = self.out_digit(x)
+        pi1 = self.out_digit(dec_x)
         pi1 = F.softmax(pi1, dim=-1)
 
-        pi2 = self.out_dir(x)
+        pi2 = self.out_dir(dec_x)
         pi2 = F.softmax(pi2, dim=-1)
 
         # https://discuss.pytorch.org/t/batch-outer-product/4025
@@ -866,7 +879,6 @@ class ActorCriticNNAgent(nn.Module):
             T = len(R_disc)
 
             # forward pass, Y1 is pi(a | s), Y2 is V(s)
-            #X = self.numpy_to_torch([self.obs_to_input(o) for o in O])
             X = torch.cat([o for o in O])
             eps = torch.cat([e for e in E])
             Y1, Y2 = self.model(X, eps)
