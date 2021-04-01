@@ -384,7 +384,7 @@ class SGraphPredictor(nn.Module):
                                                                      emb_dists,
                                                                      freq_dists)
         rel_cl_loss = None
-        
+
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
 

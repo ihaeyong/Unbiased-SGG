@@ -62,6 +62,7 @@ class VGEnv(gym.Env):
 
         # make move and reveal square
         self.var += move_map[dir]
+        self.var_eps += move_map[dir] * 0.1
         self._reveal()
 
         # state (observation) consists of masked image (h x w)
@@ -87,6 +88,7 @@ class VGEnv(gym.Env):
         # resets the environment and returns initial observation
         self.mu = 0.0
         self.var = 0.1
+        self.var_eps = 0.1
         self.noise = np.zeros((4096))
         self.eps = np.zeros((512))
 
@@ -110,6 +112,6 @@ class VGEnv(gym.Env):
     def _reveal(self):
         # reveal the window at self.pos
         self.noise = np.random.normal(self.mu, self.var, 4096)
-        self.eps = np.random.normal(self.mu, self.var, 512)
+        #self.eps = np.random.normal(self.mu, self.var_eps, 512)
         #self.mask = np.clip(self.mask, -1, 1)
 

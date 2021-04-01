@@ -626,7 +626,7 @@ class RLTransform(nn.Module):
 
             topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
             topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
-            bias = torch.ones_like(topk_prob) * 0.01
+            bias = torch.ones_like(topk_prob) * 0.05
             topk_prob = topk_prob - bias
             mask = torch.bernoulli(torch.clamp(topk_prob, 0, 1))
             mask_rel_labels = topk_idx[bg_idx,] * mask
