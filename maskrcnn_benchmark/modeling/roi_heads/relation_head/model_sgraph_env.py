@@ -65,7 +65,7 @@ class VGEnv(gym.Env):
         self._reveal()
 
         # state (observation) consists of masked image (h x w)
-        obs = self._get_obs()
+        obs,eps = self._get_obs()
 
         if self.Y is not None:
             # -0.1 penalty for each additional timestep
@@ -81,13 +81,14 @@ class VGEnv(gym.Env):
         # info is empty (for now)
         info = {}
 
-        return obs, reward, done, info
+        return obs, eps, reward, done, info
 
     def reset(self, x, y=None):
         # resets the environment and returns initial observation
         self.mu = 0.0
         self.var = 0.1
         self.noise = np.zeros((4096))
+        self.eps = np.zeros((512))
 
         self.X = self.torch_to_numpy(x)
         if y is not None:
@@ -102,11 +103,13 @@ class VGEnv(gym.Env):
 
     def _get_obs(self):
         obs = self.X + self.noise
+        eps = self.eps
         #assert self.observation_space.contains(obs)
-        return obs
+        return obs, eps
 
     def _reveal(self):
         # reveal the window at self.pos
         self.noise = np.random.normal(self.mu, self.var, 4096)
+        self.eps = np.random.normal(self.mu, self.var, 512)
         #self.mask = np.clip(self.mask, -1, 1)
 

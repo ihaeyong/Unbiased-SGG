@@ -626,7 +626,7 @@ class RLTransform(nn.Module):
 
             topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
             topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
-            bias = torch.ones_like(topk_prob) * 0.1
+            bias = torch.ones_like(topk_prob) * 0.01
             topk_prob = topk_prob - bias
             mask = torch.bernoulli(torch.clamp(topk_prob, 0, 1))
             mask_rel_labels = topk_idx[bg_idx,] * mask
@@ -644,7 +644,7 @@ class RLTransform(nn.Module):
             Y = rel_labels.cpu()
 
             for ep in tf_idx:
-                observation = self.env.reset(X[ep], Y[ep])
+                observation, eps = self.env.reset(X[ep], Y[ep])
 
                 self.agent.new_episode()
                 total_reward = 0
@@ -652,8 +652,8 @@ class RLTransform(nn.Module):
                 done = False
                 while not done:
                     # given env. and observation,agent take a action
-                    action, value = self.agent.act(observation, device, self.env)
-                    observation, reward, done, info = self.env.step(action, value)
+                    action, value = self.agent.act(observation, eps, device, self.env)
+                    observation, eps, reward, done, info = self.env.step(action, value)
                     self.agent.store_reward(reward)
 
                     total_reward += reward
@@ -684,11 +684,53 @@ class VGNet(nn.Module):
 
         super(VGNet, self).__init__()
 
+        # transfer
+        enc_transf = [
+            nn.Linear(4096, 4096 // 2, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096 // 2, 4096 // 4, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096 // 4, 4096 // 8, bias=True),
+            nn.ReLU(inplace=True),
+        ]
+
+        dec_transf = [
+            nn.Linear(4096 // 8, 4096 // 4, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096 // 4, 4096 // 2, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096 // 2, 4096, bias=True),
+        ]
+
+        self.enc_transf = nn.Sequential(*enc_transf)
+        self.dec_transf = nn.Sequential(*dec_transf)
+        self.enc_transf.apply(seq_init)
+        self.dec_transf.apply(seq_init)
+
+        self.mean = nn.Linear(4096 // 8, 4096 // 8, bias=True)
+        self.std = nn.Linear(4096 // 8, 4096 // 8, bias=True)
+        layer_init(self.mean, xavier=True)
+        layer_init(self.std, xavier=True)
+
         self.out_dir = nn.Linear(4096, 2)
         self.out_digit = nn.Linear(4096, 51)
         self.out_critic = nn.Linear(4096, 1)
 
-    def forward(self, x):
+    def sample_normal(self, mean, logvar, eps):
+        sd = torch.exp(logvar * 0.5)
+        e = torch.randn_like(sd) + eps # Sample from standard normal
+        z = e.mul(sd).add_(mean)
+
+        return z
+
+    def forward(self, x, eps):
+
+        enc_x = self.enc_transf(x)
+        mean_x = self.mean(enc_x)
+        logvar_x = self.std(enc_x)
+
+        z = self.sample_normal(mean_x, logvar_x, eps)
+        x = self.dec_transf(z)
 
         pi1 = self.out_digit(x)
         pi1 = F.softmax(pi1, dim=-1)
@@ -755,13 +797,17 @@ class ActorCriticNNAgent(nn.Module):
         # reshape to (1, 28, 28)
         return obs[np.newaxis, ...]
 
-    def act(self, x, device, env=None, display=False):
-
+    def act(self, x, eps, device, env=None, display=False):
         # feed observation as input to net to get distribution as output
         x = self.obs_to_input(x)
         x = self.numpy_to_torch(x)
+        eps = self.obs_to_input(eps)
+        eps = self.numpy_to_torch(eps)
+
         x = Variable(x).cuda(device).requires_grad_(False)
-        y1, y2 = self.model(x)
+        eps = Variable(eps).cuda(device).requires_grad_(False)
+
+        y1, y2 = self.model(x, eps)
 
         pi = self.torch_to_numpy(y1.cpu()).flatten()
         v  = self.torch_to_numpy(y2.cpu()).squeeze()
@@ -773,13 +819,14 @@ class ActorCriticNNAgent(nn.Module):
         # update current episode in replay with observation and chosen action
         if self.trainable:
             self.replay[-1]['observations'].append(x)
+            self.replay[-1]['eps'].append(eps)
             self.replay[-1]['actions'].append(a)
 
         return np.array(a), np.array(v)
 
     def new_episode(self):
         # start a new episode in replay
-        self.replay.append({'observations': [], 'actions': [], 'rewards': []})
+        self.replay.append({'observations': [], 'eps': [], 'actions': [], 'rewards': []})
 
     def store_reward(self, r):
         # insert 0s for actions that received no reward; end with reward r
@@ -812,6 +859,7 @@ class ActorCriticNNAgent(nn.Module):
         for episode in self.replay:
 
             O = episode['observations']
+            E = episode['eps']
             A = episode['actions']
             R = self.numpy_to_torch(episode['rewards'])
             R_disc = self.numpy_to_torch(episode['rewards_disc'])
@@ -820,7 +868,8 @@ class ActorCriticNNAgent(nn.Module):
             # forward pass, Y1 is pi(a | s), Y2 is V(s)
             #X = self.numpy_to_torch([self.obs_to_input(o) for o in O])
             X = torch.cat([o for o in O])
-            Y1, Y2 = self.model(X)
+            eps = torch.cat([e for e in E])
+            Y1, Y2 = self.model(X, eps)
             pi = Y1
             Vs_curr = Y2.view(-1)
 
