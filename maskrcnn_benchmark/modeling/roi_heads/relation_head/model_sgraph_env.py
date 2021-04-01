@@ -30,7 +30,18 @@ class VGEnv(gym.Env):
             np.random.seed(seed=seed)
 
         self.mask = np.zeros((4096))
-        self.MAX_STEPS = 9
+        self.MAX_STEPS = 1
+
+        # predicate inverse proportion
+        fg_rel = np.load('./datasets/vg/fg_matrix.npy')
+        bg_rel = np.load('./datasets/vg/bg_matrix.npy')
+        fg_rel[:,:,0] = bg_rel
+        pred_freq = fg_rel.sum(0).sum(0)
+
+        # pred inverse proportion
+        pred_inv_prop = 1.0 / np.power(pred_freq, 1/2)
+        max_m = 1.0
+        self.pred_inv_prop = pred_inv_prop * (max_m / pred_inv_prop.max())
 
     def torch_to_numpy(self, tensor):
         return tensor.data.numpy()
@@ -45,8 +56,8 @@ class VGEnv(gym.Env):
         self.steps += 1
 
         move_map = {
-            0:  0.1,  # increase variance
-            1: -0.1,  # decrease variance
+            0:  0.01,  # increase variance
+            1: -0.01,  # decrease variance
         }
 
         # make move and reveal square
@@ -59,7 +70,7 @@ class VGEnv(gym.Env):
         if self.Y is not None:
             # -0.1 penalty for each additional timestep
             # +1.0 for correct guess
-            reward = -0.1 + int(Y_pred == self.Y)
+            reward = -0.1 + int(Y_pred == self.Y) * self.pred_inv_prop[self.Y]
 
             # game ends if prediction is correct or max steps is reached
             done = Y_pred == self.Y or self.steps >= self.MAX_STEPS
@@ -75,8 +86,8 @@ class VGEnv(gym.Env):
     def reset(self, x, y=None):
         # resets the environment and returns initial observation
         self.mu = 0.0
-        self.var = 1.0
-        self.mask = np.zeros((4096))
+        self.var = 0.1
+        self.noise = np.zeros((4096))
 
         self.X = self.torch_to_numpy(x)
         if y is not None:
@@ -85,17 +96,17 @@ class VGEnv(gym.Env):
             self.Y = None
 
         self.steps = 0
+        self.MAX_STEPS = 9
 
         return self._get_obs()
 
     def _get_obs(self):
-        obs = self.X * self.mask
+        obs = self.X + self.noise
         #assert self.observation_space.contains(obs)
         return obs
 
     def _reveal(self):
-
         # reveal the window at self.pos
-        self.mask = np.random.normal(self.mu, self.var, 4096)
-        self.mask = np.clip(self.mask, -1, 1)
+        self.noise = np.random.normal(self.mu, self.var, 4096)
+        #self.mask = np.clip(self.mask, -1, 1)
 

@@ -507,9 +507,9 @@ class RelTransform(nn.Module):
         if False :
             freq_bias = 1 - torch.sigmoid(freq_bias)
             freq_bias = freq_bias * torch.sigmoid(geo_dists)
-        elif True :
-            freq_bias = geo_dists
         elif False :
+            freq_bias = geo_dists
+        elif True :
             freq_bias = geo_dists * freq_bias
         elif False :
             freq_bias = torch.sigmoid(freq_bias)
@@ -607,48 +607,66 @@ class RLTransform(nn.Module):
         # initialize environment
         self.env = VGEnv(type='train', seed=None)
 
-    def forward(self, union_features, rel_mean, rel_covar, freq_bias, geo_dists, rel_labels):
+    def forward(self, union_features, rel_mean, rel_covar,
+                freq_bias, geo_dists, rel_labels):
 
+        # get device
         device = union_features.get_device()
-        # rewards
-        rewards = []
-        observations = []
 
-        # batch size
-        episodes = union_features.size(0)
-        # play out each episode
-        X = union_features.cpu()
-        if rel_labels is not None:
+        # sample classes
+        # for inverse frequency
+        freq_bias = 1 - torch.sigmoid(freq_bias)
+        freq_bias = freq_bias * torch.sigmoid(geo_dists)
+        freq_bias = F.softmax(freq_bias, 1)
+
+        if self.training:
+            # index of backgrounds / foregrounds
+            bg_idx = np.where(rel_labels.cpu() == 0)[0]
+            fg_idx = np.where(rel_labels.cpu() > 0)[0]
+
+            topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
+            topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
+            bias = torch.ones_like(topk_prob) * 0.1
+            topk_prob = topk_prob - bias
+            mask = torch.bernoulli(torch.clamp(topk_prob, 0, 1))
+            mask_rel_labels = topk_idx[bg_idx,] * mask
+            rel_labels[bg_idx] = mask_rel_labels[:,0].long()
+
+            tf_idx = np.where(mask.cpu() > 0)[0]
+            tf_idx = bg_idx[tf_idx]
+
+            # RL-trasformation
+            rewards = []
+            observations = []
+
+            # play out each episode
+            X = union_features.cpu()
             Y = rel_labels.cpu()
 
-        for ep in range(episodes):
-            if rel_labels is not None:
+            for ep in tf_idx:
                 observation = self.env.reset(X[ep], Y[ep])
-            else:
-                observation = self.env.reset(X[ep])
-            self.agent.new_episode()
-            total_reward = 0
 
-            done = False
-            while not done:
-                # given env. and observation,agent take a action
-                action, value = self.agent.act(observation, device, self.env)
-                observation, reward, done, info = self.env.step(action, value)
-                self.agent.store_reward(reward)
+                self.agent.new_episode()
+                total_reward = 0
 
-                total_reward += reward
+                done = False
+                while not done:
+                    # given env. and observation,agent take a action
+                    action, value = self.agent.act(observation, device, self.env)
+                    observation, reward, done, info = self.env.step(action, value)
+                    self.agent.store_reward(reward)
 
-            rewards.append(total_reward)
-            observation = Variable(torch.tensor(observation)).to(device)
-            observations.append(observation[None,:])
+                    total_reward += reward
 
-        # adjust agent parameters based on played episodes
-        if rel_labels is not None:
-            self.agent.update(device)
+                rewards.append(total_reward)
+                transformation = Variable(torch.tensor(observation)).to(device)
+                union_features[ep,] = transformation.half()
 
-        observations = cat(observations)
+            # adjust agent parameters based on played episodes
+            if len(tf_idx) > 0:
+                self.agent.update(device)
 
-        return observations, rel_labels
+        return union_features, rel_labels
 
 
 class VGNet(nn.Module):
@@ -706,9 +724,6 @@ class ActorCriticNNAgent(nn.Module):
         s' - next state
     '''
 
-    #def __init__(self, new_network, params=None, obs_to_input=lambda x: x,
-    #             lr=1e-3, df=0.1, alpha=0.5):
-
     def __init__(self, new_network, params=None, lr=1e-3, df=0.1, alpha=0.5):
 
         super(ActorCriticNNAgent, self).__init__()
@@ -720,6 +735,7 @@ class ActorCriticNNAgent(nn.Module):
             self.model = new_network()
         if isinstance(self.model, torch.nn.Module):
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+
         self.df = df # discount factor
         self.alpha = alpha # multiply critic updates by this factor
 
