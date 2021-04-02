@@ -46,7 +46,7 @@ class VGEnv(gym.Env):
     def torch_to_numpy(self, tensor):
         return tensor.data.numpy()
 
-    def step(self, action, value):
+    def step(self, action, value, X):
 
         # action a consists of
         #   1. direction in {N, S, E, W}, determined by = a (mod 4)
@@ -54,6 +54,7 @@ class VGEnv(gym.Env):
         dir, Y_pred = action % 2, action // 2
 
         self.steps += 1
+        self._update_obs(X)
 
         move_map = {
             0:  0.01,  # increase variance
@@ -102,6 +103,9 @@ class VGEnv(gym.Env):
         self.MAX_STEPS = 9
 
         return self._get_obs()
+
+    def _update_obs(self, x):
+        self.X = self.torch_to_numpy(x[0].cpu())
 
     def _get_obs(self):
         obs = self.X + self.noise

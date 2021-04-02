@@ -619,6 +619,7 @@ class RLTransform(nn.Module):
         freq_bias = freq_bias * torch.sigmoid(geo_dists)
         freq_bias = F.softmax(freq_bias, 1)
 
+        rel_rt_loss = None
         if self.training:
             # index of backgrounds / foregrounds
             bg_idx = np.where(rel_labels.cpu() == 0)[0]
@@ -626,7 +627,7 @@ class RLTransform(nn.Module):
 
             topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
             topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
-            bias = torch.ones_like(topk_prob) * 1e-3
+            bias = torch.ones_like(topk_prob) * 0.0
             topk_prob = topk_prob - bias
             mask = torch.bernoulli(torch.clamp(topk_prob, 1e-5, 1.0))
             mask_rel_labels = topk_idx[bg_idx,] * mask
@@ -652,8 +653,8 @@ class RLTransform(nn.Module):
                 done = False
                 while not done:
                     # given env. and observation,agent take a action
-                    action, value = self.agent.act(observation, eps, device, self.env)
-                    observation, eps, reward, done, info = self.env.step(action, value)
+                    action, value, observation = self.agent.act(observation, eps, device)
+                    observation, eps, reward, done, info = self.env.step(action, value, observation)
                     self.agent.store_reward(reward)
 
                     total_reward += reward
@@ -664,9 +665,11 @@ class RLTransform(nn.Module):
 
             # adjust agent parameters based on played episodes
             if len(tf_idx) > 0:
-                self.agent.update(device)
+                rel_rt_loss = self.agent.update(device)
+            else:
+                rel_rt_loss = 0
 
-        return union_features, rel_labels
+        return union_features, rel_labels, rel_rt_loss
 
 
 class VGNet(nn.Module):
@@ -760,7 +763,7 @@ class VGNet(nn.Module):
         if not self.training:
             y2 = torch.sigmoid(y2)
 
-        return y1, y2
+        return y1, y2, dec_x
 
 class ActorCriticNNAgent(nn.Module):
     '''
@@ -820,7 +823,7 @@ class ActorCriticNNAgent(nn.Module):
         x = Variable(x).cuda(device).requires_grad_(False)
         eps = Variable(eps).cuda(device).requires_grad_(False)
 
-        y1, y2 = self.model(x, eps)
+        y1, y2, transf_x = self.model(x, eps)
 
         pi = self.torch_to_numpy(y1.cpu()).flatten()
         v  = self.torch_to_numpy(y2.cpu()).squeeze()
@@ -835,7 +838,7 @@ class ActorCriticNNAgent(nn.Module):
             self.replay[-1]['eps'].append(eps)
             self.replay[-1]['actions'].append(a)
 
-        return np.array(a), np.array(v)
+        return np.array(a), np.array(v), transf_x
 
     def new_episode(self):
         # start a new episode in replay
@@ -881,7 +884,7 @@ class ActorCriticNNAgent(nn.Module):
             # forward pass, Y1 is pi(a | s), Y2 is V(s)
             X = torch.cat([o for o in O])
             eps = torch.cat([e for e in E])
-            Y1, Y2 = self.model(X, eps)
+            Y1, Y2, Transf_X = self.model(X, eps)
             pi = Y1
             Vs_curr = Y2.view(-1)
 
@@ -903,13 +906,15 @@ class ActorCriticNNAgent(nn.Module):
             episode_losses += actor_loss + critic_loss * self.alpha
 
         # backward pass
-        self.optimizer.zero_grad()
-        loss = episode_losses / N
-        loss.backward()
-        self.optimizer.step()
+        #self.optimizer.zero_grad()
+        loss = episode_losses / N * 1e-3
+        #loss.backward()
+        #self.optimizer.step()
 
         # reset the replay history
         self.replay = []
+
+        return loss
 
     def copy(self):
 

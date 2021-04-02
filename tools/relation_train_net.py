@@ -214,7 +214,7 @@ def train(cfg, local_rank, distributed, logger, writer):
                 writer.add_scalar('train/{}'.format(
                     loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
 
-            loss_str = 'rel_cl_loss:'
+            loss_str = 'rel_rt_loss:'
             if str_meters.find(loss_str) != -1:
                 idx = str_meters.find(loss_str) + len(loss_str) + 1
                 writer.add_scalar('train/{}'.format(
