@@ -666,8 +666,6 @@ class RLTransform(nn.Module):
             # adjust agent parameters based on played episodes
             if len(tf_idx) > 0:
                 rel_rt_loss = self.agent.update(device)
-            else:
-                rel_rt_loss = 0
 
         return union_features, rel_labels, rel_rt_loss
 
@@ -907,7 +905,7 @@ class ActorCriticNNAgent(nn.Module):
 
         # backward pass
         #self.optimizer.zero_grad()
-        loss = episode_losses / N * 1e-3
+        loss = episode_losses / N * 3e-1
         #loss.backward()
         #self.optimizer.step()
 
