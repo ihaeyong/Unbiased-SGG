@@ -905,7 +905,7 @@ class ActorCriticNNAgent(nn.Module):
 
         # backward pass
         #self.optimizer.zero_grad()
-        loss = episode_losses / N * 3e-1
+        loss = episode_losses / N * 8e-2
         #loss.backward()
         #self.optimizer.step()
 

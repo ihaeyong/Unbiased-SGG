@@ -57,8 +57,8 @@ class VGEnv(gym.Env):
         self._update_obs(X)
 
         move_map = {
-            0:  0.01,  # increase variance
-            1: -0.01,  # decrease variance
+            0:  0.001,  # increase variance
+            1: -0.001,  # decrease variance
         }
 
         # make move and reveal square
@@ -88,8 +88,8 @@ class VGEnv(gym.Env):
     def reset(self, x, y=None):
         # resets the environment and returns initial observation
         self.mu = 0.0
-        self.var = 0.1
-        self.var_eps = 0.1
+        self.var = 0.01
+        self.var_eps = 0.01
         self.noise = np.zeros((4096))
         self.eps = np.zeros((512))
 
