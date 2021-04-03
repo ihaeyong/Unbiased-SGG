@@ -917,11 +917,11 @@ class ActorCriticNNAgent(nn.Module):
             episode_losses += actor_loss + critic_loss * self.alpha
 
         # backward pass
-        self.optimizer.zero_grad()
+        #self.optimizer.zero_grad()
         loss = episode_losses / N * 1e-2
-        loss.backward()
-        self.optimizer.step()
-
+        #loss.backward()
+        #self.optimizer.step()
+        
         # reset the replay history
         self.replay = []
 
