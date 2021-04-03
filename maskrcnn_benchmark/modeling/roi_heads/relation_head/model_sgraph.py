@@ -793,7 +793,7 @@ class ActorCriticNNAgent(nn.Module):
         s' - next state
     '''
 
-    def __init__(self, new_network, params=None, lr=1e-3, df=0.1, alpha=0.5):
+    def __init__(self, new_network, params=None, lr=1e-4, df=0.1, alpha=0.5):
 
         super(ActorCriticNNAgent, self).__init__()
 
@@ -917,10 +917,10 @@ class ActorCriticNNAgent(nn.Module):
             episode_losses += actor_loss + critic_loss * self.alpha
 
         # backward pass
-        #self.optimizer.zero_grad()
+        self.optimizer.zero_grad()
         loss = episode_losses / N * 1e-2
-        #loss.backward()
-        #self.optimizer.step()
+        loss.backward()
+        self.optimizer.step()
 
         # reset the replay history
         self.replay = []

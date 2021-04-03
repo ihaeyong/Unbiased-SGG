@@ -78,7 +78,7 @@ class VGEnv(gym.Env):
             reward = -0.1 + int(Y_pred == self.Y) + inv_freq
         else:
             inv_freq = int(Y_pred == self.Y) * self.pred_inv_prop[self.Y]
-            reward = -self.pred_inv_prop.min() * 0.5 + inv_freq
+            reward = -self.pred_inv_prop.min() * 0.1 + inv_freq
 
         # game ends if prediction is correct or max steps is reached
         done = Y_pred == self.Y or self.steps >= self.MAX_STEPS

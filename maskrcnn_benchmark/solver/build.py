@@ -9,6 +9,8 @@ def make_optimizer(cfg, model, logger, slow_heads=None, slow_ratio=5.0, rl_facto
     for key, value in model.named_parameters():
         if not value.requires_grad:
             continue
+        if 'rel_transform' in key:
+            continue
         lr = cfg.SOLVER.BASE_LR
         weight_decay = cfg.SOLVER.WEIGHT_DECAY
         if "bias" in key:

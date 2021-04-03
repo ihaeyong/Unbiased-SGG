@@ -148,12 +148,12 @@ def train(cfg, local_rank, distributed, logger, writer):
 
         loss_dict = model(images, targets)
 
-        #losses = 0
-        #for key, value in loss_dict.items():
-        #    if key is not 'rel_rt_loss':
-        #        losses += value
+        losses = 0
+        for key, value in loss_dict.items():
+            if key is not 'rel_rt_loss':
+                losses += value
 
-        losses = sum(loss for loss in loss_dict.values())
+        #losses = sum(loss for loss in loss_dict.values())
 
         # reduce losses over all GPUs for logging purposes
         loss_dict_reduced = reduce_loss_dict(loss_dict)
