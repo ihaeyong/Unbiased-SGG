@@ -51,39 +51,46 @@ class VGEnv(gym.Env):
         # action a consists of
         #   1. direction in {N, S, E, W}, determined by = a (mod 4)
         #   2. predicted class (0-9), determined by floor(a / 4)
-        dir, Y_pred = action % 2, action // 2
+        dir, Y_pred = action % 3, action // 3
 
         self.steps += 1
         self._update_obs(X)
 
         move_map = {
-            0:  0.001,  # increase variance
-            1: -0.001,  # decrease variance
+            0:  1,  # increase variance
+            1:  0,  # increase variance
+            2: -1,  # decrease variance
         }
 
         # make move and reveal square
-        self.var += move_map[dir]
-        self.var_eps += move_map[dir] * 0.1
-        self._reveal()
+        self.Y += move_map[dir]
+        done = self.Y == 0 or self.Y > 50
+        if self.Y > 50:
+            self.Y = 0
 
         # state (observation) consists of masked image (h x w)
         obs,eps = self._get_obs()
 
-        if self.Y is not None:
-            # -0.1 penalty for each additional timestep
-            # +1.0 for correct guess
-            reward = -0.1 + int(Y_pred == self.Y) * self.pred_inv_prop[self.Y]
-
-            # game ends if prediction is correct or max steps is reached
-            done = Y_pred == self.Y or self.steps >= self.MAX_STEPS
+        # -0.1 penalty for each additional timestep
+        # +1.0 for correct guess
+        if False:
+            inv_freq = int(Y_pred == self.Y) * self.pred_inv_prop[self.Y]
+            reward = -0.1 + int(Y_pred == self.Y) + inv_freq
         else:
-            reward = 0.9
-            done = value >= 0.5 or self.steps >= self.MAX_STEPS
+            inv_freq = int(Y_pred == self.Y) * self.pred_inv_prop[self.Y]
+            reward = -self.pred_inv_prop.min() * 0.5 + inv_freq
+
+        # game ends if prediction is correct or max steps is reached
+        done = Y_pred == self.Y or self.steps >= self.MAX_STEPS
+
+        if self.steps >= self.MAX_STEPS:
+            if Y_pred != self.Y:
+                self.Y = 0
 
         # info is empty (for now)
         info = {}
 
-        return obs, eps, reward, done, info
+        return obs, self.Y, reward, done, info
 
     def reset(self, x, y=None):
         # resets the environment and returns initial observation
@@ -94,11 +101,7 @@ class VGEnv(gym.Env):
         self.eps = np.zeros((512))
 
         self.X = self.torch_to_numpy(x)
-        if y is not None:
-            self.Y = self.torch_to_numpy(y)
-        else:
-            self.Y = None
-
+        self.Y = self.torch_to_numpy(y)
         self.steps = 0
         self.MAX_STEPS = 9
 
@@ -112,10 +115,4 @@ class VGEnv(gym.Env):
         eps = self.eps
         #assert self.observation_space.contains(obs)
         return obs, eps
-
-    def _reveal(self):
-        # reveal the window at self.pos
-        self.noise = np.random.normal(self.mu, self.var, 4096)
-        #self.eps = np.random.normal(self.mu, self.var_eps, 512)
-        #self.mask = np.clip(self.mask, -1, 1)
 

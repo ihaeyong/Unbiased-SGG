@@ -607,6 +607,16 @@ class RLTransform(nn.Module):
         # initialize environment
         self.env = VGEnv(type='train', seed=None)
 
+
+        rl_fc = [
+            nn.Linear(4096, 4096, bias=True),
+            nn.BatchNorm1d(4096),
+            nn.ReLU(inplace=True),
+        ]
+        self.rl_fc = nn.Sequential(*rl_fc)
+
+        self.rl_fc.apply(seq_init)
+
     def forward(self, union_features, rel_mean, rel_covar,
                 freq_bias, geo_dists, rel_labels):
 
@@ -616,7 +626,7 @@ class RLTransform(nn.Module):
         # sample classes
         # for inverse frequency
         freq_bias = 1 - torch.sigmoid(freq_bias)
-        freq_bias = freq_bias * torch.sigmoid(geo_dists)
+        freq_bias = freq_bias + torch.sigmoid(geo_dists)
         freq_bias = F.softmax(freq_bias, 1)
 
         rel_rt_loss = None
@@ -627,9 +637,9 @@ class RLTransform(nn.Module):
 
             topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
             topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
-            bias = torch.ones_like(topk_prob) * 0.0
-            topk_prob = topk_prob - bias
-            mask = torch.bernoulli(torch.clamp(topk_prob, 1e-5, 1.0))
+            #bias = torch.ones_like(topk_prob) * 0.0
+            #topk_prob = topk_prob - bias
+            mask = torch.bernoulli(torch.clamp(topk_prob, 1e-6, 1.0))
             mask_rel_labels = topk_idx[bg_idx,] * mask
             rel_labels[bg_idx] = mask_rel_labels[:,0].long()
 
@@ -654,18 +664,21 @@ class RLTransform(nn.Module):
                 while not done:
                     # given env. and observation,agent take a action
                     action, value, observation = self.agent.act(observation, eps, device)
-                    observation, eps, reward, done, info = self.env.step(action, value, observation)
+                    observation, label, reward, done, info = self.env.step(action, value, observation)
                     self.agent.store_reward(reward)
 
                     total_reward += reward
 
                 rewards.append(total_reward)
-                transformation = Variable(torch.tensor(observation)).to(device)
-                union_features[ep,] = transformation.half()
+                #transformation = Variable(torch.tensor(observation)).to(device)
+                #union_features[ep,] = transformation.half()
+                rel_labels[ep] = torch.tensor(label).to(device).long()
 
             # adjust agent parameters based on played episodes
             if len(tf_idx) > 0:
                 rel_rt_loss = self.agent.update(device)
+
+        union_features = self.rl_fc(union_features)
 
         return union_features, rel_labels, rel_rt_loss
 
@@ -713,7 +726,7 @@ class VGNet(nn.Module):
         #layer_init(self.mean, xavier=True)
         #layer_init(self.std, xavier=True)
 
-        self.out_dir = nn.Linear(4096, 2)
+        self.out_dir = nn.Linear(4096, 3)
         self.out_digit = nn.Linear(4096, 51)
         self.out_critic = nn.Linear(4096, 1)
 
@@ -754,7 +767,7 @@ class VGNet(nn.Module):
 
         # https://discuss.pytorch.org/t/batch-outer-product/4025
         y1 = torch.bmm(pi1.unsqueeze(2), pi2.unsqueeze(1))
-        y1 = y1.view(-1, 51 * 2)
+        y1 = y1.view(-1, 51 * 3)
 
         y2 = self.out_critic(x)
 
@@ -828,7 +841,7 @@ class ActorCriticNNAgent(nn.Module):
 
         # sample action from distribution
         pi = pi / pi.sum()
-        a = np.random.choice(np.arange(2*51), p=pi)
+        a = np.random.choice(np.arange(3*51), p=pi)
 
         # update current episode in replay with observation and chosen action
         if self.trainable:
@@ -905,7 +918,7 @@ class ActorCriticNNAgent(nn.Module):
 
         # backward pass
         #self.optimizer.zero_grad()
-        loss = episode_losses / N * 8e-2
+        loss = episode_losses / N * 1e-2
         #loss.backward()
         #self.optimizer.step()
 
