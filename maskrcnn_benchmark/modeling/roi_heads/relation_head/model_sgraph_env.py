@@ -77,8 +77,8 @@ class VGEnv(gym.Env):
             inv_freq = int(Y_pred == self.Y) * self.pred_inv_prop[self.Y]
             reward = -0.1 + int(Y_pred == self.Y) + inv_freq
         else:
-            inv_freq = int(Y_pred == self.Y) * self.pred_inv_prop[self.Y]
-            reward = -self.pred_inv_prop.min() * 0.1 + inv_freq
+            inv_freq = int(Y_pred == self.Y) * self.pred_inv_prop[self.Y] * 20.0
+            reward = -self.pred_inv_prop.min() * 1.0 + inv_freq
 
         # game ends if prediction is correct or max steps is reached
         done = Y_pred == self.Y or self.steps >= self.MAX_STEPS
@@ -95,9 +95,9 @@ class VGEnv(gym.Env):
     def reset(self, x, y=None):
         # resets the environment and returns initial observation
         self.mu = 0.0
-        self.var = 0.01
+        self.var = 0.1
         self.var_eps = 0.01
-        self.noise = np.zeros((4096))
+        self.noise = np.random.normal(self.mu, self.var, 4096)
         self.eps = np.zeros((512))
 
         self.X = self.torch_to_numpy(x)
