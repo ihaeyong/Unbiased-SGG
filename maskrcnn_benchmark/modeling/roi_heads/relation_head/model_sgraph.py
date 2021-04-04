@@ -603,7 +603,7 @@ class RLTransform(nn.Module):
         self.cfg = cfg
 
         # initialize agent
-        self.agent = ActorCriticNNAgent(VGNet)
+        self.agent = ActorCriticNNAgent(VGNet, df=0.2)
         # initialize environment
         self.env = VGEnv(type='train', seed=None)
 
@@ -678,8 +678,8 @@ class RLTransform(nn.Module):
                 rewards.append(total_reward)
                 #transformation = Variable(torch.tensor(observation)).to(device)
 
-                if done and False:
-                    union_features[ep,] = observation.half()
+                if done and self.env.steps == 1:
+                    union_features[ep,] = observation.clone().detach().requires_grad_(False).half()
                 rel_labels[ep] = torch.tensor(label).to(device).long()
 
             # adjust agent parameters based on played episodes

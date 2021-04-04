@@ -175,8 +175,13 @@ class VGEnv(nn.Module):
 
         # -0.1 penalty for each additional timestep
         # +1.0 for correct guess
-        inv_freq = int(Y_pred == y) * self.pred_inv_prop[y] * 30.0
-        reward = -self.pred_inv_prop.min() * 2 + inv_freq
+        if True:
+            inv_freq = int(Y_pred == y) * self.pred_inv_prop[y] * 30.0
+            reward = -self.pred_inv_prop.min() * 2 + inv_freq
+        else:
+            inv_freq = int(Y_pred == y)
+            reward = -0.1 + inv_freq
+
 
         # game ends if prediction is correct or max steps is reached
         done = Y_pred == y or self.steps >= self.MAX_STEPS
@@ -193,7 +198,7 @@ class VGEnv(nn.Module):
     def reset(self, x, y=None):
         # resets the environment and returns initial observation
         self.eps = 0.5
-        self.step_size = 0.1
+        self.step_size = 0.01
         self.Y = self.torch_to_numpy(y)
 
         self.idx = 1
