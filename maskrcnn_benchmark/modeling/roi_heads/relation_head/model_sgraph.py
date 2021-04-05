@@ -464,7 +464,7 @@ class RLTransform(nn.Module):
 
             #topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
             topk_prob, topk_idx = freq_bias.topk(3)
-            topk_prob_bg = torch.gather(freq_bias[bg_idx,] * fg_mask[bg_idx][:,None], 1, topk_idx[bg_idx,0])
+            topk_prob_bg = torch.gather(freq_bias[bg_idx,] * fg_mask[bg_idx][:,None], 1, topk_idx[bg_idx,0][:,None])
 
             mask_bg = torch.bernoulli(torch.clamp(topk_prob_bg, 0.0, 1.0))
             rel_labels_bg = topk_idx[bg_idx,] * mask_bg
@@ -477,7 +477,7 @@ class RLTransform(nn.Module):
             # RL-trasformation
             rewards = []
             observations = []
-            
+
             # play out each episode
             X = union_features.clone().detach()
             Y = topk_idx.cpu()
