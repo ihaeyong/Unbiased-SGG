@@ -19,7 +19,7 @@ from .model_transformer import TransformerContext
 from .utils_relation import layer_init, get_box_info, get_box_pair_info
 from maskrcnn_benchmark.data import get_dataset_statistics
 
-from .model_sgraph import SpectralContext, PostSpectralContext, RelTransform, RLTransform
+from .model_sgraph import SpectralContext, PostSpectralContext, RLTransform
 from .model_sgraph_with_vratt import UnionRegionAttention
 from .model_sgraph_with_cl import SupConLoss, NpairLoss
 
@@ -372,7 +372,10 @@ class SGraphPredictor(nn.Module):
                                                                      rel_covar,
                                                                      freq_bias,
                                                                      geo_dists,
-                                                                     rel_labels)
+                                                                     rel_labels,
+                                                                     num_objs,
+                                                                     num_rels,
+                                                                     rel_pair_idxs)
 
         if self.training:
             rel_labels = rel_labels.split(num_rels, dim=0)

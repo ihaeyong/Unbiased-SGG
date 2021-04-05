@@ -383,214 +383,6 @@ class PostSpectralContext(nn.Module):
         return obj_dists
 
 
-
-
-class RelTransform(nn.Module):
-    """
-    Transform relational features into closes to ones closed to foregrounds
-    """
-
-    def __init__(self, cfg):
-        super(RelTransform, self).__init__()
-
-        # configure
-        self.cfg = cfg
-
-        # predicate inverse proportion
-        fg_rel = np.load('./datasets/vg/fg_matrix.npy')
-        bg_rel = np.load('./datasets/vg/bg_matrix.npy')
-        fg_rel[:,:,0] = bg_rel
-        pred_freq = fg_rel.sum(0).sum(0)
-
-        # pred inverse proportion
-        pred_inv_prop = 1.0 / np.power(pred_freq, 1/2)
-        max_m = 0.03
-        self.pred_inv_prop = pred_inv_prop * (max_m / pred_inv_prop.max())
-
-        self.mse_loss = nn.MSELoss() #nn.CrossEntropyLoss()
-        self.ce_loss = nn.CrossEntropyLoss()
-        self.max_iter = 1
-        self.step_size = 0.1
-
-        # transfer
-        enc_transf = [
-            nn.Linear(4096, 4096 // 2, bias=True),
-            nn.BatchNorm1d(4096 // 2),
-            nn.ReLU(inplace=True),
-            nn.Linear(4096 // 2, 4096 // 4, bias=True),
-            nn.BatchNorm1d(4096 // 4),
-            nn.ReLU(inplace=True),
-            nn.Linear(4096 // 4, 4096 // 8, bias=True),
-            nn.BatchNorm1d(4096 // 8),
-            nn.ReLU(inplace=True),
-        ]
-
-        dec_transf = [
-            nn.Linear(4096 // 8, 4096 // 4, bias=True),
-            nn.BatchNorm1d(4096 // 4),
-            nn.ReLU(inplace=True),
-            nn.Linear(4096 // 4, 4096 // 2, bias=True),
-            nn.BatchNorm1d(4096 // 2),
-            nn.ReLU(inplace=True),
-            nn.Linear(4096 // 2, 4096, bias=True),
-        ]
-
-        self.enc_transf = nn.Sequential(*enc_transf)
-        self.dec_transf = nn.Sequential(*dec_transf)
-        self.enc_transf.apply(seq_init)
-        self.dec_transf.apply(seq_init)
-
-        self.mean = nn.Linear(4096 // 8, 4096 // 8, bias=True)
-        self.std = nn.Linear(4096 // 8, 4096 // 8, bias=True)
-        layer_init(self.mean, xavier=True)
-        layer_init(self.std, xavier=True)
-
-        self.rel_logits = nn.Linear(4096, 51, bias=True)
-        layer_init(self.rel_logits, xavier=True)
-
-        # initialize agent
-        self.agent = ActorCriticNNAgent(VGNet)
-        # initialize environment
-        self.env = SGEnv(type='train', seed=None)
-
-    def rand_perturb(self, inputs, attack, eps=0.5):
-
-        if attack == 'inf':
-            r_inputs = 2 * (torch.rand_like(inputs) - 0.5) * eps
-        elif attack == 'randn':
-            r_inputs = torch.randn_like(inputs) * inputs.max(1)[0][:,None]
-        elif attack == 'l2':
-            r_inputs = (torch.rand_like(inputs) - 0.5).renorm(p=2, dim=1, maxnorm=eps)
-        elif attack == 'zero':
-            r_inputs = torch.zeros_like(inputs)
-
-        return r_inputs
-
-    def make_step(self, grad, attack='l2', step_size=0.1):
-
-        if attack == 'l2':
-            grad_norm = torch.norm(grad, dim=1).view(-1, 1)
-            scaled_grad = grad / (grad_norm + 1e-10)
-            step = step_size * scaled_grad
-
-        elif attack == 'inf':
-            step = step_size * torch.sign(grad)
-
-        elif attack == 'none':
-            step = step_size * grad
-
-        return step
-
-    def sample_normal(self, mean, logvar, logvar_add=None):
-        # Using torch.normal(means,sds) returns a stochastic tensor which we cannot backpropogate through.
-        # Instead we utilize the 'reparameterization trick'.
-        # http://stats.stackexchange.com/a/205336
-        # http://dpkingma.com/wordpress/wp-content/uploads/2015/12/talk_nips_workshop_2015.pdf
-        sd = torch.exp(logvar * 0.5)
-        e = torch.randn_like(sd) # Sample from standard normal
-        z = e.mul(sd).add_(mean)
-
-        return z
-
-    # Loss function
-    def criterion(self, x_out, x_in, z_mu, z_logvar):
-
-        mse_loss = self.mse_loss(x_out, x_in)
-        kld_loss = -0.5 * torch.sum(1 + z_logvar - (z_mu ** 2) - torch.exp(z_logvar))
-        loss = (mse_loss + kld_loss) / x_out.size(0) # normalize by batch size
-
-        return loss
-
-    def forward(self, union_features, rel_mean, rel_covar, freq_bias, geo_dists, rel_labels):
-
-        # for inverse frequency
-        if False :
-            freq_bias = 1 - torch.sigmoid(freq_bias)
-            freq_bias = freq_bias * torch.sigmoid(geo_dists)
-        elif False :
-            freq_bias = geo_dists
-        elif True :
-            freq_bias = geo_dists * freq_bias
-        elif False :
-            freq_bias = torch.sigmoid(freq_bias)
-            freq_bias = freq_bias * torch.sigmoid(geo_dists)
-
-        freq_bias = F.softmax(freq_bias, 1)
-        rel_covar = F.softmax(rel_covar, 1)
-
-        if self.training:
-            # index of backgrounds / foregrounds
-            bg_idx = np.where(rel_labels.cpu() == 0)[0]
-            fg_idx = np.where(rel_labels.cpu() > 0)[0]
-
-            # set target relational labels
-            if False :
-                topk_prob, topk_idx = freq_bias.topk(1, largest=True)
-                #mask = topk_prob[bg_idx, 0] > 0.5
-                mask = torch.bernoulli(topk_prob[bg_idx,0])
-                mask_rel_labels = topk_idx[bg_idx, 0] * mask
-                rel_labels[bg_idx] = topk_idx[bg_idx,0] * mask.long()
-
-            elif True:
-                topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
-                topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
-                bias = torch.ones_like(topk_prob) * 0.1
-                topk_prob = topk_prob - bias
-                mask = torch.bernoulli(torch.clamp(topk_prob, 0,1))
-                mask_rel_labels = topk_idx[bg_idx,] * mask
-                rel_labels[bg_idx] = mask_rel_labels[:,0].long()
-
-            elif False:
-                topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
-                prob = torch.gather(rel_covar[bg_idx,], 1, topk_idx[bg_idx,])
-
-                mask = torch.bernoulli(prob)
-                mask_rel_labels = topk_idx[bg_idx] * mask
-                rel_labels[bg_idx] = mask_rel_labels[:,0].long()
-
-            tf_idx = np.where(mask.cpu() > 0)[0]
-            tf_idx = bg_idx[tf_idx]
-
-        # relational dict
-        rel_dict = rel_mean[rel_labels].clone().detach().requires_grad_(True)
-        rel_reps = union_features
-
-        # transformation
-        for _ in range(self.max_iter):
-            # transformation of relational features
-            in_reps = rel_reps
-            enc_reps = self.enc_transf(in_reps)
-
-            mean = self.mean(enc_reps)
-            logvar = self.std(enc_reps)
-            z = self.sample_normal(mean, logvar)
-
-            out_reps = self.dec_transf(z)
-            rel_reps = out_reps
-
-            # tranformation loss
-            if self.training:
-                rel_logits = self.rel_logits(rel_reps)
-
-                loss_ce = self.ce_loss(rel_logits, rel_labels.long())
-                loss = self.criterion(out_reps, rel_dict, mean, logvar)
-                loss += loss_ce
-                grad, = torch.autograd.grad(loss, [z])
-
-                noise = self.rand_perturb(logvar,'l2')
-                logvar[tf_idx] =  logvar[tf_idx] + noise[tf_idx].half()
-
-                z = self.sample_normal(mean, logvar)
-                z = z - self.make_step(grad, 'l2', self.step_size)
-
-                rel_reps = self.dec_transf(z)
-
-        union_features = rel_reps.half()
-
-        return union_features, rel_labels
-
-
-
 class RLTransform(nn.Module):
     """
     Transform relational features into closes to ones closed to foregrounds
@@ -617,8 +409,39 @@ class RLTransform(nn.Module):
 
         self.rl_fc.apply(seq_init)
 
+    def graph(self, num_objs, num_rels, freq_bias,
+              rel_pair_idxs=None,
+              rel_labels=None):
+
+        rel_mask = torch.zeros_like(rel_labels)
+        rel_mask = rel_mask.split(num_rels)
+        rel_labels = rel_labels.split(num_rels)
+
+        for i in range(len(num_objs)):
+            num_obj = num_objs[i]
+            adj = torch.zeros((num_obj, num_obj))
+            rel_label = rel_labels[i]
+            pair = rel_pair_idxs[i]
+
+            bg_idx = np.where(rel_label.cpu() == 0)[0]
+            fg_idx = np.where(rel_label.cpu() > 0)[0]
+
+            adj[pair[fg_idx,0], pair[fg_idx,1]] = 1
+
+            # find candidate foregrouds
+            for idx in fg_idx:
+                cand_idx = np.where(
+                    (pair.cpu()[bg_idx,0] == pair.cpu()[idx,1]) &
+                    (pair.cpu()[bg_idx,1] == pair.cpu()[idx,0]))[0]
+
+                if adj[pair[idx,1], pair[idx, 0]] < 1 and len(cand_idx) > 0:
+                    rel_mask[i][cand_idx] = 1
+
+        return cat(rel_mask)
+
     def forward(self, union_features, rel_mean, rel_covar,
-                freq_bias, geo_dists, rel_labels):
+                freq_bias, geo_dists, rel_labels,
+                num_objs, num_rels, rel_pair_idxs):
 
         # get device
         device = union_features.get_device()
@@ -632,33 +455,32 @@ class RLTransform(nn.Module):
 
         rel_rt_loss = None
         if self.training:
+
+            fg_mask=self.graph(num_objs, num_rels, num_rels, rel_pair_idxs, rel_labels)
+
             # index of backgrounds / foregrounds
             bg_idx = np.where(rel_labels.cpu() == 0)[0]
             fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
-            topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
-            topk_prob = torch.gather(freq_bias[bg_idx,], 1, topk_idx[bg_idx,])
-            #bias = torch.ones_like(topk_prob) * 0.0
-            #topk_prob = topk_prob - bias
-            mask = torch.bernoulli(torch.clamp(topk_prob, 1e-6, 1.0))
-            mask_rel_labels = topk_idx[bg_idx,] * mask
-            rel_labels[bg_idx] = mask_rel_labels[:,0].long()
+            #topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
+            topk_prob, topk_idx = freq_bias.topk(3)
+            topk_prob_bg = torch.gather(freq_bias[bg_idx,] * fg_mask[bg_idx][:,None], 1, topk_idx[bg_idx,0])
 
-            tf_idx = np.where(mask.cpu() > 0)[0]
+            mask_bg = torch.bernoulli(torch.clamp(topk_prob_bg, 0.0, 1.0))
+            rel_labels_bg = topk_idx[bg_idx,] * mask_bg
+
+            rel_labels[bg_idx] = rel_labels_bg[:,0].long()
+
+            tf_idx = np.where(mask_bg.cpu() > 0)[0]
             tf_idx = bg_idx[tf_idx]
-
-            # topk
-            top3_prob, top3_idx = freq_bias.topk(3)
-
 
             # RL-trasformation
             rewards = []
             observations = []
-
+            
             # play out each episode
-            X = union_features.clone().detach().requires_grad_(False)
-            #Y = rel_labels.cpu()
-            Y = top3_idx.cpu()
+            X = union_features.clone().detach()
+            Y = topk_idx.cpu()
 
             for ep in tf_idx:
                 observation = self.env.reset(X[ep], Y[ep])
