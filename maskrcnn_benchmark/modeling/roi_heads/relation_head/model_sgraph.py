@@ -449,8 +449,8 @@ class RLTransform(nn.Module):
         # sample classes
         # for inverse frequency
         #freq_bias = 1 - torch.sigmoid(freq_bias)
-        #freq_bias = freq_bias + torch.sigmoid(geo_dists)
-        freq_bias = torch.sigmoid(freq_bias + geo_dists)
+        freq_bias = freq_bias + geo_dists
+        #freq_bias = torch.sigmoid(freq_bias + geo_dists)
         freq_bias = F.softmax(freq_bias, 1)
 
         rel_rt_loss = None
@@ -466,7 +466,7 @@ class RLTransform(nn.Module):
             topk_prob, topk_idx = freq_bias.topk(3)
             topk_prob_bg = torch.gather(freq_bias[bg_idx,] * fg_mask[bg_idx][:,None], 1, topk_idx[bg_idx,0][:,None])
 
-            mask_bg = torch.bernoulli(torch.clamp(topk_prob_bg, 0.0, 1.0))
+            mask_bg = torch.bernoulli(topk_prob_bg)
             rel_labels_bg = topk_idx[bg_idx,] * mask_bg
 
             rel_labels[bg_idx] = rel_labels_bg[:,0].long()
