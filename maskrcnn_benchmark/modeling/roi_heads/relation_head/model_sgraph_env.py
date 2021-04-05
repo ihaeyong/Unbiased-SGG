@@ -171,7 +171,10 @@ class VGEnv(nn.Module):
         obs = self._transform(X)
 
         # make move and reveal square
-        y = self.Y[2]
+        if self.Y[0] == 0:
+            y = self.Y[1]
+        else:
+            y = self.Y[0]
 
         # -0.1 penalty for each additional timestep
         # +1.0 for correct guess
