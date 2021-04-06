@@ -178,7 +178,7 @@ class VGEnv(nn.Module):
 
         # -0.1 penalty for each additional timestep
         # +1.0 for correct guess
-        if True:
+        if False:
             inv_freq = int(Y_pred == y) * self.pred_inv_prop[y] * 30.0
             reward = -self.pred_inv_prop.min() * 2 + inv_freq
         else:

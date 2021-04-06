@@ -395,7 +395,7 @@ class RLTransform(nn.Module):
         self.cfg = cfg
 
         # initialize agent
-        self.agent = ActorCriticNNAgent(VGNet, df=0.2)
+        self.agent = ActorCriticNNAgent(VGNet, df=0.1)
         # initialize environment
         self.env = VGEnv(type='train', seed=None)
 

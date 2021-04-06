@@ -206,7 +206,7 @@ class RelReward(nn.Module):
         inv_prop = pred_inv_prop * (max_m / pred_inv_prop.max())
         self.pred_inv_prop = torch.tensor(inv_prop)
 
-    def forward(self, rel_logits, freq_bias, rel_labels, alpha=0.5):
+    def forward(self, rel_logits, freq_bias, rel_labels, alpha=1.0):
 
         device = rel_logits.get_device()
         ce_loss = F.cross_entropy(rel_logits, rel_labels)
@@ -216,7 +216,10 @@ class RelReward(nn.Module):
         #V_freq = torch.gather(freq_bias, 1, Y_pred[:,None])
         y = rel_labels
 
-        reward = (Y_freq == y).float()
+        V_pred = torch.sigmoid(V_curr)
+
+        reward_freq = (Y_freq == y).float()
+        reward_pred = (Y_pred == y).float()
 
         #adv = reward.float() - V_curr - V_freq[:,0]
         #adv = reward.float()
@@ -227,10 +230,13 @@ class RelReward(nn.Module):
         #actor_loss = -torch.dot(log_prob, adv) / rel_logits.size(0)
         #rel_logits = rel_logits * self.pred_inv_prop[y].to(device)[:,None].float()
 
-        critic = ((reward - V_freq) ** 2) * self.pred_inv_prop[y].to(device).float()
-        critic_loss = critic.sum() / rel_logits.size(0)
+        critic_freq = ((reward_freq - V_freq) ** 2)*self.pred_inv_prop[y].to(device).float()
+        critic_pred = ((reward_pred - V_pred) ** 2)*self.pred_inv_prop[y].to(device).float()
+        freq_loss = critic_freq.sum() / rel_logits.size(0)
+        pred_loss = critic_pred.sum() / rel_logits.size(0)
 
-        #loss = critic_loss * alpha + actor_loss
+        critic_loss = pred_loss + freq_loss
+
         loss = critic_loss * alpha + ce_loss
 
         return  loss
