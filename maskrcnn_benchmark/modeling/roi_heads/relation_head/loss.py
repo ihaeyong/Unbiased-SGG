@@ -10,7 +10,7 @@ from maskrcnn_benchmark.modeling.box_coder import BoxCoder
 from maskrcnn_benchmark.modeling.matcher import Matcher
 from maskrcnn_benchmark.structures.boxlist_ops import boxlist_iou
 from maskrcnn_benchmark.modeling.utils import cat
-from .model_sgraph_with_rel_weight import RelWeight, ObjWeight, LDAMLoss, RelSample
+from .model_sgraph_with_rel_weight import RelWeight, ObjWeight, LDAMLoss, RelSample, RelReward
 
 class RelationLossComputation(object):
     """
@@ -48,7 +48,7 @@ class RelationLossComputation(object):
         self.obj_type = 'weight'
         self.gamma = 0.02
 
-        self.weight = 'ce'
+        self.weight = 'batchreward'
 
         cls_num_list = np.load('./datasets/vg/obj_freq.npy')
         #cls_num_list[0] = 0 # no samples
@@ -57,6 +57,8 @@ class RelationLossComputation(object):
         self.obj_weight = ObjWeight(obj_prop, temp=1e0)
         self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
         self.rel_sample = RelSample(predicate_proportion, temp=1e0)
+
+        self.rel_reward = RelReward()
 
         if self.use_label_smoothing:
             self.criterion_loss = Label_Smoothing_Regression(e=0.01)
@@ -139,6 +141,12 @@ class RelationLossComputation(object):
 
             loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
 
+
+        elif self.weight == 'batchreward':
+
+            loss_relation = self.rel_reward(relation_logits,
+                                            freq_bias,
+                                            rel_labels)
         else:
             loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
 

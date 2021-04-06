@@ -434,6 +434,7 @@ class SGraphPredictor(nn.Module):
         elif self.fusion_type == 'sum_v3' or self.fusion_type == 'gate_v3':
             # 18.9, 25.1, 27.7 // ( 2.0 // 3.2) // 51.5, 60.6, 63.2
             freq_bias = torch.sigmoid(freq_dists + emb_dists + geo_dists)
+            #freq_bias = freq_dists + emb_dists + geo_dists
             union_dists = vis_dists + ctx_dists + torch.sigmoid(freq_dists) + emb_dists + geo_dists
 
         else:

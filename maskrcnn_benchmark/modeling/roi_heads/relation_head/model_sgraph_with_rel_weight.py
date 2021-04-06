@@ -184,6 +184,58 @@ class RelWeight(nn.Module):
         return  rel_weight, rel_margin
 
 
+
+class RelReward(nn.Module):
+    """
+    None dim means that not to use that sub module.
+    if None of geo, cat and appr was specified, only upconvolution is used.
+    """
+
+    def __init__(self):
+        super(RelReward, self).__init__()
+
+        # predicate inverse proportion
+        fg_rel = np.load('./datasets/vg/fg_matrix.npy')
+        bg_rel = np.load('./datasets/vg/bg_matrix.npy')
+        fg_rel[:,:,0] = bg_rel
+        pred_freq = fg_rel.sum(0).sum(0)
+
+        # pred inverse proportion
+        pred_inv_prop = 1.0 / np.power(pred_freq, 1/2)
+        max_m = 1.0
+        inv_prop = pred_inv_prop * (max_m / pred_inv_prop.max())
+        self.pred_inv_prop = torch.tensor(inv_prop)
+
+    def forward(self, rel_logits, freq_bias, rel_labels, alpha=0.5):
+
+        device = rel_logits.get_device()
+        ce_loss = F.cross_entropy(rel_logits, rel_labels)
+
+        V_curr, Y_pred = rel_logits.max(1)
+        V_freq, Y_freq = freq_bias.max(1)
+        #V_freq = torch.gather(freq_bias, 1, Y_pred[:,None])
+        y = rel_labels
+
+        reward = (Y_freq == y).float()
+
+        #adv = reward.float() - V_curr - V_freq[:,0]
+        #adv = reward.float()
+
+        #V_vis = V_curr + V_freq[:,0]
+        #log_prob = torch.log(V_vis)
+
+        #actor_loss = -torch.dot(log_prob, adv) / rel_logits.size(0)
+        #rel_logits = rel_logits * self.pred_inv_prop[y].to(device)[:,None].float()
+
+        critic = ((reward - V_freq) ** 2) * self.pred_inv_prop[y].to(device).float()
+        critic_loss = critic.sum() / rel_logits.size(0)
+
+        #loss = critic_loss * alpha + actor_loss
+        loss = critic_loss * alpha + ce_loss
+
+        return  loss
+
+
 class RelSample(nn.Module):
     """
     None dim means that not to use that sub module.
