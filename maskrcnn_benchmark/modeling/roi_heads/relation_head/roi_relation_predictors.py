@@ -367,15 +367,16 @@ class SGraphPredictor(nn.Module):
                 self.rel_mean[rel_labels], union_features * rel_mask[:,None])
 
         rel_covar = torch.matmul(union_features, self.rel_mean.transpose(0,1))
-        union_features, rel_labels, rel_rt_loss = self.rel_transform(union_features,
-                                                                     self.rel_mean,
-                                                                     rel_covar,
-                                                                     freq_bias,
-                                                                     geo_dists,
-                                                                     rel_labels,
-                                                                     num_objs,
-                                                                     num_rels,
-                                                                     rel_pair_idxs)
+        union_features, rel_labels, rel_rt_loss, link_loss = self.rel_transform(obj_embs,
+                                                                                union_features,
+                                                                                self.rel_mean,
+                                                                                rel_covar,
+                                                                                freq_bias,
+                                                                                geo_dists,
+                                                                                rel_labels,
+                                                                                num_objs,
+                                                                                num_rels,
+                                                                                rel_pair_idxs)
 
         if self.training:
             rel_labels = rel_labels.split(num_rels, dim=0)
@@ -395,6 +396,9 @@ class SGraphPredictor(nn.Module):
 
         if rel_rt_loss is not None:
             add_losses['rel_rt_loss'] = rel_rt_loss
+
+        if link_loss is not None:
+            add_losses['link_loss'] = link_loss
 
         if iba_loss is not None:
             add_losses['iba_loss'] = iba_loss

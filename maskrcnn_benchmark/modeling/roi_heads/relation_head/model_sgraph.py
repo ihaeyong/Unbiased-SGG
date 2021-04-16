@@ -6,6 +6,10 @@ from torch import nn
 from torch.nn.utils.rnn import PackedSequence
 from torch.nn import functional as F
 from torch.autograd import Variable
+
+from torch.nn.modules.module import Module
+from torch.nn.parameter import Parameter
+
 from maskrcnn_benchmark.modeling.utils import cat
 from .utils_motifs import obj_edge_vectors, center_x, sort_by_score, to_onehot, get_dropout_mask, nms_overlaps, encode_box_info
 
@@ -17,6 +21,9 @@ from .model_sgraph_env import VGEnv
 
 from torch.autograd import Variable, grad
 import torch.optim as optim
+
+import networkx as nx
+import scipy.sparse as sp
 
 class SpectralContext(nn.Module):
     """
@@ -383,6 +390,78 @@ class PostSpectralContext(nn.Module):
         return obj_dists
 
 
+class GraphConvolution(nn.Module):
+    """
+    Simple GCN layer, similar to https://arxiv.org/abs/1609.02907
+    """
+
+    def __init__(self, in_features, out_features, dropout=0., act=F.relu):
+        super(GraphConvolution, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.dropout = dropout
+        self.act = act
+        self.weight = Parameter(torch.FloatTensor(in_features, out_features))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        torch.nn.init.xavier_uniform_(self.weight).half()
+
+    def forward(self, input, adj):
+        input = F.dropout(input, self.dropout, self.training)
+        support = torch.mm(input.float(), self.weight)
+        output = torch.spmm(adj, support.float())
+        output = self.act(output)
+        return output
+
+    def __repr__(self):
+        return self.__class__.__name__ + ' (' \
+               + str(self.in_features) + ' -> ' \
+               + str(self.out_features) + ')'
+
+
+class GCNModelVAE(nn.Module):
+    def __init__(self, input_feat_dim, hidden_dim1, hidden_dim2, dropout):
+        super(GCNModelVAE, self).__init__()
+        self.gc1 = GraphConvolution(input_feat_dim, hidden_dim1, dropout, act=F.relu)
+        self.gc2 = GraphConvolution(hidden_dim1, hidden_dim2, dropout, act=lambda x: x)
+        self.gc3 = GraphConvolution(hidden_dim1, hidden_dim2, dropout, act=lambda x: x)
+        self.dc = InnerProductDecoder(dropout, act=lambda x: x)
+
+    def encode(self, x, adj):
+        hidden1 = self.gc1(x, adj)
+        return self.gc2(hidden1, adj), self.gc3(hidden1, adj)
+
+    def reparameterize(self, mu, logvar):
+        if self.training:
+            std = torch.exp(logvar)
+            eps = torch.randn_like(std)
+            return eps.mul(std).add_(mu)
+        else:
+            return mu
+
+    def forward(self, x, adj):
+        mu, logvar = self.encode(x, adj)
+        z = self.reparameterize(mu, logvar)
+        return self.dc(z), mu, logvar
+
+
+class InnerProductDecoder(nn.Module):
+    """Decoder for using inner product for prediction."""
+
+    def __init__(self, dropout, act=torch.sigmoid):
+        super(InnerProductDecoder, self).__init__()
+        self.dropout = dropout
+        self.act = act
+
+    def forward(self, z):
+        z = F.dropout(z, self.dropout, training=self.training)
+        adj = self.act(torch.mm(z, z.t()))
+        return adj
+
+
+
+
 class RLTransform(nn.Module):
     """
     Transform relational features into closes to ones closed to foregrounds
@@ -406,42 +485,119 @@ class RLTransform(nn.Module):
             nn.ReLU(inplace=True),
         ]
         self.rl_fc = nn.Sequential(*rl_fc)
-
         self.rl_fc.apply(seq_init)
 
-    def graph(self, num_objs, num_rels, freq_bias,
+        # feat_dim, h_dim1, h_dim2, dropout rate
+        self.link_model = GCNModelVAE(200, 32, 16, 0.0)
+
+    def loss_function(self, preds, labels, mu, logvar, n_nodes, norm,
+                      pos_weight):
+        cost = norm * F.binary_cross_entropy_with_logits(preds,
+                                                         labels,
+                                                         pos_weight=pos_weight)
+
+        # see Appendix B from VAE paper:
+        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+        # https://arxiv.org/abs/1312.6114
+        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        KLD = -0.5 / n_nodes * torch.mean(torch.sum(
+            1 + 2 * logvar - mu.pow(2) - logvar.exp().pow(2), 1))
+
+        return cost + KLD
+
+
+    def preprocess_graph(self, adj):
+        adj = sp.coo_matrix(adj)
+        adj_ = adj + sp.eye(adj.shape[0])
+        rowsum = np.array(adj_.sum(1))
+        degree_mat_inv_sqrt = sp.diags(np.power(rowsum, -0.5).flatten())
+        adj_normalized = adj_.dot(degree_mat_inv_sqrt).transpose().dot(degree_mat_inv_sqrt).tocoo()
+        # return sparse_to_tuple(adj_normalized)
+        return self.sparse_mx_to_torch_sparse_tensor(adj_normalized)
+
+    def sparse_mx_to_torch_sparse_tensor(self, sparse_mx):
+        """Convert a scipy sparse matrix to a torch sparse tensor."""
+        sparse_mx = sparse_mx.tocoo().astype(np.float32)
+        indices = torch.from_numpy(
+            np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
+        values = torch.from_numpy(sparse_mx.data)
+        shape = torch.Size(sparse_mx.shape)
+        return torch.sparse.FloatTensor(indices, values, shape)
+
+    def nx_adj(self, pair, num_obj, device):
+
+        # direct graph
+        graph = nx.DiGraph()
+        graph.add_nodes_from(range(num_obj))
+        elist = [tuple(e) for e in pair.cpu().numpy().tolist()]
+        graph.add_edges_from(elist)
+        adj = nx.adjacency_matrix(graph)
+
+        # normalization
+        adj_norm = self.preprocess_graph(adj)
+        adj_label = adj + sp.eye(adj.shape[0])
+        adj_label = torch.FloatTensor(adj_label.toarray())
+
+        pos_weight = float(adj.shape[0] * adj.shape[0] - adj.sum()) / adj.sum()
+        norm = adj.shape[0] * adj.shape[0] / float((adj.shape[0] * adj.shape[0] - adj.sum()) * 2)
+
+        pos_weight = torch.tensor(pos_weight).to(device)
+        return adj_norm.to(device), adj_label.to(device), pos_weight, norm
+
+    def graph(self, obj_embed,
+              num_objs,
+              num_rels,
+              freq_bias,
               rel_pair_idxs=None,
-              rel_labels=None):
+              rel_labels=None, device=None):
 
         rel_mask = torch.zeros_like(rel_labels)
         rel_mask = rel_mask.split(num_rels)
         rel_labels = rel_labels.split(num_rels)
 
+        link_loss = []
         for i in range(len(num_objs)):
             num_obj = num_objs[i]
-            adj = torch.zeros((num_obj, num_obj))
+            #adj = torch.zeros((num_obj, num_obj))
             rel_label = rel_labels[i]
             pair = rel_pair_idxs[i]
 
             bg_idx = np.where(rel_label.cpu() == 0)[0]
             fg_idx = np.where(rel_label.cpu() > 0)[0]
+            #adj[pair[fg_idx,0], pair[fg_idx,1]] = 1
 
-            adj[pair[fg_idx,0], pair[fg_idx,1]] = 1
+            adj_norm, adj_label, pos_weight, norm = self.nx_adj(
+                pair[fg_idx], num_obj, device)
+
+            recovered, mu, logvar = self.link_model(obj_embed[i], adj_norm)
+            loss = self.loss_function(preds=recovered, labels=adj_label,
+                                      mu=mu, logvar=logvar, n_nodes=num_obj,
+                                      norm=norm, pos_weight=pos_weight)
 
             # find candidate foregrouds
-            for idx in fg_idx:
-                cand_idx = np.where(
-                    (pair.cpu()[bg_idx,0] == pair.cpu()[idx,1]) &
-                    (pair.cpu()[bg_idx,1] == pair.cpu()[idx,0]))[0]
+            if True:
+                for idx in fg_idx:
+                    cand_idx = np.where(
+                        (pair.cpu()[bg_idx,0] == pair.cpu()[idx,1]) &
+                        (pair.cpu()[bg_idx,1] == pair.cpu()[idx,0]))[0]
 
-                if adj[pair[idx,1], pair[idx, 0]] < 1 and len(cand_idx) > 0:
-                    rel_mask[i][cand_idx] = 1
+                    if recovered[pair[idx,1], pair[idx, 0]] > 0.3 and len(cand_idx) > 0:
+                        rel_mask[i][cand_idx] = 1
 
-        return cat(rel_mask)
+            else:
+                for idx in bg_idx:
+                    if recovered[pair[idx,0], pair[idx, 1]] > 0.9 :
+                        rel_mask[i][idx] = 1
 
-    def forward(self, union_features, rel_mean, rel_covar,
-                freq_bias, geo_dists, rel_labels,
-                num_objs, num_rels, rel_pair_idxs):
+
+            link_loss.append(loss)
+
+        link_loss = torch.stack(link_loss).mean() * 0.1
+        return cat(rel_mask), link_loss
+
+    def forward(self, obj_embed, union_features, rel_mean, rel_covar,
+                freq_bias, geo_dists, rel_labels,num_objs, num_rels,
+                rel_pair_idxs):
 
         # get device
         device = union_features.get_device()
@@ -454,20 +610,23 @@ class RLTransform(nn.Module):
         freq_bias = F.softmax(freq_bias, 1)
 
         rel_rt_loss = None
+        rel_link_loss = None
         if self.training:
 
-            fg_mask=self.graph(num_objs, num_rels, num_rels, rel_pair_idxs, rel_labels)
+            fg_mask, rel_link_loss =self.graph(obj_embed, num_objs, num_rels, num_rels,
+                                           rel_pair_idxs, rel_labels, device)
 
             # index of backgrounds / foregrounds
             bg_idx = np.where(rel_labels.cpu() == 0)[0]
             fg_idx = np.where(rel_labels.cpu() > 0)[0]
 
             #topk_idx = torch.multinomial(freq_bias, 1, replacement=True)
-            topk_prob, topk_idx = freq_bias.topk(3)
+            topk_prob, topk_idx = freq_bias.topk(5)
             topk_prob_bg = torch.gather(freq_bias[bg_idx,] * fg_mask[bg_idx][:,None], 1, topk_idx[bg_idx,0][:,None])
 
             mask_bg = torch.bernoulli(topk_prob_bg)
-            rel_labels_bg = topk_idx[bg_idx,] * mask_bg
+            #rel_labels_bg = topk_idx[bg_idx,] * mask_bg
+            rel_labels_bg = topk_idx[bg_idx,]
 
             rel_labels[bg_idx] = rel_labels_bg[:,0].long()
 
@@ -481,9 +640,10 @@ class RLTransform(nn.Module):
             # play out each episode
             X = union_features.clone().detach()
             Y = topk_idx.cpu()
+            Y_prob = topk_prob.cpu()
 
             for ep in tf_idx:
-                observation = self.env.reset(X[ep], Y[ep])
+                observation = self.env.reset(X[ep], Y[ep], Y_prob[ep])
 
                 self.agent.new_episode()
                 total_reward = 0
@@ -510,7 +670,7 @@ class RLTransform(nn.Module):
 
         union_features = self.rl_fc(union_features)
 
-        return union_features, rel_labels, rel_rt_loss
+        return union_features, rel_labels, rel_rt_loss, rel_link_loss
 
 
 class VGNet(nn.Module):

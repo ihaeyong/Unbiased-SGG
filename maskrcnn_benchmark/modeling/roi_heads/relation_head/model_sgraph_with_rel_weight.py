@@ -232,12 +232,17 @@ class RelReward(nn.Module):
 
         critic_freq = ((reward_freq - V_freq) ** 2)*self.pred_inv_prop[y].to(device).float()
         critic_pred = ((reward_pred - V_pred) ** 2)*self.pred_inv_prop[y].to(device).float()
+        critic_dist = ((V_freq - V_pred) ** 2)*self.pred_inv_prop[y].to(device).float()
+
         freq_loss = critic_freq.sum() / rel_logits.size(0)
         pred_loss = critic_pred.sum() / rel_logits.size(0)
+        dist_loss = critic_dist.sum() / rel_logits.size(0)
 
-        critic_loss = pred_loss + freq_loss
+        critic_loss = pred_loss + freq_loss + dist_loss
 
-        loss = critic_loss * alpha + ce_loss
+        #loss = critic_loss * alpha + ce_loss
+
+        loss = ce_loss
 
         return  loss
 

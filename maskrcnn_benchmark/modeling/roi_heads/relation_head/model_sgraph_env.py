@@ -171,10 +171,11 @@ class VGEnv(nn.Module):
         obs = self._transform(X)
 
         # make move and reveal square
-        if self.Y[0] == 0:
-            y = self.Y[1]
-        else:
-            y = self.Y[0]
+        #if self.Y[0] == 0:
+        #    y = self.Y[1]
+        #else:
+        #    y = self.Y[0]
+        y = self.Y[self.i]
 
         # -0.1 penalty for each additional timestep
         # +1.0 for correct guess
@@ -198,11 +199,16 @@ class VGEnv(nn.Module):
 
         return obs, y, reward, done, info
 
-    def reset(self, x, y=None):
+    def reset(self, x, y=None, y_prob=None):
         # resets the environment and returns initial observation
         self.eps = 0.5
         self.step_size = 0.01
         self.Y = self.torch_to_numpy(y)
+
+        #y_prob = 1 - self.torch_to_numpy(y_prob)
+        y_prob = self.torch_to_numpy(y_prob)
+        pi = y_prob / y_prob.sum()
+        self.i = np.random.choice(np.arange(5), p=pi)
 
         self.idx = 1
         self.steps = 0
