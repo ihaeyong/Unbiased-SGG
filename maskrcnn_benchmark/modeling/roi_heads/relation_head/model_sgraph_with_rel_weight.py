@@ -72,7 +72,7 @@ class ObjWeight(nn.Module):
             topk_true_mask = (topk_idx[:,0] == obj_labels).float().data.cpu().numpy()
             topk_false_mask = (topk_idx[:,0] != obj_labels).float().data.cpu().numpy()
 
-            w_type = 'false'
+            w_type = 'full'
             if w_type is 'full':
                 batch_freq = freq_bias.data.cpu().numpy()
                 cls_num_list = batch_freq.sum(0)
@@ -90,7 +90,7 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 2.2 # default 2.2
+            skew_th = 2.1 # default 2.2
             if skew_v > skew_th:
                 beta = 1.0 - ent_v * 1.0
             elif skew_v < -skew_th:
@@ -145,7 +145,7 @@ class RelWeight(nn.Module):
             topk_true_mask = (topk_idx[:,0] == rel_labels).float().data.cpu().numpy()
             topk_false_mask = (topk_idx[:,0] != rel_labels).float().data.cpu().numpy()
 
-            w_type = 'false'
+            w_type = 'full'
 
             if w_type is 'full':
                 batch_freq = freq_bias.data.cpu().numpy()
@@ -164,7 +164,7 @@ class RelWeight(nn.Module):
                 ent_v = ent_v.sum() / (topk_false_mask.sum() + 1)
                 skew_v = skew_v.sum() / (topk_false_mask.sum() + 1)
 
-            skew_th = 0.9 # default 0.9
+            skew_th = 1.1 # default 0.9
             if skew_v > skew_th :
                 beta = 1.0 - ent_v * 1.0
             elif skew_v < -skew_th :
