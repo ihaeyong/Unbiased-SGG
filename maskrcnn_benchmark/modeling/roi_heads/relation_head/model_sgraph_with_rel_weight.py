@@ -72,25 +72,40 @@ class ObjWeight(nn.Module):
             topk_true_mask = (topk_idx[:,0] == obj_labels).float().data.cpu().numpy()
             topk_false_mask = (topk_idx[:,0] != obj_labels).float().data.cpu().numpy()
 
-            w_type = 'full'
-            if w_type is 'full':
-                batch_freq = freq_bias.data.cpu().numpy()
-                cls_num_list = batch_freq.sum(0)
-                cls_order = batch_freq[:, self.obj_idx]
+            batch_freq = freq_bias.data.cpu().numpy()
+            cls_num_list = batch_freq.sum(0)
+            cls_order = batch_freq[:, self.obj_idx]
+
+            w_type = 'avg'
+            if w_type == 'full':
                 ent_v = entropy(cls_order, base=151, axis=1).mean()
                 skew_v = skew(cls_order, axis=1).mean()
-            elif w_type is 'false':
-                batch_freq = freq_bias.data.cpu().numpy()
-                cls_num_list = batch_freq.sum(0)
-                cls_order = batch_freq[:, self.obj_idx]
+
+            elif w_type == 'false':
                 ent_v = entropy(cls_order, base=151, axis=1) * topk_false_mask
                 ent_v = ent_v.sum() / (topk_false_mask.sum()+1)
                 skew_v = skew(cls_order, axis=1) * topk_false_mask
                 skew_v = skew_v.sum() / (topk_false_mask.sum()+1)
 
+            elif w_type == 'avg':
+                ent_v = entropy(cls_order, base=151, axis=1)
+                skew_v = skew(cls_order, axis=1)
+
+                ent_false_v = ent_v * topk_false_mask
+                ent_true_v = ent_v * topk_true_mask
+
+                skew_false_v = skew_v * topk_false_mask
+                skew_true_v = skew_v * topk_true_mask
+
+                alpha = topk_false_mask.sum() / topk_false_mask.shape[0]
+
+                ent_v = ent_false_v.mean() * alpha + ent_false_v.mean() * (1-alpha)
+                skew_v = skew_false_v.mean() * alpha + skew_true_v.mean() * (1-alpha)
+
+
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 2.1 # default 2.2
+            skew_th = 2.2 # default 2.2
             if skew_v > skew_th:
                 beta = 1.0 - ent_v * 1.0
             elif skew_v < -skew_th:
@@ -145,26 +160,39 @@ class RelWeight(nn.Module):
             topk_true_mask = (topk_idx[:,0] == rel_labels).float().data.cpu().numpy()
             topk_false_mask = (topk_idx[:,0] != rel_labels).float().data.cpu().numpy()
 
-            w_type = 'full'
+            batch_freq = freq_bias.data.cpu().numpy()
+            cls_num_list = batch_freq.sum(0)
+            cls_order = batch_freq[:, self.pred_idx]
 
+            w_type = 'avg'
             if w_type is 'full':
-                batch_freq = freq_bias.data.cpu().numpy()
                 cls_num_list = batch_freq.sum(0)
                 cls_order = batch_freq[:, self.pred_idx]
                 ent_v = entropy(cls_order, base=51, axis=1).mean()
                 skew_v = skew(cls_order, axis=1).mean()
 
             elif w_type is 'false':
-                batch_freq = freq_bias.data.cpu().numpy()
-                cls_num_list = batch_freq.sum(0)
-                cls_order = batch_freq[:, self.pred_idx]
-
                 ent_v = entropy(cls_order, base=51, axis=1) * topk_false_mask
                 skew_v = skew(cls_order, axis=1) * topk_false_mask
                 ent_v = ent_v.sum() / (topk_false_mask.sum() + 1)
                 skew_v = skew_v.sum() / (topk_false_mask.sum() + 1)
 
-            skew_th = 1.1 # default 0.9
+            elif w_type is 'avg':
+                ent_v = entropy(cls_order, base=51, axis=1)
+                skew_v = skew(cls_order, axis=1)
+
+                ent_false_v = ent_v * topk_false_mask
+                ent_true_v = ent_v * topk_true_mask
+
+                skew_false_v = skew_v * topk_false_mask
+                skew_true_v = skew_v * topk_true_mask
+
+                alpha = topk_false_mask.sum() / topk_false_mask.shape[0]
+
+                ent_v = ent_false_v.mean() * alpha + ent_false_v.mean() * (1-alpha)
+                skew_v = skew_false_v.mean() * alpha + skew_true_v.mean() * (1-alpha)
+
+            skew_th = 1.0 # default 0.9
             if skew_v > skew_th :
                 beta = 1.0 - ent_v * 1.0
             elif skew_v < -skew_th :
