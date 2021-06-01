@@ -105,7 +105,7 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 2.2 # default 2.2
+            skew_th = 2.0 # default 2.2
             if skew_v > skew_th:
                 beta = 1.0 - ent_v * 1.0
             elif skew_v < -skew_th:
@@ -165,19 +165,19 @@ class RelWeight(nn.Module):
             cls_order = batch_freq[:, self.pred_idx]
 
             w_type = 'avg'
-            if w_type is 'full':
+            if w_type == 'full':
                 cls_num_list = batch_freq.sum(0)
                 cls_order = batch_freq[:, self.pred_idx]
                 ent_v = entropy(cls_order, base=51, axis=1).mean()
                 skew_v = skew(cls_order, axis=1).mean()
 
-            elif w_type is 'false':
+            elif w_type == 'false':
                 ent_v = entropy(cls_order, base=51, axis=1) * topk_false_mask
                 skew_v = skew(cls_order, axis=1) * topk_false_mask
                 ent_v = ent_v.sum() / (topk_false_mask.sum() + 1)
                 skew_v = skew_v.sum() / (topk_false_mask.sum() + 1)
 
-            elif w_type is 'avg':
+            elif w_type == 'avg':
                 ent_v = entropy(cls_order, base=51, axis=1)
                 skew_v = skew(cls_order, axis=1)
 
