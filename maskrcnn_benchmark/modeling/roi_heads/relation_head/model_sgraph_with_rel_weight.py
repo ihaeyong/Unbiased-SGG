@@ -72,6 +72,9 @@ class ObjWeight(nn.Module):
             topk_true_mask = (topk_idx[:,0] == obj_labels).float().data.cpu().numpy()
             topk_false_mask = (topk_idx[:,0] != obj_labels).float().data.cpu().numpy()
 
+            true_idx = np.where(topk_true_mask == 1)[0]
+            false_idx = np.where(topk_false_mask == 1)[0]
+
             batch_freq = freq_bias.data.cpu().numpy()
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.obj_idx]
@@ -91,21 +94,28 @@ class ObjWeight(nn.Module):
                 ent_v = entropy(cls_order, base=151, axis=1)
                 skew_v = skew(cls_order, axis=1)
 
-                ent_false_v = ent_v * topk_false_mask
-                ent_true_v = ent_v * topk_true_mask
+                if False:
+                    ent_false_v = ent_v * topk_false_mask
+                    ent_true_v = ent_v * topk_true_mask
 
-                skew_false_v = skew_v * topk_false_mask
-                skew_true_v = skew_v * topk_true_mask
+                    skew_false_v = skew_v * topk_false_mask
+                    skew_true_v = skew_v * topk_true_mask
+                else:
+                    ent_false_v = ent_v[false_idx]
+                    ent_true_v = ent_v[true_idx]
+
+                    skew_false_v = skew_v[false_idx]
+                    skew_true_v = skew_v[true_idx]
 
                 alpha = topk_false_mask.sum() / topk_false_mask.shape[0]
 
-                ent_v = ent_false_v.mean() * alpha + ent_false_v.mean() * (1-alpha)
+                ent_v = ent_false_v.mean() * alpha + ent_true_v.mean() * (1-alpha)
                 skew_v = skew_false_v.mean() * alpha + skew_true_v.mean() * (1-alpha)
 
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 2.0 # default 2.2
+            skew_th = 2.1 # default 2.2
             if skew_v > skew_th:
                 beta = 1.0 - ent_v * 1.0
             elif skew_v < -skew_th:
@@ -160,6 +170,9 @@ class RelWeight(nn.Module):
             topk_true_mask = (topk_idx[:,0] == rel_labels).float().data.cpu().numpy()
             topk_false_mask = (topk_idx[:,0] != rel_labels).float().data.cpu().numpy()
 
+            true_idx = np.where(topk_true_mask == 1)[0]
+            false_idx = np.where(topk_false_mask == 1)[0]
+
             batch_freq = freq_bias.data.cpu().numpy()
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
@@ -181,15 +194,22 @@ class RelWeight(nn.Module):
                 ent_v = entropy(cls_order, base=51, axis=1)
                 skew_v = skew(cls_order, axis=1)
 
-                ent_false_v = ent_v * topk_false_mask
-                ent_true_v = ent_v * topk_true_mask
+                if False:
+                    ent_false_v = ent_v * topk_false_mask
+                    ent_true_v = ent_v * topk_true_mask
 
-                skew_false_v = skew_v * topk_false_mask
-                skew_true_v = skew_v * topk_true_mask
+                    skew_false_v = skew_v * topk_false_mask
+                    skew_true_v = skew_v * topk_true_mask
+                else:
+                    ent_false_v = ent_v[false_idx]
+                    ent_true_v = ent_v[true_idx]
+
+                    skew_false_v = skew_v[false_idx]
+                    skew_true_v = skew_v[true_idx]
 
                 alpha = topk_false_mask.sum() / topk_false_mask.shape[0]
 
-                ent_v = ent_false_v.mean() * alpha + ent_false_v.mean() * (1-alpha)
+                ent_v = ent_false_v.mean() * alpha + ent_true_v.mean() * (1-alpha)
                 skew_v = skew_false_v.mean() * alpha + skew_true_v.mean() * (1-alpha)
 
             skew_th = 1.0 # default 0.9

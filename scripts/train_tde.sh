@@ -25,7 +25,6 @@ if [ $2 == "sgcls" ]; then
            MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING True \
            MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT False \
            SOLVER.IMS_PER_BATCH 12 \
-           SOLVER.BASE_LR 0.0001 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
            SOLVER.MAX_ITER 70000 \
@@ -33,7 +32,7 @@ if [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/skew_non_skip_avg_obj2.0_rel1.0_sum_v3-sgcls
+           OUTPUT_DIR ./checkpoints/skew_non_skip_avg_idx_obj2.1_rel1.0_sum_v3-sgcls
 
 elif [ $2 == "predcls" ]; then
     python -m torch.distributed.launch \
@@ -55,14 +54,13 @@ elif [ $2 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING True \
            MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT False \
            SOLVER.IMS_PER_BATCH 12 \
-           SOLVER.BASE_LR 0.0001 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" SOLVER.MAX_ITER 70000 \
            SOLVER.VAL_PERIOD 2000 \
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/skew_non_skip_avg_obj2.0_rel1.0_sum_v3-predcls
+           OUTPUT_DIR ./checkpoints/skew_non_skip_avg_idx_obj2.1_rel1.0_sum_v3-predcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \
@@ -90,6 +88,6 @@ elif [ $2 == "sgdet" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/skew_non_skip_avg_obj2.0_rel1.0_sum_v3-sgdet
+           OUTPUT_DIR ./checkpoints/skew_non_skip_avg_idx_obj2.1_rel1.0_sum_v3-sgdet
 
 fi
