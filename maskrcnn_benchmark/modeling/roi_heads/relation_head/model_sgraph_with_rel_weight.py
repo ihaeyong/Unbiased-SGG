@@ -107,7 +107,7 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 2.1 # default 2.2
+            skew_th = 2.2 # default 2.2
             if skew_v > skew_th:
                 beta = 1.0 - ent_v * 1.0
             elif skew_v < -skew_th:
@@ -195,7 +195,7 @@ class RelWeight(nn.Module):
                 ent_v = ent_false_v * alpha + ent_true_v * (1-alpha)
                 skew_v = skew_false_v * alpha + skew_true_v * (1-alpha)
 
-            skew_th = 1.0 # default 0.9
+            skew_th = 0.9 # default 0.9
             if skew_v > skew_th :
                 beta = 1.0 - ent_v * 1.0
             elif skew_v < -skew_th :
