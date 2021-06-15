@@ -64,7 +64,7 @@ class DecoderTreeLSTM(torch.nn.Module):
         out_h = lstm_io.hidden[lstm_io.order.long()]
         out_dists = lstm_io.dists[lstm_io.order.long()]
         out_commitments = lstm_io.commitments[lstm_io.order.long()]
-            
+
         return out_dists, out_commitments
 
 
@@ -107,7 +107,7 @@ class VCTreeLSTMContext(nn.Module):
         self.overlap_embed = nn.Sequential(*[
             nn.Linear(6, 128), nn.BatchNorm1d(128, momentum= 0.001), nn.ReLU(inplace=True),
             ])
-        
+
         # box embed
         self.box_embed = nn.Sequential(*[
             nn.Linear(9, 128), nn.BatchNorm1d(128, momentum= 0.001), nn.ReLU(inplace=True),
@@ -137,7 +137,7 @@ class VCTreeLSTMContext(nn.Module):
         self.score_sub = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.score_obj = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.vision_prior = nn.Linear(self.hidden_dim * 3 + 1, 1)
-        
+
         layer_init(self.obj_reduce, xavier=True)
         layer_init(self.emb_reduce, xavier=True)
         layer_init(self.score_pre, xavier=True)
@@ -158,7 +158,7 @@ class VCTreeLSTMContext(nn.Module):
                 out_dim=self.hidden_dim,
                 num_layer=self.nl_edge,
                 dropout=self.dropout_rate if self.nl_edge > 1 else 0,)
-        
+
         # untreated average features
         self.average_ratio = 0.0005
         self.effect_analysis = config.MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS
@@ -181,7 +181,7 @@ class VCTreeLSTMContext(nn.Module):
         """
         obj_feats = obj_feats.split(num_objs, dim=0)
         obj_labels = obj_labels.split(num_objs, dim=0) if obj_labels is not None else None
-        
+
         obj_ctxs = []
         obj_preds = []
         obj_dists = []
@@ -216,7 +216,7 @@ class VCTreeLSTMContext(nn.Module):
         :return: edge_ctx: [num_obj, #feats] For later!
         """
         inp_feats = obj_feats.split(num_objs, dim=0)
-        
+
         edge_ctxs = []
         for feat, tree, num_obj in zip(inp_feats, forest, num_objs):
             edge_rep = self.edge_ctx_rnn(tree, feat, num_obj)
@@ -238,7 +238,7 @@ class VCTreeLSTMContext(nn.Module):
         else:
             obj_logits = cat([proposal.get_field("predict_logits") for proposal in proposals], dim=0).detach()
             obj_embed = F.softmax(obj_logits, dim=1) @ self.obj_embed1.weight
-        
+
         assert proposals[0].mode == 'xyxy'
         box_info = encode_box_info(proposals)
         pos_embed = self.pos_embed(box_info)
@@ -274,7 +274,7 @@ class VCTreeLSTMContext(nn.Module):
             self.untreated_obj_feat = self.moving_average(self.untreated_obj_feat, obj_pre_rep)
             self.untreated_edg_feat = self.moving_average(self.untreated_edg_feat, cat((obj_embed2, x), -1))
 
-        return obj_dists, obj_preds, edge_ctx, bi_preds
+        return obj_dists, obj_preds, edge_ctx, bi_preds, obj_embed2
 
     def moving_average(self, holder, input):
         assert len(input.shape) == 2

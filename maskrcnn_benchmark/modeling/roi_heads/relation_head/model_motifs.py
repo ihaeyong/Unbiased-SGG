@@ -395,4 +395,4 @@ class LSTMContext(nn.Module):
             self.untreated_obj_feat = self.moving_average(self.untreated_obj_feat, obj_pre_rep)
             self.untreated_edg_feat = self.moving_average(self.untreated_edg_feat, cat((obj_embed2, x), -1))
 
-        return obj_dists, obj_preds, edge_ctx, None
+        return obj_dists, obj_preds, edge_ctx, obj_embed2

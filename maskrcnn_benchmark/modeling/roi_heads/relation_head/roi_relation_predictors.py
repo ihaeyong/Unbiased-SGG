@@ -623,6 +623,7 @@ class MotifPredictor(nn.Module):
         num_inputs = in_channels
         self.use_vision = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_VISION
         self.use_bias = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS
+        self.embedding = True
 
         # load class dict
         statistics = get_dataset_statistics(config)
@@ -639,11 +640,17 @@ class MotifPredictor(nn.Module):
         # post decoding
         self.hidden_dim = config.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM
         self.pooling_dim = config.MODEL.ROI_RELATION_HEAD.CONTEXT_POOLING_DIM
+        self.embed_dim = config.MODEL.ROI_RELATION_HEAD.EMBED_DIM
         self.post_emb = nn.Linear(self.hidden_dim, self.hidden_dim * 2)
         self.post_cat = nn.Linear(self.hidden_dim * 2, self.pooling_dim)
         self.rel_compress = nn.Linear(self.pooling_dim, self.num_rel_cls, bias=True)
 
-        # initialize layer parameters 
+        if self.embedding:
+            self.non_vis_dists = nn.Linear(self.embed_dim * 2,
+                                           self.num_rel_cls, bias=True)
+            layer_init(self.non_vis_dists, xavier=True)
+
+        # initialize layer parameters
         layer_init(self.post_emb, 10.0 * (1.0 / self.hidden_dim) ** 0.5, normal=True)
         layer_init(self.post_cat, xavier=True)
         layer_init(self.rel_compress, xavier=True)
@@ -672,7 +679,7 @@ class MotifPredictor(nn.Module):
         if self.attribute_on:
             obj_dists, obj_preds, att_dists, edge_ctx = self.context_layer(roi_features, proposals, logger)
         else:
-            obj_dists, obj_preds, edge_ctx, _ = self.context_layer(roi_features, proposals, logger)
+            obj_dists, obj_preds, edge_ctx, obj_embed = self.context_layer(roi_features, proposals, logger)
 
         # post decode
         edge_rep = self.post_emb(edge_ctx)
@@ -687,14 +694,19 @@ class MotifPredictor(nn.Module):
         head_reps = head_rep.split(num_objs, dim=0)
         tail_reps = tail_rep.split(num_objs, dim=0)
         obj_preds = obj_preds.split(num_objs, dim=0)
+        obj_embs = obj_embed.split(num_objs, dim=0)
 
         prod_reps = []
         pair_preds = []
-        for pair_idx, head_rep, tail_rep, obj_pred in zip(rel_pair_idxs, head_reps, tail_reps, obj_preds):
+        prod_embs = []
+        for pair_idx, head_rep, tail_rep, obj_emb, obj_pred in zip(rel_pair_idxs, head_reps, tail_reps, obj_embs, obj_preds):
             prod_reps.append( torch.cat((head_rep[pair_idx[:,0]], tail_rep[pair_idx[:,1]]), dim=-1) )
             pair_preds.append( torch.stack((obj_pred[pair_idx[:,0]], obj_pred[pair_idx[:,1]]), dim=1) )
+            prod_embs.append( torch.cat((obj_emb[pair_idx[:,0]], obj_emb[pair_idx[:,1]]), dim=-1) )
+
         prod_rep = cat(prod_reps, dim=0)
         pair_pred = cat(pair_preds, dim=0)
+        prod_emb = cat(prod_embs, dim=0)
 
         prod_rep = self.post_cat(prod_rep)
 
@@ -709,7 +721,13 @@ class MotifPredictor(nn.Module):
         if self.use_bias:
             freq_dists = self.freq_bias.index_with_labels(pair_pred.long())
 
-            freq_bias = torch.sigmoid(freq_dists)
+            # we estimates the effective number using non-visual predicate distributions
+            if self.embedding:
+                embed_bias = self.non_vis_dists(prod_emb)
+                freq_bias = torch.sigmoid(freq_dists + embed_bias)
+            else:
+                freq_bias = torch.sigmoid(freq_dists)
+
             if True:
                 # proposed by haeyong
                 rel_dists = rel_dists + freq_bias
@@ -780,6 +798,12 @@ class VCTreePredictor(nn.Module):
 
         self.freq_bias = FrequencyBias(config, statistics)
 
+        self.embedding = True
+        if self.embedding:
+            self.non_vis_dists = nn.Linear(self.embed_dim * 2,
+                                           self.num_rel_cls, bias=True)
+            layer_init(self.non_vis_dists, xavier=True)
+
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, union_features, logger=None):
         """
         Returns:
@@ -790,7 +814,7 @@ class VCTreePredictor(nn.Module):
         """
 
         # encode context infomation
-        obj_dists, obj_preds, edge_ctx, binary_preds = self.context_layer(roi_features, proposals, rel_pair_idxs, logger)
+        obj_dists, obj_preds, edge_ctx, binary_preds, obj_embed = self.context_layer(roi_features, proposals, rel_pair_idxs, logger)
 
         # post decode
         edge_rep = F.relu(self.post_emb(edge_ctx))
@@ -808,11 +832,14 @@ class VCTreePredictor(nn.Module):
 
         prod_reps = []
         pair_preds = []
-        for pair_idx, head_rep, tail_rep, obj_pred in zip(rel_pair_idxs, head_reps, tail_reps, obj_preds):
+        prod_embs = []
+        for pair_idx, head_rep, tail_rep, obj_emb, obj_pred in zip(rel_pair_idxs, head_reps, tail_reps, obj_embs, obj_preds):
             prod_reps.append( torch.cat((head_rep[pair_idx[:,0]], tail_rep[pair_idx[:,1]]), dim=-1) )
             pair_preds.append( torch.stack((obj_pred[pair_idx[:,0]], obj_pred[pair_idx[:,1]]), dim=1) )
+            prod_embs.append( torch.cat((obj_emb[pair_idx[:,0]], obj_emb[pair_idx[:,1]]), dim=-1) )
         prod_rep = cat(prod_reps, dim=0)
         pair_pred = cat(pair_preds, dim=0)
+        prod_emb = cat(prod_embs, dim=0)
 
         prod_rep = self.post_cat(prod_rep)
 
@@ -827,7 +854,12 @@ class VCTreePredictor(nn.Module):
         #uni_dists = self.uni_compress(self.drop(union_features))
         frq_dists = self.freq_bias.index_with_labels(pair_pred.long())
 
-        freq_bias = torch.sigmoid(frq_dists)
+        if self.embedding:
+            embed_bias = self.non_vis_dists(prod_emb)
+            freq_bias = torch.sigmoid(freq_dists + embed_bias)
+        else:
+            freq_bias = torch.sigmoid(freq_dists)
+
         if True:
             # proposed by haeyong
             rel_dists = ctx_dists + freq_bias
