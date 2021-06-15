@@ -209,14 +209,13 @@ class TransformerContext(nn.Module):
         self.hidden_dim = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM
         self.nms_thresh = self.cfg.TEST.RELATION.LATER_NMS_PREDICTION_THRES
 
-        self.dropout_rate = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.DROPOUT_RATE   
-        self.obj_layer = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.OBJ_LAYER      
-        self.edge_layer = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.REL_LAYER        
-        self.num_head = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.NUM_HEAD         
-        self.inner_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.INNER_DIM     
-        self.k_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.KEY_DIM         
-        self.v_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.VAL_DIM    
-
+        self.dropout_rate = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.DROPOUT_RATE
+        self.obj_layer = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.OBJ_LAYER
+        self.edge_layer = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.REL_LAYER
+        self.num_head = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.NUM_HEAD
+        self.inner_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.INNER_DIM
+        self.k_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.KEY_DIM
+        self.v_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.VAL_DIM
 
         # the following word embedding layer should be initalize by glove.6B before using
         embed_vecs = obj_edge_vectors(self.obj_classes, wv_dir=self.cfg.GLOVE_DIR, wv_dim=self.embed_dim)
@@ -239,7 +238,7 @@ class TransformerContext(nn.Module):
         self.context_edge = TransformerEncoder(self.edge_layer, self.num_head, self.k_dim, 
                                                 self.v_dim, self.hidden_dim, self.inner_dim, self.dropout_rate)
 
-    
+
     def forward(self, roi_features, proposals, logger=None):
         # labels will be used in DecoderRNN during training
         use_gt_label = self.training or self.cfg.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL
@@ -251,7 +250,7 @@ class TransformerContext(nn.Module):
         else:
             obj_logits = cat([proposal.get_field("predict_logits") for proposal in proposals], dim=0).detach()
             obj_embed = F.softmax(obj_logits, dim=1) @ self.obj_embed1.weight
-        
+
         # bbox embedding will be used as input
         assert proposals[0].mode == 'xyxy'
         pos_embed = self.bbox_embed(encode_box_info(proposals))
@@ -266,7 +265,9 @@ class TransformerContext(nn.Module):
         if self.mode == 'predcls':
             obj_preds = obj_labels
             obj_dists = to_onehot(obj_preds, self.num_obj_cls)
-            edge_pre_rep = cat((roi_features, obj_feats, self.obj_embed2(obj_labels)), dim=-1)
+            obj_embed2 = self.obj_embed2(obj_labels)
+            edge_pre_rep = cat((roi_features, obj_feats, obj_embed2), dim=-1)
+
         else:
             obj_dists = self.out_obj(obj_feats)
             use_decoder_nms = self.mode == 'sgdet' and not self.training
@@ -275,13 +276,15 @@ class TransformerContext(nn.Module):
                 obj_preds = self.nms_per_cls(obj_dists, boxes_per_cls, num_objs)
             else:
                 obj_preds = obj_dists[:, 1:].max(1)[1] + 1
-            edge_pre_rep = cat((roi_features, obj_feats, self.obj_embed2(obj_preds)), dim=-1)
+
+            obj_embed2 = self.obj_embed2(obj_preds)
+            edge_pre_rep = cat((roi_features, obj_feats, obj_embed2), dim=-1)
 
         # edge context
         edge_pre_rep = self.lin_edge(edge_pre_rep)
         edge_ctx = self.context_edge(edge_pre_rep, num_objs)
 
-        return obj_dists, obj_preds, edge_ctx
+        return obj_dists, obj_preds, edge_ctx, obj_embed2
 
     def nms_per_cls(self, obj_dists, boxes_per_cls, num_objs):
         obj_dists = obj_dists.split(num_objs, dim=0)

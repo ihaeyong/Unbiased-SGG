@@ -305,7 +305,7 @@ class VCTreeLSTMContext(nn.Module):
             sub_dist = dist.view(1, num_obj, -1).expand(num_obj, num_obj, -1).unsqueeze(2)
             obj_dist = dist.view(num_obj, 1, -1).expand(num_obj, num_obj, -1).unsqueeze(3)
             joint_dist = (sub_dist * obj_dist).view(num_obj, num_obj, -1)
-            
+
             co_prior = self.bi_freq_prior(joint_dist.view(num_obj*num_obj, -1)).view(num_obj, num_obj)
             vis_prior = self.vision_prior(cat([sub * obj, sub, obj, co_prior.unsqueeze(-1)], dim=-1).view(num_obj*num_obj, -1)).view(num_obj, num_obj)
             joint_pred =  torch.sigmoid(vis_prior) *  co_prior
