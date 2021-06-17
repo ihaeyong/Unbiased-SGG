@@ -193,6 +193,19 @@ class RelWeight(nn.Module):
                 ent_v = ent_false_v * alpha + ent_true_v * (1-alpha)
                 skew_v = skew_false_v * alpha + skew_true_v * (1-alpha)
 
+            elif w_type == 'avg_smooth':
+                ent_v = entropy(cls_order, base=51, axis=1)
+                skew_v = skew(cls_order, axis=1)
+
+                ent_false_v = ent_v * topk_false_mask
+                ent_true_v = ent_v * topk_true_mask
+                skew_false_v = skew_v * topk_false_mask
+                skew_true_v = skew_v * topk_true_mask
+
+                alpha = topk_false_mask.sum() / topk_false_mask.shape[0]
+                ent_v = ent_false_v.mean() * alpha + ent_true_v.mean() * (1-alpha)
+                skew_v = skew_false_v.mean() * alpha + skew_true_v.mean() * (1-alpha)
+
             skew_th = 0.9 # default 0.9
             if skew_v > skew_th :
                 beta = 1.0 - ent_v * 1.0

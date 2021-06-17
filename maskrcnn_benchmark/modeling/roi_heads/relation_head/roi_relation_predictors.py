@@ -528,13 +528,13 @@ class TransformerPredictor(nn.Module):
         if self.use_bias:
             freq_dists = self.freq_bias.index_with_labels(pair_pred.long())
             if self.embedding:
-                embed_bias = self.non_vis_dists(prod_emb)
-                freq_bias = torch.sigmoid(freq_dists + embed_bias)
+                embed_dists = self.non_vis_dists(prod_emb)
+                freq_bias = torch.sigmoid(freq_dists + embed_dists)
             else:
                 freq_bias = torch.sigmoid(freq_dists)
             if True:
                 # proposed by haeyong
-                rel_dists = rel_dists + freq_bias
+                rel_dists = rel_dists + torch.sigmoid(freq_dists) + embed_dists
             else:
                 rel_dists = rel_dists + freq_dists
 
@@ -611,7 +611,7 @@ class IMPPredictor(nn.Module):
             freq_bias = torch.sigmoid(freq_dists)
             if True:
                 # proposed by haeyong
-                rel_dists = rel_dists + freq_bias
+                rel_dists = rel_dists + torch.sigmoid(freq_dists)
             else:
                 rel_dists = rel_dists + freq_dists
 
@@ -738,14 +738,14 @@ class MotifPredictor(nn.Module):
 
             # we estimates the effective number using non-visual predicate distributions
             if self.embedding:
-                embed_bias = self.non_vis_dists(prod_emb)
-                freq_bias = torch.sigmoid(freq_dists + embed_bias)
+                embed_dists = self.non_vis_dists(prod_emb)
+                freq_bias = torch.sigmoid(freq_dists + embed_dists)
             else:
                 freq_bias = torch.sigmoid(freq_dists)
 
             if True:
                 # proposed by haeyong
-                rel_dists = rel_dists + freq_bias
+                rel_dists = rel_dists + torch.sigmoid(freq_dists) + embed_dists
             else:
                 rel_dists = rel_dists + freq_dists
 
@@ -872,14 +872,14 @@ class VCTreePredictor(nn.Module):
         frq_dists = self.freq_bias.index_with_labels(pair_pred.long())
 
         if self.embedding:
-            embed_bias = self.non_vis_dists(prod_emb)
-            freq_bias = torch.sigmoid(freq_dists + embed_bias)
+            embed_dists = self.non_vis_dists(prod_emb)
+            freq_bias = torch.sigmoid(freq_dists + embed_dists)
         else:
             freq_bias = torch.sigmoid(freq_dists)
 
         if True:
             # proposed by haeyong
-            rel_dists = ctx_dists + freq_bias
+            rel_dists = ctx_dists + torch.sigmoid(freq_dists) + embed_dists
         else:
             rel_dists = ctx_dists + frq_dists
 
