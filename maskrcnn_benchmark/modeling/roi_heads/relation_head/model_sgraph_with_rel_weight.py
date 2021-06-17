@@ -206,11 +206,11 @@ class RelWeight(nn.Module):
                 ent_v = ent_false_v.mean() * alpha + ent_true_v.mean() * (1-alpha)
                 skew_v = skew_false_v.mean() * alpha + skew_true_v.mean() * (1-alpha)
 
-            skew_th = 0.8 # default 0.9
+            skew_th = 0.9 # default 0.9
             if skew_v > skew_th :
-                beta = 1.0 - ent_v * 1.0
+                beta = 1.0 - ent_v * 0.3
             elif skew_v < -skew_th :
-                beta = 1.0 - ent_v * 1.0
+                beta = 1.0 - ent_v * 0.3
             else:
                 beta = 0.0
 

@@ -103,6 +103,9 @@ class RelationFeatureExtractor(nn.Module):
             spatial_features = self.spatial_fc(rect_features.view(rect_features.size(0), -1))
             union_features = (region_features, spatial_features)
         else:
+            """
+            instead of rect_bbox embedding, we use rotational bbox embedding
+            """
             if not self.cfg.MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB:
                 union_features = union_vis_features
             else:
