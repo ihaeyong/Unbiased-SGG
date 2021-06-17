@@ -30,15 +30,15 @@ class FrequencyBias(nn.Module):
 
     def index_with_labels(self, labels):
         """
-        :param labels: [batch_size, 2] 
-        :return: 
+        :param labels: [batch_size, 2]
+        :return:
         """
         return self.obj_baseline(labels[:, 0] * self.num_objs + labels[:, 1])
 
     def index_with_probability(self, pair_prob):
         """
-        :param labels: [batch_size, num_obj, 2] 
-        :return: 
+        :param labels: [batch_size, num_obj, 2]
+        :return:
         """
         batch_size, num_obj, _ = pair_prob.shape
 
@@ -382,6 +382,7 @@ class LSTMContext(nn.Module):
         obj_dists, obj_preds, obj_ctx, perm, inv_perm, ls_transposed = self.obj_ctx(obj_pre_rep, proposals, obj_labels, boxes_per_cls, ctx_average=ctx_average)
         # edge level contextual feature
         obj_embed2 = self.obj_embed2(obj_preds.long())
+        obj_embed1 = F.softmax(obj_dists, dim=1) @ self.obj_embed1.weight
 
         if (all_average or ctx_average) and self.effect_analysis and (not self.training):
             obj_rel_rep = cat((self.untreated_edg_feat.view(1, -1).expand(batch_size, -1), obj_ctx), dim=-1)
@@ -395,4 +396,4 @@ class LSTMContext(nn.Module):
             self.untreated_obj_feat = self.moving_average(self.untreated_obj_feat, obj_pre_rep)
             self.untreated_edg_feat = self.moving_average(self.untreated_edg_feat, cat((obj_embed2, x), -1))
 
-        return obj_dists, obj_preds, edge_ctx, obj_embed2
+        return obj_dists, obj_preds, edge_ctx, obj_embed1
