@@ -283,6 +283,8 @@ class TransformerContext(nn.Module):
         # edge context
         edge_pre_rep = self.lin_edge(edge_pre_rep)
         edge_ctx = self.context_edge(edge_pre_rep, num_objs)
+        # object embedding updated by haeyong.k
+        obj_embed2 = F.softmax(obj_dists, dim=1) @ self.obj_embed2.weight
 
         return obj_dists, obj_preds, edge_ctx, obj_embed2
 

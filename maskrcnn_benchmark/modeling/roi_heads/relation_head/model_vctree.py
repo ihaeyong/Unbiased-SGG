@@ -261,6 +261,8 @@ class VCTreeLSTMContext(nn.Module):
         obj_ctxs, obj_preds, obj_dists = self.obj_ctx(num_objs, obj_pre_rep, proposals, obj_labels, vc_forest, ctx_average=ctx_average)
         # edge level contextual feature
         obj_embed2 = self.obj_embed2(obj_preds.long())
+        # object embedding updated by haeyong.k 
+        obj_embed2 = F.softmax(obj_dists, dim=1) @ self.obj_embed2.weight
 
         if (all_average or ctx_average) and self.effect_analysis and (not self.training):
             obj_rel_rep = cat((self.untreated_edg_feat.view(1, -1).expand(batch_size, -1), obj_ctxs), dim=-1)
@@ -312,7 +314,7 @@ class VCTreeLSTMContext(nn.Module):
 
             bi_preds.append(joint_pred)
             vc_scores.append(torch.sigmoid(joint_pred))
-        
+
         return bi_preds, vc_scores
 
 

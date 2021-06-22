@@ -869,7 +869,7 @@ class VCTreePredictor(nn.Module):
 
         ctx_dists = self.ctx_compress(prod_rep * union_features)
         #uni_dists = self.uni_compress(self.drop(union_features))
-        frq_dists = self.freq_bias.index_with_labels(pair_pred.long())
+        freq_dists = self.freq_bias.index_with_labels(pair_pred.long())
 
         if self.embedding:
             embed_dists = self.non_vis_dists(prod_emb)
