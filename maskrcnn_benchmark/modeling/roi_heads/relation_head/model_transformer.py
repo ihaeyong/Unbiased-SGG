@@ -6,7 +6,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from maskrcnn_benchmark.modeling.utils import cat
-from .utils_motifs import obj_edge_vectors, to_onehot, nms_overlaps, encode_box_info
+from .utils_motifs import obj_edge_vectors, to_onehot, nms_overlaps, encode_box_info, sort_by_score, center_x
+from .model_motifs import DecoderRNN
+from .utils_relation import layer_init
+from torch.nn.utils.rnn import PackedSequence
+
 
 class ScaledDotProductAttention(nn.Module):
     ''' Scaled Dot-Product Attention '''
@@ -189,9 +193,77 @@ class TransformerEncoder(nn.Module):
         enc_output = enc_output[non_pad_mask.squeeze(-1)]
         return enc_output
 
+class DecoderLayer(nn.Module):
+    ''' Compose with two layers '''
+    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.1):
+        super(DecoderLayer, self).__init__()
+        self.co_attn = MultiHeadAttention(
+            n_head, d_model, d_k, d_v, dropout=dropout)
+        self.pos_ffn = PositionwiseFeedForward(d_model, d_inner, dropout=dropout)
+        self.n_head = n_head
 
-class TransformerContext(nn.Module):
-    def __init__(self, config, obj_classes, rel_classes, in_channels):
+    def forward(self, dec_input, enc_input, non_pad_mask=None, co_attn_mask=None):
+        dec_output, dec_co_attn = self.co_attn(
+            dec_input, enc_input, enc_input, mask=co_attn_mask)
+        dec_output *= non_pad_mask.float()
+        dec_co_attn *= non_pad_mask.float().repeat(self.n_head, 1, 1)
+
+        dec_output = self.pos_ffn(dec_output)
+        dec_output *= non_pad_mask.float()
+
+        return dec_output, dec_co_attn
+
+
+class TransformerDecoder(nn.Module):
+    """
+    A encoder model with self attention mechanism.
+    """
+    def __init__(self, n_layers, n_head, d_k, d_v, d_model, d_inner, dropout=0.1):
+        super().__init__()
+        self.layer_stack = nn.ModuleList([
+            DecoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
+            for _ in range(n_layers)])
+
+    def forward(self, rel_inputs, obj_inputs, num_rel, num_obj):
+        """
+        Args:
+            input_feats [Tensor] (#total_box, d_model) : bounding box features of a batch
+            num_objs [list of int] (bsz, ) : number of bounding box of each image
+        Returns:
+            enc_output [Tensor] (#total_box, d_model)
+        """
+        original_rel_inputs = rel_inputs
+        rel_inputs = rel_inputs.split(num_rel, dim=0)
+        rel_inputs = nn.utils.rnn.pad_sequence(rel_inputs, batch_first=True)
+
+        original_obj_inputs = obj_inputs
+        obj_inputs = obj_inputs.split(num_obj, dim=0)
+        obj_inputs = nn.utils.rnn.pad_sequence(obj_inputs, batch_first=True)
+
+        # -- Prepare masks
+        bsz = len(num_rel)
+        device = rel_inputs.device
+        pad_q_len = max(num_rel)
+        pad_k_len = max(num_obj)
+        num_q = torch.LongTensor(num_rel).to(device).unsqueeze(1).expand(-1, pad_q_len)
+        num_k = torch.LongTensor(num_obj).to(device).unsqueeze(1).expand(-1, pad_k_len)
+        co_attn_mask = torch.arange(pad_k_len, device=device).view(1, -1).expand(bsz, -1).ge(num_k).unsqueeze(1).expand(-1, pad_q_len, -1) # (bsz, pad_len, pad_len)
+        non_pad_mask = torch.arange(pad_q_len, device=device).to(device).view(1, -1).expand(bsz, -1).lt(num_q).unsqueeze(-1) # (bsz, pad_len, 1)
+
+        # -- Forward
+        dec_output = rel_inputs
+        enc_input = obj_inputs
+        for dec_layer in self.layer_stack:
+            dec_output, dec_co_attn = dec_layer(
+                dec_output, enc_input,
+                non_pad_mask=non_pad_mask,
+                co_attn_mask=co_attn_mask)
+
+        dec_output = dec_output[non_pad_mask.squeeze(-1)]
+        return dec_output
+
+class Transformer_ObjContext(nn.Module):
+    def __init__(self, config, obj_classes, in_channels):
         super().__init__()
         self.cfg = config
         # setting parameters
@@ -200,9 +272,7 @@ class TransformerContext(nn.Module):
         else:
             self.mode = 'sgdet'
         self.obj_classes = obj_classes
-        self.rel_classes = rel_classes
         self.num_obj_cls = len(obj_classes)
-        self.num_rel_cls = len(rel_classes)
         self.in_channels = in_channels
         self.obj_dim = in_channels
         self.embed_dim = self.cfg.MODEL.ROI_RELATION_HEAD.EMBED_DIM
@@ -211,7 +281,6 @@ class TransformerContext(nn.Module):
 
         self.dropout_rate = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.DROPOUT_RATE
         self.obj_layer = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.OBJ_LAYER
-        self.edge_layer = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.REL_LAYER
         self.num_head = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.NUM_HEAD
         self.inner_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.INNER_DIM
         self.k_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.KEY_DIM
@@ -231,13 +300,9 @@ class TransformerContext(nn.Module):
             nn.Linear(32, 128), nn.ReLU(inplace=True), nn.Dropout(0.1),
         ])
         self.lin_obj = nn.Linear(self.in_channels + self.embed_dim + 128, self.hidden_dim)
-        self.lin_edge = nn.Linear(self.embed_dim + self.hidden_dim + self.in_channels, self.hidden_dim)
         self.out_obj = nn.Linear(self.hidden_dim, self.num_obj_cls)
-        self.context_obj = TransformerEncoder(self.obj_layer, self.num_head, self.k_dim, 
-                                                self.v_dim, self.hidden_dim, self.inner_dim, self.dropout_rate)
-        self.context_edge = TransformerEncoder(self.edge_layer, self.num_head, self.k_dim, 
-                                                self.v_dim, self.hidden_dim, self.inner_dim, self.dropout_rate)
-
+        self.context_obj = TransformerEncoder(self.obj_layer, self.num_head, self.k_dim,
+                                              self.v_dim, self.hidden_dim, self.inner_dim, self.dropout_rate)
 
     def forward(self, roi_features, proposals, logger=None):
         # labels will be used in DecoderRNN during training
@@ -263,11 +328,9 @@ class TransformerContext(nn.Module):
 
         # predict obj_dists and obj_preds
         if self.mode == 'predcls':
+            assert obj_labels is not None
             obj_preds = obj_labels
             obj_dists = to_onehot(obj_preds, self.num_obj_cls)
-            obj_embed2 = self.obj_embed2(obj_labels)
-            edge_pre_rep = cat((roi_features, obj_feats, obj_embed2), dim=-1)
-
         else:
             obj_dists = self.out_obj(obj_feats)
             use_decoder_nms = self.mode == 'sgdet' and not self.training
@@ -276,17 +339,9 @@ class TransformerContext(nn.Module):
                 obj_preds = self.nms_per_cls(obj_dists, boxes_per_cls, num_objs)
             else:
                 obj_preds = obj_dists[:, 1:].max(1)[1] + 1
+        obj_embed_out = self.obj_embed2(obj_preds)
 
-            obj_embed2 = self.obj_embed2(obj_preds)
-            edge_pre_rep = cat((roi_features, obj_feats, obj_embed2), dim=-1)
-
-        # edge context
-        edge_pre_rep = self.lin_edge(edge_pre_rep)
-        edge_ctx = self.context_edge(edge_pre_rep, num_objs)
-        # object embedding updated by haeyong.k
-        obj_embed2 = F.softmax(obj_dists, dim=1) @ self.obj_embed2.weight
-
-        return obj_dists, obj_preds, edge_ctx, obj_embed2
+        return obj_dists, obj_preds, obj_feats, obj_embed_out, pos_embed
 
     def nms_per_cls(self, obj_dists, boxes_per_cls, num_objs):
         obj_dists = obj_dists.split(num_objs, dim=0)
@@ -308,3 +363,37 @@ class TransformerContext(nn.Module):
             obj_preds.append(out_label.long())
         obj_preds = torch.cat(obj_preds, dim=0)
         return obj_preds
+
+class Transformer_EdgeContext(nn.Module):
+    def __init__(self, config, in_channels):
+        super().__init__()
+        self.cfg = config
+        # setting parameters
+        if self.cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
+            self.mode = 'predcls' if self.cfg.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL else 'sgcls'
+        else:
+            self.mode = 'sgdet'
+        self.embed_dim = self.cfg.MODEL.ROI_RELATION_HEAD.EMBED_DIM
+        self.hidden_dim = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM
+        self.edge_in_channels = in_channels
+
+        self.dropout_rate = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.DROPOUT_RATE
+        self.edge_layer = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.REL_LAYER
+        self.num_head = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.NUM_HEAD
+        self.inner_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.INNER_DIM
+        self.k_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.KEY_DIM
+        self.v_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.VAL_DIM
+
+
+        self.lin_edge = nn.Linear(self.embed_dim * 2 + self.edge_in_channels + 128 * 2, self.hidden_dim)
+        self.context_edge = TransformerDecoder(self.edge_layer, self.num_head, self.k_dim,
+                                               self.v_dim, self.hidden_dim, self.inner_dim, self.dropout_rate)
+
+    def forward(self, pair_features, obj_features, pair_obj_embed, pair_pos_embed, num_rels, num_objs, logger=None):
+
+        edge_pre_rep = cat((pair_features, pair_obj_embed, pair_pos_embed), dim=-1)
+        edge_pre_rep = self.lin_edge(edge_pre_rep)
+        edge_ctx = self.context_edge(edge_pre_rep, obj_features, num_rels, num_objs)
+
+
+        return edge_ctx

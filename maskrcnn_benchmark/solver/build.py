@@ -1,8 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 import torch
 
-from .lr_scheduler import WarmupMultiStepLR, WarmupReduceLROnPlateau
-
+from .lr_scheduler import  WarmupMultiStepLR, WarmupReduceLROnPlateau, WarmupCosineLR, WarmupCosineMStepLR, WarmupConsrantCosineLR
 
 def make_optimizer(cfg, model, logger, slow_heads=None, slow_ratio=5.0, rl_factor=1.0):
     params = []
@@ -36,7 +35,7 @@ def make_lr_scheduler(cfg, optimizer, logger=None):
             warmup_iters=cfg.SOLVER.WARMUP_ITERS,
             warmup_method=cfg.SOLVER.WARMUP_METHOD,
         )
-    
+
     elif cfg.SOLVER.SCHEDULE.TYPE == "WarmupReduceLROnPlateau":
         return WarmupReduceLROnPlateau(
             optimizer,
@@ -49,6 +48,38 @@ def make_lr_scheduler(cfg, optimizer, logger=None):
             cooldown=cfg.SOLVER.SCHEDULE.COOLDOWN,
             logger=logger,
         )
-    
+
+    elif cfg.SOLVER.SCHEDULE.TYPE == "WarmupCosineLR":
+        return WarmupCosineLR(
+            optimizer,
+            T_max=cfg.SOLVER.MAX_ITER,
+            warmup_factor=cfg.SOLVER.WARMUP_FACTOR,
+            warmup_iters=cfg.SOLVER.WARMUP_ITERS,
+            warmup_method=cfg.SOLVER.WARMUP_METHOD,
+            eta_min=cfg.SOLVER.ETA_MIN * cfg.SOLVER.IMS_PER_BATCH,
+        )
+
+    elif cfg.SOLVER.SCHEDULE.TYPE == "WarmupCosineMstepLR":
+        return WarmupCosineMStepLR(
+            optimizer,
+            cfg.SOLVER.STEPS,
+            cfg.SOLVER.GAMMA,
+            warmup_factor=cfg.SOLVER.WARMUP_FACTOR,
+            warmup_iters=cfg.SOLVER.WARMUP_ITERS,
+            warmup_method=cfg.SOLVER.WARMUP_METHOD,
+            eta_min=cfg.SOLVER.ETA_MIN * cfg.SOLVER.IMS_PER_BATCH,
+        )
+
+    elif cfg.SOLVER.SCHEDULE.TYPE == "WarmupConsrantCosineLR":
+        return WarmupConsrantCosineLR(
+            optimizer,
+            cfg.SOLVER.STEPS,
+            T_max=cfg.SOLVER.MAX_ITER,
+            warmup_factor=cfg.SOLVER.WARMUP_FACTOR,
+            warmup_iters=cfg.SOLVER.WARMUP_ITERS,
+            warmup_method=cfg.SOLVER.WARMUP_METHOD,
+            eta_min=cfg.SOLVER.ETA_MIN * cfg.SOLVER.IMS_PER_BATCH,
+        )
+
     else:
         raise ValueError("Invalid Schedule Type")

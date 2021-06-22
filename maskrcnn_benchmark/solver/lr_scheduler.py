@@ -3,7 +3,7 @@ from bisect import bisect_right
 from functools import wraps
 import torch
 from torch.optim import Optimizer
-
+import math
 
 # FIXME ideally this would be achieved with a CombinedLRScheduler,
 # separating MultiStepLR with WarmupLR
@@ -52,6 +52,156 @@ class WarmupMultiStepLR(torch.optim.lr_scheduler._LRScheduler):
             for base_lr in self.base_lrs
         ]
 
+class WarmupCosineLR(torch.optim.lr_scheduler._LRScheduler):
+    def __init__(
+        self,
+        optimizer,
+        T_max,
+        warmup_factor=1.0 / 3,
+        warmup_iters=500,
+        warmup_method="linear",
+        last_epoch=-1,
+        eta_min=0,
+    ):
+        if warmup_method not in ("constant", "linear"):
+            raise ValueError(
+                "Only 'constant' or 'linear' warmup_method accepted"
+                "got {}".format(warmup_method)
+            )
+        self.warmup_factor = warmup_factor
+        self.warmup_iters = warmup_iters
+        self.warmup_method = warmup_method
+        self.eta_min = eta_min
+        self.T_max = T_max - self.warmup_iters
+        super(WarmupCosineLR, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        warmup_factor = 1
+        if self.last_epoch < self.warmup_iters:
+            if self.warmup_method == "constant":
+                warmup_factor = self.warmup_factor
+            elif self.warmup_method == "linear":
+                alpha = float(self.last_epoch) / self.warmup_iters
+                warmup_factor = self.warmup_factor * (1 - alpha) + alpha
+            return [
+                base_lr
+                * warmup_factor
+                for base_lr in self.base_lrs
+            ]
+        else:
+            return [self.eta_min + (base_lr - self.eta_min) *
+                    (1 + math.cos(math.pi * (self.last_epoch - self.warmup_iters) / self.T_max)) / 2
+                    for base_lr in self.base_lrs]
+
+class WarmupCosineMStepLR(torch.optim.lr_scheduler._LRScheduler):
+    def __init__(
+        self,
+        optimizer,
+        milestones,
+        gamma=0.1,
+        warmup_factor=1.0 / 3,
+        warmup_iters=500,
+        warmup_method="linear",
+        last_epoch=-1,
+        eta_min=0,
+    ):
+        if not list(milestones) == sorted(milestones):
+            raise ValueError(
+                "Milestones should be a list of" " increasing integers. Got {}",
+                milestones,
+            )
+
+        if warmup_method not in ("constant", "linear"):
+            raise ValueError(
+                "Only 'constant' or 'linear' warmup_method accepted"
+                "got {}".format(warmup_method)
+            )
+        self.milestones = milestones
+        self.gamma = gamma
+        self.warmup_factor = warmup_factor
+        self.warmup_iters = warmup_iters
+        self.warmup_method = warmup_method
+        self.eta_min = eta_min
+        self.T_max = self.milestones[0] - self.warmup_iters
+        super(WarmupCosineMStepLR, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        warmup_factor = 1
+        if self.last_epoch < self.warmup_iters:
+            if self.warmup_method == "constant":
+                warmup_factor = self.warmup_factor
+            elif self.warmup_method == "linear":
+                alpha = float(self.last_epoch) / self.warmup_iters
+                warmup_factor = self.warmup_factor * (1 - alpha) + alpha
+            return [
+                base_lr
+                * warmup_factor
+                for base_lr in self.base_lrs
+            ]
+        elif self.last_epoch <= self.milestones[0]:
+            return [self.eta_min + (base_lr - self.eta_min) *
+                    (1 + math.cos(math.pi * (self.last_epoch - self.warmup_iters) / self.T_max)) / 2
+                    for base_lr in self.base_lrs]
+        else:
+            return [
+                base_lr
+                * warmup_factor
+                * self.gamma ** bisect_right(self.milestones, self.last_epoch)
+                for base_lr in self.base_lrs
+            ]
+
+class WarmupConsrantCosineLR(torch.optim.lr_scheduler._LRScheduler):
+    def __init__(
+        self,
+        optimizer,
+        milestones,
+        T_max,
+        warmup_factor=1.0 / 3,
+        warmup_iters=500,
+        warmup_method="linear",
+        last_epoch=-1,
+        eta_min=0,
+    ):
+        
+        if not list(milestones) == sorted(milestones):
+            raise ValueError(
+                "Milestones should be a list of" " increasing integers. Got {}",
+                milestones,
+            )
+
+        if warmup_method not in ("constant", "linear"):
+            raise ValueError(
+                "Only 'constant' or 'linear' warmup_method accepted"
+                "got {}".format(warmup_method)
+            )
+        self.milestones = milestones
+        self.warmup_factor = warmup_factor
+        self.warmup_iters = warmup_iters
+        self.warmup_method = warmup_method
+        self.eta_min = eta_min
+        self.T_max = T_max - self.milestones[0]
+        super(WarmupConsrantCosineLR, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        warmup_factor = 1
+        if self.last_epoch < self.warmup_iters:
+            if self.warmup_method == "constant":
+                warmup_factor = self.warmup_factor
+            elif self.warmup_method == "linear":
+                alpha = float(self.last_epoch) / self.warmup_iters
+                warmup_factor = self.warmup_factor * (1 - alpha) + alpha
+            return [
+                base_lr
+                * warmup_factor
+                for base_lr in self.base_lrs
+            ]
+        elif self.last_epoch <= self.milestones[0]:
+            return self.base_lrs
+        else:
+            return [self.eta_min + (base_lr - self.eta_min) *
+                    (1 + math.cos(math.pi * (self.last_epoch - self.milestones[0]) / self.T_max)) / 2
+                    for base_lr in self.base_lrs]
+
 
 class WarmupReduceLROnPlateau(object):
     def __init__(
@@ -82,7 +232,7 @@ class WarmupReduceLROnPlateau(object):
         self.stage_count = 0
         self.best = -1e12
         self.num_bad_epochs = 0
-        self.under_cooldown = self.cooldown
+        self.under_cooldown = 0
         self.logger = logger
 
         # The following code is copied from Pytorch=1.2.0
@@ -107,7 +257,6 @@ class WarmupReduceLROnPlateau(object):
 
     def state_dict(self):
         """Returns the state of the scheduler as a :class:`dict`.
-
         It contains an entry for every variable in self.__dict__ which
         is not the optimizer.
         """
@@ -115,7 +264,6 @@ class WarmupReduceLROnPlateau(object):
 
     def load_state_dict(self, state_dict):
         """Loads the schedulers state.
-
         Arguments:
             state_dict (dict): scheduler state. Should be an object returned
                 from a call to :meth:`state_dict`.
