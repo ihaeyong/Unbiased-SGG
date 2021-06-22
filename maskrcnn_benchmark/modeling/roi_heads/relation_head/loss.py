@@ -52,9 +52,8 @@ class RelationLossComputation(object):
 
         cls_num_list = np.load('./datasets/vg/obj_freq.npy')
         #cls_num_list[0] = 0 # no samples
-        obj_prop = cls_num_list / cls_num_list.sum()
 
-        self.obj_weight = ObjWeight(obj_prop, temp=1e0)
+        self.obj_weight = ObjWeight(cls_num_list)
         self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
 
         if self.use_label_smoothing:

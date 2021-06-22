@@ -44,23 +44,19 @@ class ObjWeight(nn.Module):
     if None of geo, cat and appr was specified, only upconvolution is used.
     """
 
-    def __init__(self, obj_prop=None, temp=1):
+    def __init__(self, cls_num_list=None):
         super(ObjWeight, self).__init__()
 
-        self.temp = temp
+        '''
+        we set the backgounds to the maximum number of samples
+        since its sample size is zero
+        '''
+        self.cls_num_list = cls_num_list
+        self.cls_num_list[0] = cls_num_list.max()
+
+        obj_prop = cls_num_list / cls_num_list.sum()
         self.obj_prop = np.array(obj_prop)
         self.obj_idx = self.obj_prop.argsort()[::-1]
-
-    def softmax_with_temp(self,z, T=1):
-
-        z = np.array(z)
-        z = z / T
-        max_z = np.max(z)
-        exp_z = np.exp(z-max_z)
-        sum_exp_z = np.sum(exp_z)
-        y = exp_z / sum_exp_z
-
-        return y
 
     def forward(self, obj_logits, obj_labels, gamma=0.01):
 
@@ -76,7 +72,11 @@ class ObjWeight(nn.Module):
             false_idx = np.where(topk_false_mask == 1)[0]
 
             batch_freq = freq_bias.data.cpu().numpy()
-            cls_num_list = batch_freq.sum(0)
+            if False:
+                cls_num_list = batch_freq.sum(0)
+            else:
+                cls_num_list = self.cls_num_list
+
             cls_order = batch_freq[:, self.obj_idx]
 
             w_type = 'avg'
@@ -105,7 +105,7 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 2.2 # default 2.2
+            skew_th = 2.3 # default 2.2
             if skew_v > skew_th:
                 beta = 1.0 - ent_v * 1.0
             elif skew_v < -skew_th:
