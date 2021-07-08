@@ -105,11 +105,12 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 0.2 # default 2.2
+            skew_th = 2.4 # default 2.2
+            ent_w = 1.0
             if skew_v > skew_th:
-                beta = 1.0 - ent_v * 1.0
+                beta = 1.0 - ent_v * ent_w
             elif skew_v < -skew_th:
-                beta = 1.0 - ent_v * 1.0
+                beta = 1.0 - ent_v * ent_w
             else:
                 beta = 0.0
 
@@ -139,17 +140,6 @@ class RelWeight(nn.Module):
 
         self.temp = temp
 
-    def softmax_with_temp(self,z, T=1):
-
-        z = np.array(z)
-        z = z / T
-        max_z = np.max(z)
-        exp_z = np.exp(z-max_z)
-        sum_exp_z = np.sum(exp_z)
-        y = exp_z / sum_exp_z
-
-        return y
-
     def forward(self, rel_logits, freq_bias, rel_labels, gamma=0.01):
 
         # scaled mean of logits
@@ -167,7 +157,7 @@ class RelWeight(nn.Module):
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
 
-            w_type = 'avg'
+            w_type = 'full'
             if w_type == 'full':
                 cls_num_list = batch_freq.sum(0)
                 cls_order = batch_freq[:, self.pred_idx]
@@ -206,11 +196,13 @@ class RelWeight(nn.Module):
                 ent_v = ent_false_v.mean() * alpha + ent_true_v.mean() * (1-alpha)
                 skew_v = skew_false_v.mean() * alpha + skew_true_v.mean() * (1-alpha)
 
+            # todo : figure out how to set beta for scene graph classification
             skew_th = 0.9 # default 0.9
+            ent_w = 0.3  # default 0.05
             if skew_v > skew_th :
-                beta = 1.0 - ent_v * 0.05
+                beta = 1.0 - ent_v * ent_w
             elif skew_v < -skew_th :
-                beta = 1.0 - ent_v * 0.05
+                beta = 1.0 - ent_v * ent_w
             else:
                 beta = 0.0
 
