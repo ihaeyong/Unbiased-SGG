@@ -162,7 +162,7 @@ class WarmupConsrantCosineLR(torch.optim.lr_scheduler._LRScheduler):
         last_epoch=-1,
         eta_min=0,
     ):
-        
+
         if not list(milestones) == sorted(milestones):
             raise ValueError(
                 "Milestones should be a list of" " increasing integers. Got {}",
