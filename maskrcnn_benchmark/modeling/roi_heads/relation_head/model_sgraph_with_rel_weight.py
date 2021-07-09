@@ -157,7 +157,7 @@ class RelWeight(nn.Module):
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
 
-            w_type = 'full'
+            w_type = 'avg'
             if w_type == 'full':
                 cls_num_list = batch_freq.sum(0)
                 cls_order = batch_freq[:, self.pred_idx]
