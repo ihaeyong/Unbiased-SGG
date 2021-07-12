@@ -143,6 +143,7 @@ class RelWeight(nn.Module):
     def forward(self, rel_logits, freq_bias, rel_labels, gamma=0.01):
 
         # scaled mean of logits
+        batch_size = rel_logits.size(0)
         with torch.no_grad():
             # Entropy * scale
             # topk logits
@@ -157,12 +158,18 @@ class RelWeight(nn.Module):
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
 
-            w_type = 'avg'
+            w_type = 'sample'
             if w_type == 'full':
                 cls_num_list = batch_freq.sum(0)
                 cls_order = batch_freq[:, self.pred_idx]
                 ent_v = entropy(cls_order, base=51, axis=1).mean()
                 skew_v = skew(cls_order, axis=1).mean()
+
+            elif w_type == 'sample':
+                cls_num_list = batch_freq.sum(0)
+                cls_order = batch_freq[:, self.pred_idx]
+                ent_v = entropy(cls_order, base=51, axis=1)
+                skew_v = skew(cls_order, axis=1)
 
             elif w_type == 'false':
                 ent_v = entropy(cls_order, base=51, axis=1) * topk_false_mask
@@ -197,20 +204,30 @@ class RelWeight(nn.Module):
                 skew_v = skew_false_v.mean() * alpha + skew_true_v.mean() * (1-alpha)
 
             # todo : figure out how to set beta for scene graph classification
-            skew_th = 0.9 # default 0.9
-            ent_w = 0.3  # default 0.05
-            if skew_v > skew_th :
-                beta = 1.0 - ent_v * ent_w
-            elif skew_v < -skew_th :
-                beta = 1.0 - ent_v * ent_w
+            skew_th = 1.0 # default 0.9
+            ent_w = 0.7  # default 0.05
+            if False:
+                if skew_v > skew_th :
+                    beta = 1.0 - ent_v * ent_w
+                elif skew_v < -skew_th :
+                    beta = 1.0 - ent_v * ent_w
+                else:
+                    beta = 0.0
+
+                effect_num = 1.0 - np.power(beta, cls_num_list)
+                per_cls_weights = (1.0 - beta) / np.array(effect_num)
+                per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
             else:
-                beta = 0.0
+                pos_mask = (skew_v > skew_th).astype(float)
+                neg_mask = (skew_v < -skew_th).astype(float)
+                beta = 1.0 - ent_v * ent_w
+                pos_beta = beta * pos_mask
+                neg_beta = beta * neg_mask
 
-            beta = np.clip(beta, 0,1)
-
-            effect_num = 1.0 - np.power(beta, cls_num_list)
-            per_cls_weights = (1.0 - beta) / np.array(effect_num)
-            per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+                effect_num = [1.0 - np.power(b, cls) for b,cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
+                per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
+                per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+            
             rel_weight = torch.FloatTensor(per_cls_weights).cuda()
 
             rel_margin = None

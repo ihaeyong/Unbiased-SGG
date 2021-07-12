@@ -44,17 +44,18 @@ class RelationLossComputation(object):
         self.pred_weight = (1.0 / torch.FloatTensor([0.5,] + predicate_proportion)).cuda()
 
         self.mode = mode
-        self.rel_type = 'weight'
+        self.rel_type = 'sample-weight'
         self.obj_type = 'weight'
         self.gamma = 0.02
 
         self.weight = 'batchweight'
 
         cls_num_list = np.load('./datasets/vg/obj_freq.npy')
-        #cls_num_list[0] = 0 # no samples
 
         self.obj_weight = ObjWeight(cls_num_list)
         self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
+        
+        self.logSoftmax = nn.LogSoftmax(dim=1)
 
         if self.use_label_smoothing:
             self.criterion_loss = Label_Smoothing_Regression(e=0.01)
@@ -102,56 +103,70 @@ class RelationLossComputation(object):
         rel_labels = cat(rel_labels, dim=0)
 
         if self.weight == 'batchweight':
-
+            
             rel_weight, rel_margin = self.rel_weight(relation_logits,
                                                      freq_bias,
                                                      rel_labels,
                                                      self.gamma)
-            if self.rel_type is 'focal' :
+            if self.rel_type == 'focal' :
                 loss_relation = F.cross_entropy(relation_logits,
                                                 rel_labels.long(),
                                                 reduction='none',
                                                 weight=rel_weight)
                 loss_relation = self.focal_loss(loss_relation, self.gamma)
-            elif self.rel_type is 'margin':
+                
+            elif self.rel_type == 'margin':
                 loss_relation = F.cross_entropy(relation_logits - rel_margin,
                                                 rel_labels.long(),
                                                 rel_weight)
 
-            elif self.rel_type is 'var_margin':
+            elif self.rel_type == 'var_margin':
                 loss_relation = F.cross_entropy((rel_margin - relation_logits)**2,
                                                 rel_labels.long(),
                                                 rel_weight)
 
-            elif self.rel_type is 'weight':
+            elif self.rel_type == 'weight':
                 loss_relation = F.cross_entropy(relation_logits,
                                                 rel_labels.long(),
                                                 rel_weight)
+                
+            elif self.rel_type == 'sample-weight':
+                
+                # label mask
+                index = torch.zeros_like(relation_logits, dtype=torch.uint8)
+                index.scatter_(1, rel_labels.data.view(-1, 1), 1)
+                target_weight = index.type(torch.cuda.FloatTensor) * rel_weight
 
+                output = self.logSoftmax(relation_logits)
+                loss = output * target_weight
+
+                # weighted cross entropy
+                loss_relation = -loss.sum() / target_weight.sum()
+                
         else:
             loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
 
 
-        if self.weight == 'batchweight' and self.mode is not 'predcls':
+        if self.weight == 'batchweight' and self.mode != 'predcls':
 
             obj_weight, obj_margin = self.obj_weight(refine_obj_logits,
                                                      fg_labels,
                                                      self.gamma)
 
-            if self.obj_type is 'margin':
+            if self.obj_type == 'margin':
                 loss_refine_obj = F.cross_entropy(refine_obj_logits-obj_margin,
                                                   fg_labels.long(),
                                                   obj_weight)
-            elif self.obj_type is 'weight':
+            elif self.obj_type == 'weight':
                 loss_refine_obj = F.cross_entropy(refine_obj_logits,
                                                   fg_labels.long(),
                                                   obj_weight)
 
-            elif self.obj_type is 'ldam':
+            elif self.obj_type == 'ldam':
                 loss_refine_obj = self.criterion_loss(refine_obj_logits,
                                                       fg_labels.long())
 
-            elif self.obj_type is 'none':
+            elif self.obj_type == 'none':
                 loss_refine_obj = F.cross_entropy(refine_obj_logits,
                                                   fg_labels.long())
 
