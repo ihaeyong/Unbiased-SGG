@@ -157,6 +157,15 @@ class RelWeight(nn.Module):
         max_margin = min_pos_prob - max_neg_prob
         return max_margin
 
+
+    def softmax(self, x):
+        
+        max = np.max(x,axis=1,keepdims=True) #returns max of each row and keeps same dims
+        e_x = np.exp(x - max) #subtracts each row with its max value
+        sum = np.sum(e_x,axis=1,keepdims=True) #returns sum of each row and keeps same dims
+        f_x = e_x / sum
+        return f_x
+
     def forward(self, rel_logits, freq_bias, rel_labels, gamma=0.01):
 
         # scaled mean of logits
@@ -184,7 +193,7 @@ class RelWeight(nn.Module):
 
             elif w_type == 'sample':
                 cls_num_list = batch_freq.sum(0)
-                cls_order = batch_freq[:, self.pred_idx]
+                cls_order = self.softmax(batch_freq[:, self.pred_idx])
                 ent_v = entropy(cls_order, base=51, axis=1)
                 skew_v = skew(cls_order, axis=1)
 
@@ -202,7 +211,7 @@ class RelWeight(nn.Module):
                 skew_v = skew_false_v * alpha + skew_true_v * (1-alpha)
 
             # todo : figure out how to set beta for scene graph classification
-            skew_th = 1.0 # default 0.9
+            skew_th = 0.3 # default 0.9
             ent_w = 1.0  # default 0.05
             if False:
                 if skew_v > skew_th :
@@ -227,20 +236,34 @@ class RelWeight(nn.Module):
                 per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
 
+            elif False:
+                # margin
+                margin = self.margin(rel_logits, rel_labels).data.cpu().numpy() * ent_w
+                idx_for_ce = np.where(margin > skew_th)[0]
+                if len(idx_for_ce) > 0 :
+                    margin[idx_for_ce] = 0.9999
+                margin = np.exp(margin) / np.exp(1)
+                
+                # range from -1 to 1
+                beta = 1.0 - margin
+                effect_num = [1.0 - np.power(b, cls) for b,cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
+                per_cls_weights = (1.0 - beta) / np.array(effect_num)
+                per_cls_weights = per_cls_weights / np.sum(per_cls_weights, 1)[:,None] * len(cls_num_list)
 
             elif True:
-                "margin-ent"
-                margin = self.margin(rel_logits, rel_labels) * ent_w
-                idx_for_ce = np.where(margin.data.cpu() > skew_th)[0]
+                # margin
+                #skew_v = np.clip(skew_v, 0.0, 10.0) / 10.0
+                margin = self.margin(rel_logits, rel_labels).data.cpu().numpy()
+                idx_for_ce = np.where(margin > skew_th)[0]
                 if len(idx_for_ce) > 0 :
                     margin[idx_for_ce] = 1.0
-                margin = margin.exp() / np.exp(1)
-
+                margin = np.exp(margin * skew_v[:,None]) / np.exp(skew_v[:,None])
+                
                 # range from -1 to 1
-                beta = 1.0 - margin.data.cpu().numpy()
+                beta = 1.0 - margin
                 effect_num = [1.0 - np.power(b, cls) for b,cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
-                per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
-                per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+                per_cls_weights = (1.0 - beta) / np.array(effect_num)
+                per_cls_weights = per_cls_weights / np.sum(per_cls_weights, 1)[:,None] * len(cls_num_list)
             rel_weight = torch.FloatTensor(per_cls_weights).cuda()
 
             rel_margin = None
