@@ -5,19 +5,19 @@ from torch.nn import functional as F
 
 from maskrcnn_benchmark.modeling import registry
 from maskrcnn_benchmark.modeling.backbone import resnet
-from maskrcnn_benchmark.modeling.poolers import Pooler
 from maskrcnn_benchmark.modeling.make_layers import group_norm
 from maskrcnn_benchmark.modeling.make_layers import make_fc
+from maskrcnn_benchmark.modeling.poolers import Pooler
 
 
 @registry.ROI_BOX_FEATURE_EXTRACTORS.register("ResNet50Conv5ROIFeatureExtractor")
 class ResNet50Conv5ROIFeatureExtractor(nn.Module):
-    def __init__(self, config, in_channels):
+    def __init__(self, cfg, in_channels, half_out=False, cat_all_levels=False, for_relation=False):
         super(ResNet50Conv5ROIFeatureExtractor, self).__init__()
 
-        resolution = config.MODEL.ROI_BOX_HEAD.POOLER_RESOLUTION
-        scales = config.MODEL.ROI_BOX_HEAD.POOLER_SCALES
-        sampling_ratio = config.MODEL.ROI_BOX_HEAD.POOLER_SAMPLING_RATIO
+        resolution = cfg.MODEL.ROI_BOX_HEAD.POOLER_RESOLUTION
+        scales = cfg.MODEL.ROI_BOX_HEAD.POOLER_SCALES
+        sampling_ratio = cfg.MODEL.ROI_BOX_HEAD.POOLER_SAMPLING_RATIO
         pooler = Pooler(
             output_size=(resolution, resolution),
             scales=scales,
@@ -26,23 +26,50 @@ class ResNet50Conv5ROIFeatureExtractor(nn.Module):
 
         stage = resnet.StageSpec(index=4, block_count=3, return_features=False)
         head = resnet.ResNetHead(
-            block_module=config.MODEL.RESNETS.TRANS_FUNC,
+            block_module=cfg.MODEL.RESNETS.TRANS_FUNC,
             stages=(stage,),
-            num_groups=config.MODEL.RESNETS.NUM_GROUPS,
-            width_per_group=config.MODEL.RESNETS.WIDTH_PER_GROUP,
-            stride_in_1x1=config.MODEL.RESNETS.STRIDE_IN_1X1,
+            num_groups=cfg.MODEL.RESNETS.NUM_GROUPS,
+            width_per_group=cfg.MODEL.RESNETS.WIDTH_PER_GROUP,
+            stride_in_1x1=cfg.MODEL.RESNETS.STRIDE_IN_1X1,
             stride_init=None,
-            res2_out_channels=config.MODEL.RESNETS.RES2_OUT_CHANNELS,
-            dilation=config.MODEL.RESNETS.RES5_DILATION
+            res2_out_channels=cfg.MODEL.RESNETS.RES2_OUT_CHANNELS,
+            dilation=cfg.MODEL.RESNETS.RES5_DILATION
         )
 
         self.pooler = pooler
         self.head = head
         self.out_channels = head.out_channels
 
+        if cfg.MODEL.RELATION_ON:
+            # for the following relation head, the features need to be flattened
+            pooling_size = 2
+            self.adptive_pool = nn.AdaptiveAvgPool2d((pooling_size, pooling_size))
+            input_size = self.out_channels * pooling_size ** 2
+            representation_size = cfg.MODEL.ROI_BOX_HEAD.MLP_HEAD_DIM
+            use_gn = cfg.MODEL.ROI_BOX_HEAD.USE_GN
+
+            if half_out:
+                out_dim = int(representation_size / 2)
+            else:
+                out_dim = representation_size
+
+            self.fc7 = make_fc(input_size, out_dim, use_gn)
+            self.resize_channels = input_size
+            self.flatten_out_channels = out_dim
+
     def forward(self, x, proposals):
         x = self.pooler(x, proposals)
         x = self.head(x)
+        return x
+
+    def forward_without_pool(self, x):
+        x = self.head(x)
+        return self.flatten_roi_features(x)
+
+    def flatten_roi_features(self, x):
+        x = self.adptive_pool(x)
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc7(x))
         return x
 
 
@@ -52,7 +79,7 @@ class FPN2MLPFeatureExtractor(nn.Module):
     Heads for FPN for classification
     """
 
-    def __init__(self, cfg, in_channels, half_out=False, cat_all_levels=False):
+    def __init__(self, cfg, in_channels, half_out=False, cat_all_levels=False, for_relation=False):
         super(FPN2MLPFeatureExtractor, self).__init__()
 
         resolution = cfg.MODEL.ROI_BOX_HEAD.POOLER_RESOLUTION
@@ -69,15 +96,17 @@ class FPN2MLPFeatureExtractor(nn.Module):
         representation_size = cfg.MODEL.ROI_BOX_HEAD.MLP_HEAD_DIM
         use_gn = cfg.MODEL.ROI_BOX_HEAD.USE_GN
         self.pooler = pooler
-        self.fc6 = make_fc(input_size, representation_size, use_gn)
 
+        self.fc6 = make_fc(input_size, representation_size, use_gn)
         if half_out:
             out_dim = int(representation_size / 2)
         else:
             out_dim = representation_size
-        
+
         self.fc7 = make_fc(representation_size, out_dim, use_gn)
         self.resize_channels = input_size
+        self.out_channels = out_dim
+
         self.out_channels = out_dim
 
     def forward(self, x, proposals):
@@ -94,7 +123,6 @@ class FPN2MLPFeatureExtractor(nn.Module):
         x = F.relu(self.fc6(x))
         x = F.relu(self.fc7(x))
         return x
-
 
 @registry.ROI_BOX_FEATURE_EXTRACTORS.register("FPNXconv1fcFeatureExtractor")
 class FPNXconv1fcFeatureExtractor(nn.Module):
@@ -139,7 +167,7 @@ class FPNXconv1fcFeatureExtractor(nn.Module):
             xconvs.append(nn.ReLU(inplace=True))
 
         self.add_module("xconvs", nn.Sequential(*xconvs))
-        for modules in [self.xconvs,]:
+        for modules in [self.xconvs, ]:
             for l in modules.modules():
                 if isinstance(l, nn.Conv2d):
                     torch.nn.init.normal_(l.weight, std=0.01)
@@ -159,8 +187,8 @@ class FPNXconv1fcFeatureExtractor(nn.Module):
         return x
 
 
-def make_roi_box_feature_extractor(cfg, in_channels, half_out=False, cat_all_levels=False):
+def make_roi_box_feature_extractor(cfg, in_channels, half_out=False, cat_all_levels=False, for_relation=False):
     func = registry.ROI_BOX_FEATURE_EXTRACTORS[
         cfg.MODEL.ROI_BOX_HEAD.FEATURE_EXTRACTOR
     ]
-    return func(cfg, in_channels, half_out, cat_all_levels)
+    return func(cfg, in_channels, half_out, cat_all_levels, for_relation)

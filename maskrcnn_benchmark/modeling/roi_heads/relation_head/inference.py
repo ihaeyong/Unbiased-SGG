@@ -46,7 +46,7 @@ class PostProcessor(nn.Module):
                 the extra fields labels and scores
         """
         relation_logits, refine_logits = x
-        
+
         if self.attribute_on:
             if isinstance(refine_logits[0], (list, tuple)):
                 finetune_obj_logits, finetune_att_logits = refine_logits
@@ -77,7 +77,7 @@ class PostProcessor(nn.Module):
                 obj_pred = obj_prediction_nms(box.get_field('boxes_per_cls'), obj_logit, self.later_nms_pred_thres)
                 obj_score_ind = torch.arange(num_obj_bbox, device=obj_logit.device) * num_obj_class + obj_pred
                 obj_scores = obj_class_prob.view(-1)[obj_score_ind]
-            
+
             assert obj_scores.shape[0] == num_obj_bbox
             obj_class = obj_pred
 

@@ -55,7 +55,7 @@ def all_gather(data):
     """
     to_device = "cuda"
     #to_device = torch.device("cpu")
-    
+
     world_size = get_world_size()
     if world_size == 1:
         return [data]

@@ -3,6 +3,7 @@ import os
 
 from yacs.config import CfgNode as CN
 
+
 # -----------------------------------------------------------------------------
 # Convention about Training / Test specific parameters
 # -----------------------------------------------------------------------------
@@ -18,12 +19,6 @@ from yacs.config import CfgNode as CN
 # -----------------------------------------------------------------------------
 
 _C = CN()
-
-_C.DEBUG = False
-
-_C.GLOBAL_BUFFER_ON = False
-
-_C.EXPERIMENT_NAME = ""
 
 _C.MODEL = CN()
 _C.MODEL.FLIP_AUG = False
@@ -45,12 +40,14 @@ _C.MODEL.WEIGHT = ""
 # checkpoint of detector, for relation prediction
 _C.MODEL.PRETRAINED_DETECTOR_CKPT = ""
 
+
 # -----------------------------------------------------------------------------
 # LOG
 # -----------------------------------------------------------------------------
 _C.LOG = CN()
 _C.LOG.ITER = 0
 _C.LOG.MODE = "val"
+
 
 # -----------------------------------------------------------------------------
 # INPUT
@@ -91,8 +88,6 @@ _C.DATASETS.VAL = ()
 # List of the dataset names for testing, as present in paths_catalog.py
 _C.DATASETS.TEST = ()
 
-# the precomputed_det_box for relation networks
-_C.DATASETS.LOAD_PRECOMPUTE_DETECTION_BOX = False
 # -----------------------------------------------------------------------------
 # DataLoader
 # -----------------------------------------------------------------------------
@@ -106,6 +101,7 @@ _C.DATALOADER.SIZE_DIVISIBILITY = 0
 # is compatible. This groups portrait images together, and landscape images
 # are not batched with portrait images.
 _C.DATALOADER.ASPECT_RATIO_GROUPING = True
+
 
 # ---------------------------------------------------------------------------- #
 # Backbone options
@@ -121,12 +117,14 @@ _C.MODEL.BACKBONE.CONV_BODY = "R-50-C4"
 # Add StopGrad at a specified stage so the bottom layers are frozen
 _C.MODEL.BACKBONE.FREEZE_CONV_BODY_AT = 2
 
+
 # ---------------------------------------------------------------------------- #
 # FPN options
 # ---------------------------------------------------------------------------- #
 _C.MODEL.FPN = CN()
 _C.MODEL.FPN.USE_GN = False
 _C.MODEL.FPN.USE_RELU = False
+
 
 # ---------------------------------------------------------------------------- #
 # Group Norm options
@@ -138,6 +136,7 @@ _C.MODEL.GROUP_NORM.DIM_PER_GP = -1
 _C.MODEL.GROUP_NORM.NUM_GROUPS = 32
 # GroupNorm's small constant in the denominator
 _C.MODEL.GROUP_NORM.EPSILON = 1e-5
+
 
 # ---------------------------------------------------------------------------- #
 # RPN options
@@ -189,6 +188,7 @@ _C.MODEL.RPN.FPN_POST_NMS_PER_BATCH = True
 # Custom rpn head, empty to use default conv or separable conv
 _C.MODEL.RPN.RPN_HEAD = "SingleConvRPNHead"
 
+
 # ---------------------------------------------------------------------------- #
 # ROI HEADS options
 # ---------------------------------------------------------------------------- #
@@ -222,10 +222,11 @@ _C.MODEL.ROI_HEADS.SCORE_THRESH = 0.01
 _C.MODEL.ROI_HEADS.NMS = 0.3
 _C.MODEL.ROI_HEADS.POST_NMS_PER_CLS_TOPN = 300
 # Remove duplicated assigned labels for a single bbox in nms
-_C.MODEL.ROI_HEADS.NMS_FILTER_DUPLICATES = False
+_C.MODEL.ROI_HEADS.NMS_FILTER_DUPLICATES = False 
 # Maximum number of detections to return per image (100 is based on the limit
 # established for the COCO dataset)
 _C.MODEL.ROI_HEADS.DETECTIONS_PER_IMG = 256
+
 
 _C.MODEL.ROI_BOX_HEAD = CN()
 _C.MODEL.ROI_BOX_HEAD.FEATURE_EXTRACTOR = "ResNet50Conv5ROIFeatureExtractor"
@@ -243,6 +244,8 @@ _C.MODEL.ROI_BOX_HEAD.DILATION = 1
 _C.MODEL.ROI_BOX_HEAD.CONV_HEAD_DIM = 256
 _C.MODEL.ROI_BOX_HEAD.NUM_STACKED_CONVS = 4
 
+
+
 _C.MODEL.ROI_ATTRIBUTE_HEAD = CN()
 _C.MODEL.ROI_ATTRIBUTE_HEAD.FEATURE_EXTRACTOR = "FPN2MLPFeatureExtractor"
 _C.MODEL.ROI_ATTRIBUTE_HEAD.PREDICTOR = "FPNPredictor"
@@ -255,6 +258,7 @@ _C.MODEL.ROI_ATTRIBUTE_HEAD.MAX_ATTRIBUTES = 10  # max number of attribute per b
 _C.MODEL.ROI_ATTRIBUTE_HEAD.ATTRIBUTE_BGFG_SAMPLE = True
 _C.MODEL.ROI_ATTRIBUTE_HEAD.ATTRIBUTE_BGFG_RATIO = 3
 _C.MODEL.ROI_ATTRIBUTE_HEAD.POS_WEIGHT = 5.0
+
 
 _C.MODEL.ROI_MASK_HEAD = CN()
 _C.MODEL.ROI_MASK_HEAD.FEATURE_EXTRACTOR = "ResNet50Conv5ROIFeatureExtractor"
@@ -286,6 +290,7 @@ _C.MODEL.ROI_KEYPOINT_HEAD.RESOLUTION = 14
 _C.MODEL.ROI_KEYPOINT_HEAD.NUM_CLASSES = 17
 _C.MODEL.ROI_KEYPOINT_HEAD.SHARE_BOX_FEATURE_EXTRACTOR = True
 
+
 _C.MODEL.ROI_RELATION_HEAD = CN()
 # share box feature extractor should be set False for neural-motifs
 _C.MODEL.ROI_RELATION_HEAD.PREDICTOR = "MotifPredictor"
@@ -294,23 +299,20 @@ _C.MODEL.ROI_RELATION_HEAD.POOLING_ALL_LEVELS = True
 _C.MODEL.ROI_RELATION_HEAD.NUM_CLASSES = 51
 _C.MODEL.ROI_RELATION_HEAD.BATCH_SIZE_PER_IMAGE = 64
 _C.MODEL.ROI_RELATION_HEAD.POSITIVE_FRACTION = 0.25
-_C.MODEL.ROI_RELATION_HEAD.MAX_PROPOSAL_PAIR = 2048
 _C.MODEL.ROI_RELATION_HEAD.USE_GT_BOX = True
 _C.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL = False
 _C.MODEL.ROI_RELATION_HEAD.EMBED_DIM = 200
 _C.MODEL.ROI_RELATION_HEAD.CONTEXT_DROPOUT_RATE = 0.2
-
-_C.MODEL.ROI_RELATION_HEAD.USE_BINARY_LOSS = False
-# the hidden dimension of geometry and word embedding context feature representation
 _C.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM = 512
-# the dimension of relation head to extract the union features
 _C.MODEL.ROI_RELATION_HEAD.CONTEXT_POOLING_DIM = 4096
 _C.MODEL.ROI_RELATION_HEAD.CONTEXT_OBJ_LAYER = 1  # assert >= 1
 _C.MODEL.ROI_RELATION_HEAD.CONTEXT_REL_LAYER = 1  # assert >= 1
 
+_C.MODEL.ROI_RELATION_HEAD.RIB_SCALE = 1
+_C.MODEL.ROI_RELATION_HEAD.RIB_EMBEDDING = True
+_C.MODEL.ROI_RELATION_HEAD.RIB_GEOMETRIC = True
+_C.MODEL.ROI_RELATION_HEAD.RIB_OBJ_CONTEXT = True
 _C.MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB = False
-
-_C.MODEL.ROI_RELATION_HEAD.EVALUATE_REL_PROPOSAL = True
 
 _C.MODEL.ROI_RELATION_HEAD.TRANSFORMER = CN()
 # for TransformerPredictor only
@@ -328,257 +330,61 @@ _C.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS = True
 _C.MODEL.ROI_RELATION_HEAD.REQUIRE_BOX_OVERLAP = True
 _C.MODEL.ROI_RELATION_HEAD.NUM_SAMPLE_PER_GT_REL = 4  # when sample fg relationship from gt, the max number of corresponding proposal pairs
 
+
+_C.MODEL.ROI_RELATION_HEAD.CAT_PAIR = False
+_C.MODEL.ROI_RELATION_HEAD.USE_CTX_GATE = True
+_C.MODEL.ROI_RELATION_HEAD.LINEAR_USE_BIAS = True
+
+
+_C.MODEL.ROI_RELATION_HEAD.LOSS = CN()
+
+_C.MODEL.ROI_RELATION_HEAD.LOSS.USE_CLASS_BALANCED_LOSS = False
+_C.MODEL.ROI_RELATION_HEAD.LOSS.CB_FACTOR = 1.0
+_C.MODEL.ROI_RELATION_HEAD.LOSS.CB_TYPE = "softmax"
+_C.MODEL.ROI_RELATION_HEAD.LOSS.USE_NBDT_LOSS = False
+_C.MODEL.ROI_RELATION_HEAD.LOSS.USE_FOCAL_LOSS = False
+_C.MODEL.ROI_RELATION_HEAD.LOSS.USE_RW_LOSS = False
+
+_C.MODEL.ROI_RELATION_HEAD.LOSS.FOCAL = CN()
+_C.MODEL.ROI_RELATION_HEAD.LOSS.FOCAL.GAMMA = 2.0
+_C.MODEL.ROI_RELATION_HEAD.LOSS.FOCAL.ALPHA = 0.25
+
+_C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT = CN()
+
+_C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.TYPE = 'HardTreeSupLoss'
+_C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.PATH_GRAPH = './nbdt/hierarchies/VG150/graph-induced.json'
+_C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.PATH_WNIDS = './nbdt/wnids/VG150.txt'
+_C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.FACTOR = 1.0
+_C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.MODE = 'mean'
+
 # in sgdet, to make sure the detector won't missing any ground truth bbox, 
 # we add grount truth box to the output of RPN proposals during Training
 _C.MODEL.ROI_RELATION_HEAD.ADD_GTBOX_TO_PROPOSAL_IN_TRAIN = False
 
-_C.MODEL.ROI_RELATION_HEAD.KERN_MODULE = CN()
-
-_C.MODEL.ROI_RELATION_HEAD.KERN_MODULE.MESSAGE_PASSING_STEP = 3
-
-_C.MODEL.ROI_RELATION_HEAD.KERN_MODULE.GRAPH_HIDDEN_DIM = 512
-
-_C.MODEL.ROI_RELATION_HEAD.KERN_MODULE.STATISTICS_PRIOR_KNOWLEDGE = True
-
-_C.MODEL.ROI_RELATION_HEAD.KERN_MODULE.REL_PRIOR_MATRIX_DIR = "datasets/vg/stanford_spilt/kern_prior/rel_matrix.npy"
-
-_C.MODEL.ROI_RELATION_HEAD.KERN_MODULE.INST_PRIOR_MATRIX_DIR = "datasets/vg/stanford_spilt/kern_prior/obj_matrix.npy"
-
-_C.MODEL.ROI_RELATION_HEAD.KERN_MODULE.FUSE_PAIRWISE_OBJ_FEATURES = False
-
-_C.MODEL.ROI_RELATION_HEAD.KERN_MODULE.AVERAGE_GRAPH_SUMMARY = False
-
-_C.MODEL.ROI_RELATION_HEAD.IMP_MODULE = CN()
-# the relation feature representation source, can be the union feature or the subject objects pair features
-_C.MODEL.ROI_RELATION_HEAD.EDGE_FEATURES_REPRESENTATION = "union"  # obj_pair
-#
-_C.MODEL.ROI_RELATION_HEAD.IMP_MODULE.EDGE_FEATURES_REPRESENTATION = "union"  # obj_pair
-# the feature representation for the relationship feature, can be the union features, instance pair features and thire fused features
-
-_C.MODEL.ROI_RELATION_HEAD.IMP_MODULE.GRAPH_HIDDEN_DIM = 512
-_C.MODEL.ROI_RELATION_HEAD.IMP_MODULE.GRAPH_ITERATION_NUM = 2
-
-_C.MODEL.ROI_RELATION_HEAD.MSDN_MODULE = CN()
-
-_C.MODEL.ROI_RELATION_HEAD.MSDN_MODULE.GRAPH_HIDDEN_DIM = 512 # the hidden dimension of graph model
-
-_C.MODEL.ROI_RELATION_HEAD.MSDN_MODULE.SHARE_PARAMETERS_EACH_ITER=True
-
-_C.MODEL.ROI_RELATION_HEAD.MSDN_MODULE.GRAPH_ITERATION_NUM = 3
-
-_C.MODEL.ROI_RELATION_HEAD.MSDN_MODULE.EDGE_FEATURES_REPRESENTATION = "union"  # obj_pair, 
-# the feature representation for the relationship feature, can be the union features, instance pair features and thire fused features
-
-_C.MODEL.ROI_RELATION_HEAD.MSDN_MODULE.APPLY_GT = False
-
-
-
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE = CN()
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.GRAPH_HIDDEN_DIM = 512 # the hidden dimension of graph model
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.SHARE_PARAMETERS_EACH_ITER=True
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.GRAPH_ITERATION_NUM = 3
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.EDGE_FEATURES_REPRESENTATION = "union"  # obj_pair, 
-# the feature representation for the relationship feature, can be the union features, instance pair features and thire fused features
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.RELATION_CONFIDENCE_AWARE = False
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.APPLY_GT = False
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.MP_ON_VALID_PAIRS = False # graph will only message passing on edges filtered by the rel pn structure
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.MP_VALID_PAIRS_NUM = 200 # the mp will take the top 150 relatedness score for mp
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.ITERATE_MP_PAIR_REFINE = 0
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.RELNESS_MP_WEIGHTING = False
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.RELNESS_MP_WEIGHTING_SCORE_RECALIBRATION_METHOD = "minmax" # "learnable_scaling"
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.LEARNABLE_SCALING_WEIGHT = (2.5, 0.03)  # (alpha, beta)
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.SHARE_RELATED_MODEL_ACROSS_REFINE_ITER = False
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.SPLIT_GRAPH4OBJ_REL = False
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.GATING_WITH_RELNESS_LOGITS = False
-
-_C.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.SKIP_CONNECTION_ON_OUTPUT= False # add the skip connection on the graph output and initial input
-
-
-
-
-#### CVPR 2020 GPSNET_MODULE
-
-_C.MODEL.ROI_RELATION_HEAD.GPSNET_MODULE = CN()
-
-_C.MODEL.ROI_RELATION_HEAD.GPSNET_MODULE.GRAPH_ITERATION_NUM = 2
-
-_C.MODEL.ROI_RELATION_HEAD.GPSNET_MODULE.ITERATE_MP_PAIR_REFINE = 2
-
-_C.MODEL.ROI_RELATION_HEAD.GPSNET_MODULE.MP_ON_VALID_PAIRS = False # graph will only message passing on edges filtered by the rel pn structure
-
-_C.MODEL.ROI_RELATION_HEAD.GPSNET_MODULE.MP_VALID_PAIRS_NUM = 200 # the mp will take the top 150 relatedness score for mp
-
-_C.MODEL.ROI_RELATION_HEAD.GPSNET_MODULE.RELNESS_MP_WEIGHTING = False
-
-_C.MODEL.ROI_RELATION_HEAD.GPSNET_MODULE.GRAPH_HIDDEN_DIM = 512
-
-##### CVPR 2018 AGRCNN 
-_C.MODEL.ROI_RELATION_HEAD.GRCNN_MODULE = CN()
-
-_C.MODEL.ROI_RELATION_HEAD.GRCNN_MODULE.FEATURE_UPDATE_STEP = 2
-
-_C.MODEL.ROI_RELATION_HEAD.GRCNN_MODULE.SCORES_UPDATE_STEP = 2
-
-_C.MODEL.ROI_RELATION_HEAD.GRCNN_MODULE.MP_ON_VALID_PAIRS = False # graph will only message passing on edges filtered by the rel pn structure
-
-_C.MODEL.ROI_RELATION_HEAD.GRCNN_MODULE.MP_VALID_PAIRS_NUM = 200 # the mp will take the top 150 relatedness score for mp
-
-_C.MODEL.ROI_RELATION_HEAD.GRCNN_MODULE.RELNESS_MP_WEIGHTING = False
-
-_C.MODEL.ROI_RELATION_HEAD.GRCNN_MODULE.GRAPH_HIDDEN_DIM = 1024
-#####
 
 _C.MODEL.ROI_RELATION_HEAD.CAUSAL = CN()
 # direct and indirect effect analysis
 _C.MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_ANALYSIS = False
 # Fusion
-_C.MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE = 'sum'  # features  # gate
-
-_C.MODEL.ROI_RELATION_HEAD.CAUSAL.AUXILIARY_LOSS = True
+_C.MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE = 'sum'
 # causal context feature layer
 _C.MODEL.ROI_RELATION_HEAD.CAUSAL.CONTEXT_LAYER = 'motifs'
-
-# the relation proposal module for the graph model, here we will predict a confidence for each proposed relationship
-# pairs, the graph model will use this relatedness score as a reference to filter the graph
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL = CN()
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.SET_ON = False
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.PRETRAIN_RELNESS_MODULE = False
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.METHOD = "gt" # rel proposal method, can be "gt" for upper bound and "rel_pn" for predictions results
-
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.PRE_CLSER_LOSS = 'bce' #focal, bce, ce
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.REL_AWARE_PREDICTOR_TYPE = "single" # "hybrid  
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.FIX_MODEL_AT_ITER = -1
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.PRETRAIN_ITER_RELNESS_MODULE = 2000
-# we find that the relpn model is easy to over fitting, so we will fix it in few iteration for better performance
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.PAIR_NUMS_AFTER_FILTERING = -1
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.IGNORE_FOREGROUND_BOXES_PAIRS = False
-# the rel pn take the geometery and sematics information in default, but we can take the visual features of instances
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.VISUAL_FEATURES_ON = True # we will take the visual features in default 
-# the relationness score can be use for the ranking in final prediction, in default we will set is as false for better performances
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.USE_RELATEDNESS_FOR_PREDICTION_RANKING = False
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.EVAL_MODEL_AUC = False
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.USE_SAME_LABEL_WITH_CLSER = True
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.FOCAL_LOSS_ALPHA = 1.0
-
-_C.MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.FOCAL_LOSS_GAMMA = 0.0
-
-
-############## pairwise augment features #########################
-# switch of geometry information in union feature
-_C.MODEL.ROI_RELATION_HEAD.GEOMETRIC_FEATURES = True
-
-_C.MODEL.ROI_RELATION_HEAD.WORD_EMBEDDING_FEATURES = True
-
-_C.MODEL.ROI_RELATION_HEAD.USE_GT_OBJ_LABEL_FOR_EMBEDDING = False
-
-_C.MODEL.ROI_RELATION_HEAD.REL_OBJ_MULTI_TASK_LOSS = False
-
-_C.MODEL.ROI_RELATION_HEAD.OBJECT_CLASSIFICATION_REFINE = False
-
-_C.MODEL.ROI_RELATION_HEAD.OBJECT_CLASSIFICATION_MANNER = "replace" # add
-
 # separate spatial in union feature
 _C.MODEL.ROI_RELATION_HEAD.CAUSAL.SEPARATE_SPATIAL = False
 
-# the features in pairwise relationship features
-_C.MODEL.ROI_RELATION_HEAD.CAUSAL.SPATIAL_FOR_VISION = True
+_C.MODEL.ROI_RELATION_HEAD.CAUSAL.SPATIAL_FOR_VISION = False
 
-_C.MODEL.ROI_RELATION_HEAD.FREQUENCY_BAIS = True
-
-_C.MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_TYPE = 'none'  # 'TDE', 'TIE', 'TE'
-
-# enable the frequency branch to the causal inference pipeline
-_C.MODEL.ROI_RELATION_HEAD.CAUSAL.OBJ_PAIR_LABEL_FREQUENCY_BIAS_BRANCH = True
-
-# data resampling
-_C.MODEL.ROI_RELATION_HEAD.LONGTAIL_PART_DICT = [None, 'b', 't', 't', 't', 't', 't', 't', 'b', 't', 't', 't', 't', 't',
-                                                 't', 't', 't', 't', 't', 't', 'h', 'b', 'b', 'b', 't', 't', 't', 't',
-                                                 't', 'b', 'h', 'h', 't', 't', 't', 't', 't', 't', 'b', 't', 'b', 'b',
-                                                 't', 'b', 't', 't', 't', 't', 'h', 'b', 'b']
-
-_C.MODEL.ROI_RELATION_HEAD.DATA_RESAMPLING = False
-
-_C.MODEL.ROI_RELATION_HEAD.REPEAT_FACTOR = 0.02
-
-_C.MODEL.ROI_RELATION_HEAD.DATA_RESAMPLING_PARAM = CN()
-
-_C.MODEL.ROI_RELATION_HEAD.DATA_RESAMPLING_PARAM.REPEAT_FACTOR=0.012
-_C.MODEL.ROI_RELATION_HEAD.DATA_RESAMPLING_PARAM.INSTANCE_DROP_RATE=0.4
-
-
-_C.MODEL.ROI_RELATION_HEAD.DATA_RESAMPLING_PARAM.REPEAT_DICT_DIR = ""
-
-
-
-_C.MODEL.ROI_RELATION_HEAD.TAIL_REPEAT_FACTOR = 0.012
-_C.MODEL.ROI_RELATION_HEAD.BODY_REPEAT_FACTOR = 0.018
-
-_C.MODEL.ROI_RELATION_HEAD.HEAD_CATE_DROP_RATE = 0.4
-
-_C.MODEL.ROI_RELATION_HEAD.BODY_CATE_DROP_RATE = 1.0
-
-_C.MODEL.ROI_RELATION_HEAD.DATA_RESAMPLING_METHOD = "bilvl" # lvis
-
-# fix the feature extract modules only train the classifier
-_C.MODEL.ROI_RELATION_HEAD.FIX_FEATURE = False
-
-_C.MODEL.ROI_RELATION_HEAD.CLASSIFIER = "linear"  # weighted_norm
-
-_C.MODEL.ROI_RELATION_HEAD.CLASSIFIER_WEIGHT_SCALE = False  # weighted_norm
-
-_C.MODEL.ROI_RELATION_HEAD.FIX_CLASSIFIER_WEIGHT = False
-
-_C.MODEL.ROI_RELATION_HEAD.RE_INITIALIZE_CLASSIFIER = False
-
-# set to "None" will generate repeat dict on the fly
-
-_C.MODEL.ROI_RELATION_HEAD.REPEAT_DICT = "None"
-# _C.MODEL.ROI_RELATION_HEAD.REPEAT_DICT = "/root/projects/Scene-Graph-Benchmark.pytorch/repeat_factor_dict.json"
-
-_C.MODEL.ROI_RELATION_HEAD.REMOVE_TAIL_CLASSES = False
+_C.MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_TYPE = 'none' # 'TDE', 'TIE', 'TE'
 
 # proportion of predicates
-_C.MODEL.ROI_RELATION_HEAD.REL_PROP = [0.01858, 0.00057, 0.00051, 0.00109, 0.00150, 0.00489, 0.00432, 0.02913, 0.00245,
-                                       0.00121,
-                                       0.00404, 0.00110, 0.00132, 0.00172, 0.00005, 0.00242, 0.00050, 0.00048, 0.00208,
-                                       0.15608,
-                                       0.02650, 0.06091, 0.00900, 0.00183, 0.00225, 0.00090, 0.00028, 0.00077, 0.04844,
-                                       0.08645,
-                                       0.31621, 0.00088, 0.00301, 0.00042, 0.00186, 0.00100, 0.00027, 0.01012, 0.00010,
-                                       0.01286,
-                                       0.00647, 0.00084, 0.01077, 0.00132, 0.00069, 0.00376, 0.00214, 0.11424, 0.01205,
-                                       0.02958]
+_C.MODEL.ROI_RELATION_HEAD.REL_PROP = [0.01858, 0.00057, 0.00051, 0.00109, 0.00150, 0.00489, 0.00432, 0.02913, 0.00245, 0.00121, 
+                                       0.00404, 0.00110, 0.00132, 0.00172, 0.00005, 0.00242, 0.00050, 0.00048, 0.00208, 0.15608,
+                                       0.02650, 0.06091, 0.00900, 0.00183, 0.00225, 0.00090, 0.00028, 0.00077, 0.04844, 0.08645,
+                                       0.31621, 0.00088, 0.00301, 0.00042, 0.00186, 0.00100, 0.00027, 0.01012, 0.00010, 0.01286,
+                                       0.00647, 0.00084, 0.01077, 0.00132, 0.00069, 0.00376, 0.00214, 0.11424, 0.01205, 0.02958]
 
 _C.MODEL.VGG = CN()
-_C.MODEL.VGG.VGG16_OUT_CHANNELS = 512
+_C.MODEL.VGG.VGG16_OUT_CHANNELS= 512
 # ---------------------------------------------------------------------------- #
 # ResNe[X]t options (ResNets = {ResNet, ResNeXt}
 # Note that parts of a resnet may be used for both the backbone and the head
@@ -611,6 +417,7 @@ _C.MODEL.RESNETS.STEM_OUT_CHANNELS = 64
 _C.MODEL.RESNETS.STAGE_WITH_DCN = (False, False, False, False)
 _C.MODEL.RESNETS.WITH_MODULATED_DCN = False
 _C.MODEL.RESNETS.DEFORMABLE_GROUPS = 1
+
 
 # ---------------------------------------------------------------------------- #
 # RetinaNet Options (Follow the Detectron version)
@@ -672,6 +479,7 @@ _C.MODEL.RETINANET.INFERENCE_TH = 0.05
 # NMS threshold used in RetinaNet
 _C.MODEL.RETINANET.NMS_TH = 0.4
 
+
 # ---------------------------------------------------------------------------- #
 # FBNet options
 # ---------------------------------------------------------------------------- #
@@ -708,6 +516,7 @@ _C.MODEL.FBNET.MASK_HEAD_STRIDE = 0
 _C.MODEL.FBNET.RPN_HEAD_BLOCKS = 0
 _C.MODEL.FBNET.RPN_BN_TYPE = ""
 
+
 # ---------------------------------------------------------------------------- #
 # Solver
 # ---------------------------------------------------------------------------- #
@@ -729,6 +538,7 @@ _C.SOLVER.STEPS = (30000,)
 _C.SOLVER.WARMUP_FACTOR = 1.0 / 3
 _C.SOLVER.WARMUP_ITERS = 500
 _C.SOLVER.WARMUP_METHOD = "linear"
+_C.SOLVER.ETA_MIN = 0.0001
 
 _C.SOLVER.SCHEDULE = CN()
 _C.SOLVER.SCHEDULE.TYPE = "WarmupMultiStepLR"  # "WarmupReduceLROnPlateau"
@@ -738,6 +548,7 @@ _C.SOLVER.SCHEDULE.THRESHOLD = 1e-4
 _C.SOLVER.SCHEDULE.COOLDOWN = 1
 _C.SOLVER.SCHEDULE.FACTOR = 0.5
 _C.SOLVER.SCHEDULE.MAX_DECAY_STEP = 7
+
 
 _C.SOLVER.CHECKPOINT_PERIOD = 2500
 
@@ -801,24 +612,23 @@ _C.TEST.RELATION.MULTIPLE_PREDS = False
 _C.TEST.RELATION.IOU_THRESHOLD = 0.5
 _C.TEST.RELATION.REQUIRE_OVERLAP = True
 # when predict the label of bbox, run nms on each cls
-_C.TEST.RELATION.LATER_NMS_PREDICTION_THRES = 0.3
+_C.TEST.RELATION.LATER_NMS_PREDICTION_THRES = 0.3 
 # synchronize_gather, used for sgdet, otherwise test on multi-gpu will cause out of memory
-# for detection mode, need to set as false, otherwise there may have some prediction been missed
-_C.TEST.RELATION.SYNC_GATHER = True
+_C.TEST.RELATION.SYNC_GATHER = False
 
-_C.TEST.ALLOW_LOAD_FROM_CACHE = False
+_C.TEST.ALLOW_LOAD_FROM_CACHE = True
+
 
 _C.TEST.CUSTUM_EVAL = False
 _C.TEST.CUSTUM_PATH = '.'
 
-
 # ---------------------------------------------------------------------------- #
 # Misc options
 # ---------------------------------------------------------------------------- #
-_C.OUTPUT_DIR = "./checkpoints"
-_C.GLOVE_DIR = "datasets/vg/stanford_spilt/glove"
-_C.RIB_FMAP_SAVE = False
+_C.OUTPUT_DIR = "."
 _C.DETECTED_SGG_DIR = "."
+_C.GLOVE_DIR = "."
+_C.RIB_FMAP_SAVE = False
 
 _C.PATHS_CATALOG = os.path.join(os.path.dirname(__file__), "paths_catalog.py")
 _C.PATHS_DATA = os.path.join(os.path.dirname(__file__), "../data/datasets")

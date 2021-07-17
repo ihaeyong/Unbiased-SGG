@@ -34,7 +34,7 @@ def get_dataset_statistics(cfg):
 
     data_statistics_name = ''.join(dataset_names) + '_statistics'
     save_file = os.path.join(cfg.OUTPUT_DIR, "{}.cache".format(data_statistics_name))
-    
+
     if os.path.exists(save_file):
         logger.info('Loading data statistics from: ' + str(save_file))
         logger.info('-'*100)

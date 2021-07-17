@@ -211,8 +211,8 @@ class RelWeight(nn.Module):
                 skew_v = skew_false_v * alpha + skew_true_v * (1-alpha)
 
             # todo : figure out how to set beta for scene graph classification
-            skew_th = 0.01 # default 0.9
-            ent_w = 1.0  # default 0.05
+            skew_th = 0.9 # default 0.9
+            ent_w = 0.05  # default 0.05
             if False:
                 if skew_v > skew_th :
                     beta = 1.0 - ent_v * ent_w
@@ -224,8 +224,8 @@ class RelWeight(nn.Module):
                 effect_num = 1.0 - np.power(beta, cls_num_list)
                 per_cls_weights = (1.0 - beta) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
-            elif False:
-                "sample-ent"
+            elif True:
+                #"sample-ent"
                 pos_mask = (skew_v > skew_th).astype(float)
                 neg_mask = (skew_v < -skew_th).astype(float)
                 beta = 1.0 - ent_v * ent_w
@@ -234,9 +234,9 @@ class RelWeight(nn.Module):
 
                 effect_num = [1.0 - np.power(b, cls) for b,cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
                 per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
-                per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+                per_cls_weights = per_cls_weights / np.sum(per_cls_weights,1)[:,None] * len(cls_num_list)
 
-            elif True:
+            elif False:
                 # margin v1
                 margin = self.margin(rel_logits, rel_labels).data.cpu().numpy() * ent_w
                 idx_for_ce = np.where(margin > skew_th)[0]
@@ -258,12 +258,13 @@ class RelWeight(nn.Module):
                 if len(idx_for_ce) > 0 :
                     margin[idx_for_ce] = 1.0
                 margin = np.exp(margin * skew_v[:,None]) / np.exp(skew_v[:,None])
-                
+
                 # range from -1 to 1
                 beta = 1.0 - margin
                 effect_num = [1.0 - np.power(b, cls) for b,cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
                 per_cls_weights = (1.0 - beta) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights, 1)[:,None] * len(cls_num_list)
+
             rel_weight = torch.FloatTensor(per_cls_weights).cuda()
 
             rel_margin = None

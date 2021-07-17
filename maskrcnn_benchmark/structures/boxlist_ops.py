@@ -142,6 +142,14 @@ def _cat(tensors, dim=0):
         return tensors[0]
     return torch.cat(tensors, dim)
 
+def squeeze_tensor(tensor):
+    tensor = torch.squeeze(tensor)
+    try:
+        len(tensor)
+    except TypeError:
+        tensor.unsqueeze_(0)
+    return tensor
+
 
 def cat_boxlist(bboxes):
     """

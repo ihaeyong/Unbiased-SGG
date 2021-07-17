@@ -95,12 +95,12 @@ class PostProcessor(nn.Module):
             assert self.bbox_aug_enabled == False
             if not self.bbox_aug_enabled:  # If bbox aug is enabled, we will do it later
                 boxlist, orig_inds, boxes_per_cls = self.filter_results(boxlist, num_classes)
-            # add 
+            # add
             boxlist = self.add_important_fields(i, boxes, orig_inds, boxlist, boxes_per_cls, relation_mode)
-            
+
             results.append(boxlist)
             nms_features.append(features[i][orig_inds])
-        
+
         nms_features = torch.cat(nms_features, dim=0)
         return nms_features, results
 
@@ -109,7 +109,7 @@ class PostProcessor(nn.Module):
             if not self.custum_eval:
                 gt_labels = boxes[i].get_field('labels')[orig_inds]
                 gt_attributes = boxes[i].get_field('attributes')[orig_inds]
-        
+
                 boxlist.add_field('labels', gt_labels)
                 boxlist.add_field('attributes', gt_attributes)
 
@@ -212,7 +212,7 @@ class PostProcessor(nn.Module):
         else:
             result = cat_boxlist(result)
             orig_inds = torch.cat(orig_inds, dim=0)
-        
+
         number_of_detections = len(result)
         # Limit to max_per_image detections **over all classes**
         if number_of_detections > self.detections_per_img > 0:
