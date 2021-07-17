@@ -211,7 +211,7 @@ class RelWeight(nn.Module):
                 skew_v = skew_false_v * alpha + skew_true_v * (1-alpha)
 
             # todo : figure out how to set beta for scene graph classification
-            skew_th = 0.9 # default 0.9
+            skew_th = 0.05 # default 0.9
             ent_w = 0.05  # default 0.05
             if False:
                 if skew_v > skew_th :
@@ -224,7 +224,7 @@ class RelWeight(nn.Module):
                 effect_num = 1.0 - np.power(beta, cls_num_list)
                 per_cls_weights = (1.0 - beta) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
-            elif True:
+            elif False:
                 #"sample-ent"
                 pos_mask = (skew_v > skew_th).astype(float)
                 neg_mask = (skew_v < -skew_th).astype(float)
@@ -250,13 +250,19 @@ class RelWeight(nn.Module):
                 per_cls_weights = (1.0 - beta) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights, 1)[:,None] * len(cls_num_list)
 
-            elif False:
+            elif True:
                 # margin
                 #skew_v = np.clip(skew_v, 0.0, 10.0) / 10.0
                 margin = self.margin(rel_logits, rel_labels).data.cpu().numpy()
-                idx_for_ce = np.where(margin > skew_th)[0]
-                if len(idx_for_ce) > 0 :
-                    margin[idx_for_ce] = 1.0
+
+                idx_pos_ce = np.where(margin > skew_th)[0]
+                if len(idx_pos_ce) > 0 :
+                    margin[idx_pos_ce] = 1.0
+
+                idx_neg_ce = np.where(margin < -skew_th * 4)[0]
+                if len(idx_neg_ce) > 0 :
+                    margin[idx_neg_ce] = 1.0
+
                 margin = np.exp(margin * skew_v[:,None]) / np.exp(skew_v[:,None])
 
                 # range from -1 to 1
