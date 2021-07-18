@@ -211,7 +211,7 @@ class RelWeight(nn.Module):
                 skew_v = skew_false_v * alpha + skew_true_v * (1-alpha)
 
             # todo : figure out how to set beta for scene graph classification
-            skew_th = 0.05 # default 0.9
+            skew_th = 0.2 # default 0.9
             ent_w = 0.05  # default 0.05
             if False:
                 if skew_v > skew_th :
@@ -250,7 +250,7 @@ class RelWeight(nn.Module):
                 per_cls_weights = (1.0 - beta) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights, 1)[:,None] * len(cls_num_list)
 
-            elif True:
+            elif False:
                 # margin
                 #skew_v = np.clip(skew_v, 0.0, 10.0) / 10.0
                 margin = self.margin(rel_logits, rel_labels).data.cpu().numpy()
@@ -259,11 +259,34 @@ class RelWeight(nn.Module):
                 if len(idx_pos_ce) > 0 :
                     margin[idx_pos_ce] = 1.0
 
-                idx_neg_ce = np.where(margin < -skew_th * 4)[0]
+                idx_neg_ce = np.where(margin < -skew_th * 0.0)[0]
                 if len(idx_neg_ce) > 0 :
                     margin[idx_neg_ce] = 1.0
 
                 margin = np.exp(margin * skew_v[:,None]) / np.exp(skew_v[:,None])
+
+                # range from -1 to 1
+                beta = 1.0 - margin
+                effect_num = [1.0 - np.power(b, cls) for b,cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
+                per_cls_weights = (1.0 - beta) / np.array(effect_num)
+                per_cls_weights = per_cls_weights / np.sum(per_cls_weights, 1)[:,None] * len(cls_num_list)
+
+            elif True:
+                # margin
+                #skew_v = np.clip(skew_v, 0.0, 10.0) / 10.0
+                margin = self.margin(rel_logits, rel_labels).data.cpu().numpy()
+                mean_margin = margin.mean()
+                b_margin = np.ones_like(margin)
+
+                idx_pos_ce = np.where(margin > mean_margin + skew_th)[0]
+                if len(idx_pos_ce) > 0 :
+                    b_margin[idx_pos_ce] = margin[idx_pos_ce]
+
+                idx_neg_ce = np.where(margin < mean_margin - skew_th)[0]
+                if len(idx_neg_ce) > 0 :
+                    b_margin[idx_neg_ce] = margin[idx_neg_ce]
+
+                margin = np.exp(b_margin * skew_v[:,None]) / np.exp(skew_v[:,None])
 
                 # range from -1 to 1
                 beta = 1.0 - margin
