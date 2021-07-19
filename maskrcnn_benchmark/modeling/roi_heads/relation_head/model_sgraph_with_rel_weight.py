@@ -211,7 +211,7 @@ class RelWeight(nn.Module):
                 skew_v = skew_false_v * alpha + skew_true_v * (1-alpha)
 
             # todo : figure out how to set beta for scene graph classification
-            skew_th = 1.2 # default 0.9
+            skew_th = 4.0 # default 0.9
             ent_w = 0.05  # default 0.05
             if False:
                 if skew_v > skew_th :
