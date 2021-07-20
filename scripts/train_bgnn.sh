@@ -26,7 +26,7 @@ if [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 1000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/vg_faster_det.pth \
-           OUTPUT_DIR ./checkpoints/bgnn-v3-skew-m0.1-predcls
+           OUTPUT_DIR ./checkpoints/bgnn-v3-std-skew1.5-predcls
 
 elif [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \

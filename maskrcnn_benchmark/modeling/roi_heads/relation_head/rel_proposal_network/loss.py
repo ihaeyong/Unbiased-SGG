@@ -130,7 +130,6 @@ def loss_eval_hybrid_level(pre_cls_logits, rel_labels, loss):
     # return loss_val_bin
     return loss_val_bin * 0.8 + loss_val_mulabel * 0.2
 
-
 class RelAwareLoss(nn.Module):
     def __init__(self, cfg):
         super(RelAwareLoss, self).__init__()
