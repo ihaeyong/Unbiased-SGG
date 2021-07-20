@@ -211,7 +211,7 @@ class RelWeight(nn.Module):
                 skew_v = skew_false_v * alpha + skew_true_v * (1-alpha)
 
             # todo : figure out how to set beta for scene graph classification
-            skew_th = 15.0 # default 0.9
+            skew_th = 0.4 # default 0.9
             ent_w = 0.05  # default 0.05
             if False:
                 if skew_v > skew_th :
@@ -279,11 +279,13 @@ class RelWeight(nn.Module):
                 std_margin = margin.std()
                 b_margin = np.ones_like(margin)
 
-                idx_pos_ce = np.where(margin > 1/(std_margin+skew_th))[0]
+                #idx_pos_ce = np.where(margin > 1/(std_margin+skew_th))[0]
+                idx_pos_ce = np.where(margin > np.tanh(var_margin*skew_th))[0]
                 if len(idx_pos_ce) > 0 :
                     b_margin[idx_pos_ce] = margin[idx_pos_ce]
 
-                idx_neg_ce = np.where(margin < -1/(std_margin+skew_th))[0]
+                #idx_neg_ce = np.where(margin < -1/(std_margin+skew_th))[0]
+                idx_neg_ce = np.where(margin < -np.tanh(var_margin*skew_th))[0]
                 if len(idx_neg_ce) > 0 :
                     b_margin[idx_neg_ce] = margin[idx_neg_ce]
 
