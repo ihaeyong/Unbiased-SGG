@@ -177,18 +177,21 @@ class BGNNPredictor(nn.Module):
 
         # using the object results, update the pred label and logits
         if self.use_obj_recls_logits:
-            boxes_per_cls = cat(
-                [proposal.get_field("boxes_per_cls") for proposal in inst_proposals], dim=0
-            )  # comes from post process of box_head
-            # here we use the logits refinements by adding
-            if self.obj_recls_logits_update_manner == "add":
-                obj_pred_logits = refined_obj_logits + obj_pred_logits
-            if self.obj_recls_logits_update_manner == "replace":
-                obj_pred_logits = refined_obj_logits
-            refined_obj_pred_labels = obj_prediction_nms(
-                boxes_per_cls, obj_pred_logits, nms_thresh=0.5
-            )
-            obj_pred_labels = refined_obj_pred_labels
+            if self.mode == "sgdet":
+                boxes_per_cls = cat(
+                    [proposal.get_field("boxes_per_cls") for proposal in inst_proposals], dim=0
+                )  # comes from post process of box_head
+                # here we use the logits refinements by adding
+                if self.obj_recls_logits_update_manner == "add":
+                    obj_pred_logits = refined_obj_logits + obj_pred_logits
+                if self.obj_recls_logits_update_manner == "replace":
+                    obj_pred_logits = refined_obj_logits
+                refined_obj_pred_labels = obj_prediction_nms(
+                    boxes_per_cls, obj_pred_logits, nms_thresh=0.5
+                )
+                obj_pred_labels = refined_obj_pred_labels
+            else:
+                _, obj_pred_labels = refined_obj_logits[:, 1:].max(-1)
         else:
             obj_pred_labels = cat(
                 [each_prop.get_field("pred_labels") for each_prop in inst_proposals], dim=0
@@ -205,7 +208,7 @@ class BGNNPredictor(nn.Module):
             freq_dists = self.freq_bias.index_with_labels(pair_pred.long())
             rel_cls_logits = (
                 rel_cls_logits
-                + self.freq_lambda * freq_dists
+                + self.freq_lambda * torch.sigmoid(freq_dists)
             )
 
             # we estimates the effective number using non-visual predicate distributions

@@ -54,7 +54,7 @@ class RelationLossComputation(object):
 
         self.obj_weight = ObjWeight(cls_num_list)
         self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
-        
+
         self.logSoftmax = nn.LogSoftmax(dim=1)
 
         if self.use_label_smoothing:
@@ -103,7 +103,7 @@ class RelationLossComputation(object):
         rel_labels = cat(rel_labels, dim=0)
 
         if self.weight == 'batchweight':
-            
+
             rel_weight, rel_margin = self.rel_weight(relation_logits,
                                                      freq_bias,
                                                      rel_labels,

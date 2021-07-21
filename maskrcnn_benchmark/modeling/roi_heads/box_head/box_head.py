@@ -82,10 +82,10 @@ class ROIBoxHead(torch.nn.Module):
                     # return gt proposals and no loss even during training
 
                     # ------------- added by haeyong.k ------------------
-                    class_logits, _ = self.predictor(x)
-                    proposals = add_predict_info(proposals, class_logits)
+                    #class_logits, _ = self.predictor(x)
+                    #proposals = add_predict_info(proposals, class_logits)
                     # ---------------------------------------------------
-                    
+
                     return x, proposals, {}
                 else:
                     # mode==sgcls

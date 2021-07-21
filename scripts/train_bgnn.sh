@@ -16,7 +16,7 @@ if [ $2 == "predcls" ]; then
            MODEL.ROI_RELATION_HEAD.PREDICTOR BGNNPredictor \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            MODEL.ROI_RELATION_HEAD.BGNN_MODULE.RELATION_CONFIDENCE_AWARE False \
-           MODEL.ROI_RELATION_HEAD.BGNN_MODULE.APPLY_GT True \
+           MODEL.ROI_RELATION_HEAD.BGNN_MODULE.APPLY_GT False \
            MODEL.ROI_RELATION_HEAD.RELATION_PROPOSAL_MODEL.SET_ON False \
            MODEL.ROI_RELATION_HEAD.REL_OBJ_MULTI_TASK_LOSS True \
            SOLVER.IMS_PER_BATCH 12 \
@@ -27,7 +27,7 @@ if [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/vg_faster_det.pth \
-           OUTPUT_DIR ./checkpoints/bgnn-var-tanh-gt-neg-skew0.4-ent0.6-predcls
+           OUTPUT_DIR ./checkpoints/bgnn-multi-task-neg-skew0.6-shift0.0-predcls
 
 elif [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \
