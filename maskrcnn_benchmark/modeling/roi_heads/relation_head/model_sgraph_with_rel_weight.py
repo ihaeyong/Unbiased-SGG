@@ -139,6 +139,21 @@ class RelWeight(nn.Module):
         self.pred_idx = self.pred_prop.argsort()[::-1]
 
         self.temp = temp
+        
+        self.register_buffer('mean', torch.zeros(51, 1))
+        self.register_buffer('var', torch.zeros(51, 1))
+
+    def moving_avg(self, holder, inputs, avg_ratio=0.0005):
+        with torch.no_grad():
+            holder = holder * (1 - avg_ratio) + avg_ratio * inputs
+        return holder
+
+    def update(self, margin, label):
+        # get mean embedding
+        self.mean[label] = self.moving_avg(self.mean[label], margin.cpu().detach())
+
+        var = torch.pow(self.mean[label] - margin.cpu().detach(), 2)
+        self.var[label] = self.moving_avg(self.var[label], var.detach())
 
     def margin(self, x, labels):
 
@@ -272,29 +287,26 @@ class RelWeight(nn.Module):
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights, 1)[:,None] * len(cls_num_list)
 
             elif True:
-                # margin
-                margin = self.margin(rel_logits, rel_labels).data.cpu().numpy()
+                margin = self.margin(rel_logits, rel_labels)
+                self.update(margin, rel_labels)
+
+                margin = margin.view(-1).data.cpu().numpy()
                 mean_margin = margin.mean()
                 var_margin = margin.var()
                 std_margin = margin.std()
                 b_margin = np.ones_like(margin)
 
-                #idx_pos_ce = np.where(margin > 1/(std_margin+skew_th))[0]
-                idx_pos_ce = np.where(margin > np.tanh(std_margin * skew_th))[0]
-                if len(idx_pos_ce) > 0 :
-                    b_margin[idx_pos_ce] = margin[idx_pos_ce]
-
-                #idx_neg_ce = np.where(margin < -1/(std_margin+skew_th))[0]
-                idx_neg_ce = np.where(margin < -np.tanh(std_margin * skew_th))[0]
+                mask = margin <  skew_th * self.mean[rel_labels].view(-1).numpy()
+                idx_neg_ce = np.where(mask == True)[0]
                 if len(idx_neg_ce) > 0 :
                     b_margin[idx_neg_ce] = margin[idx_neg_ce]
 
-                margin = np.exp(b_margin * skew_v[:,None]) / np.exp(skew_v[:,None])
+                margin = np.exp(b_margin * skew_v) / np.exp(skew_v)
 
                 # range from -1 to 1
                 beta = 1.0 - margin
                 effect_num = [1.0 - np.power(b, cls) for b,cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
-                per_cls_weights = (1.0 - beta) / np.array(effect_num)
+                per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights, 1)[:,None] * len(cls_num_list)
 
             rel_weight = torch.FloatTensor(per_cls_weights).cuda()
