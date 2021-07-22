@@ -821,7 +821,7 @@ class BGNNContext(nn.Module):
 
             # apply GT
             if self.apply_gt_for_rel_conf:
-                ref_relatedness = rel_gt_binarys.clone()
+                ref_relatedness = rel_gt_binarys # clone()
 
                 if pred_relatedness_scores is None:
                     relatedness_scores = ref_relatedness

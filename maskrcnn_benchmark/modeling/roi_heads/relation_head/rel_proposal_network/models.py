@@ -729,7 +729,7 @@ class RelAwareRelFeature(nn.Module):
                 relness_bin_logits = self.fusion_layer(relness_logits)
 
                 relness_scores = squeeze_tensor(torch.sigmoid(relness_bin_logits))
-                pred_rel_matrix[pair_idx[:, 0], pair_idx[:, 1]] = relness_scores
+                pred_rel_matrix[pair_idx[:, 0], pair_idx[:, 1]] = relness_scores.float()
 
                 relness_logits = torch.cat((relness_logits, relness_bin_logits), dim=1)
             elif self.predictor_type == "single":
