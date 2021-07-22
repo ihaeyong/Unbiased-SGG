@@ -199,7 +199,7 @@ class RelWeight(nn.Module):
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
 
-            w_type = 'sample'
+            w_type = 'full'
             if w_type == 'full':
                 cls_num_list = batch_freq.sum(0)
                 cls_order = batch_freq[:, self.pred_idx]
@@ -226,9 +226,9 @@ class RelWeight(nn.Module):
                 skew_v = skew_false_v * alpha + skew_true_v * (1-alpha)
 
             # todo : figure out how to set beta for scene graph classification
-            skew_th = 0.2 # default 0.9
-            ent_w = 0.0  # default 0.05
-            if False:
+            skew_th = 1.0 # default 0.9
+            ent_w = 0.8  # default 0.05
+            if True:
                 if skew_v > skew_th :
                     beta = 1.0 - ent_v * ent_w
                 elif skew_v < -skew_th :
@@ -286,7 +286,7 @@ class RelWeight(nn.Module):
                 per_cls_weights = (1.0 - beta) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights, 1)[:,None] * len(cls_num_list)
 
-            elif True:
+            elif False:
                 margin = self.margin(rel_logits, rel_labels)
                 self.update(margin, rel_labels)
 
