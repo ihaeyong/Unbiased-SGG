@@ -34,7 +34,7 @@ from maskrcnn_benchmark.modeling.roi_heads.box_head.roi_box_feature_extractors i
 
 from maskrcnn_benchmark.modeling.utils import cat
 from maskrcnn_benchmark.structures.boxlist_ops import squeeze_tensor
-from .utils_motifs import to_onehot
+from .utils_motifs import to_onehot, obj_edge_vectors
 
 @registry.ROI_RELATION_PREDICTOR.register("BGNNPredictor")
 class BGNNPredictor(nn.Module):
@@ -113,6 +113,21 @@ class BGNNPredictor(nn.Module):
 
         # for logging things
         self.forward_time = 0
+
+        #if self.embedding:
+        self.embed_dim = config.MODEL.ROI_RELATION_HEAD.EMBED_DIM
+        statistics = get_dataset_statistics(config)
+        obj_embed_vecs = obj_edge_vectors(statistics['obj_classes'],
+                                          wv_dir=config.GLOVE_DIR,
+                                          wv_dim=self.embed_dim)
+
+        self.obj_embed2 = nn.Embedding(self.num_obj_cls, self.embed_dim)
+        with torch.no_grad():
+            self.obj_embed2.weight.copy_(obj_embed_vecs, non_blocking=True)
+
+        self.non_vis_dists = nn.Linear(self.embed_dim * 2,
+                                       self.num_rel_cls, bias=True)
+        layer_init(self.non_vis_dists, xavier=True)
 
     def init_classifier_weight(self):
         self.rel_classifier.reset_parameters()
@@ -197,26 +212,35 @@ class BGNNPredictor(nn.Module):
                 [each_prop.get_field("pred_labels") for each_prop in inst_proposals], dim=0
             )
 
+        # object embedding updated by haeyong.k
+        obj_embed2 = F.softmax(obj_pred_logits, dim=1) @ self.obj_embed2.weight
+
         if self.use_bias:
             obj_pred_labels = obj_pred_labels.split(num_objs, dim=0)
             pair_preds = []
+            pair_obj_embeds = []
             for pair_idx, obj_pred in zip(rel_pair_idxs, obj_pred_labels):
                 pair_preds.append(
                     torch.stack((obj_pred[pair_idx[:, 0]], obj_pred[pair_idx[:, 1]]), dim=1)
                 )
+                pair_obj_embeds.append(torch.cat((obj_embed2[pair_idx[:, 0]], obj_embed2[pair_idx[:, 1]]), dim=-1))
             pair_pred = cat(pair_preds, dim=0)
+            prod_embed = cat(pair_obj_embeds, dim=0)
+
             freq_dists = self.freq_bias.index_with_labels(pair_pred.long())
-            rel_cls_logits = (
-                rel_cls_logits
-                + self.freq_lambda * torch.sigmoid(freq_dists)
-            )
 
             # we estimates the effective number using non-visual predicate distributions
-            if False:
-                embed_dists = self.non_vis_dists(prod_emb)
+            if True:
+                embed_dists = self.non_vis_dists(prod_embed)
                 freq_bias = torch.sigmoid(freq_dists + embed_dists)
             else:
                 freq_bias = torch.sigmoid(freq_dists)
+
+            rel_cls_logits = (
+                # modified by haeyong.k
+                rel_cls_logits
+                + self.freq_lambda * torch.sigmoid(freq_dists) + embed_dists
+            )
 
         obj_pred_logits = obj_pred_logits.split(num_objs, dim=0)
         rel_cls_logits = rel_cls_logits.split(num_rels, dim=0)
@@ -394,7 +418,7 @@ class TransformerPredictor(nn.Module):
                 freq_bias = torch.sigmoid(freq_dists)
 
             if True:
-                # proposed by haeyong
+                # proposed by haeyong.k
                 rel_dists = rel_dists + torch.sigmoid(freq_dists) + embed_dists
             else:
                 rel_dists = rel_dists + freq_dists
