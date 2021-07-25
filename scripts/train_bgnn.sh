@@ -22,12 +22,12 @@ if [ $2 == "predcls" ]; then
            SOLVER.IMS_PER_BATCH 12 \
            SOLVER.BASE_LR 0.01 \
            TEST.IMS_PER_BATCH $1 \
-           DTYPE "float16" SOLVER.MAX_ITER 70000 \
+           DTYPE "float16" SOLVER.MAX_ITER 90000 \
            SOLVER.VAL_PERIOD 2000 \
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/bgnn_embed_weight_skew1.0_ent0.6-predcls
+           OUTPUT_DIR ./checkpoints/bgnn_lr_embed_weight_skew0.9_ent0.6-predcls
 
 elif [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \
@@ -42,7 +42,7 @@ elif [ $2 == "sgcls" ]; then
 	   #MODEL.ROI_RELATION_HEAD.DATA_RESAMPLING_PARAM.REPEAT_FACTOR 0.13 \ 
            #MODEL.ROI_RELATION_HEAD.DATA_RESAMPLING_PARAM.INSTANCE_DROP_RATE 1.6 \ 
            SOLVER.IMS_PER_BATCH 12 \
-           SOLVER.BASE_LR 0.01 \
+               SOLVER.BASE_LR 0.01 \
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
            SOLVER.MAX_ITER 70000 \
