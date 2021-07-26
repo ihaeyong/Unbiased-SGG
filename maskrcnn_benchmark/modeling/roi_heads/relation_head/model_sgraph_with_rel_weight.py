@@ -199,7 +199,7 @@ class RelWeight(nn.Module):
             cls_num_list = batch_freq.sum(0)
             cls_order = batch_freq[:, self.pred_idx]
 
-            w_type = 'full'
+            w_type = 'sample'
             if w_type == 'full':
                 cls_num_list = batch_freq.sum(0)
                 cls_order = batch_freq[:, self.pred_idx]
@@ -227,9 +227,9 @@ class RelWeight(nn.Module):
 
             # todo : figure out how to set beta for scene graph classification
             skew_th = 0.9 # default 0.9
-            ent_pos_w = 0.6  # default 0.05
-            ent_neg_w = 0.6  # default 0.05
-            if True:
+            ent_pos_w = 0.5  # default 0.05
+            ent_neg_w = 0.5  # default 0.05
+            if False:
                 if skew_v > skew_th :
                     beta = 1.0 - ent_v * ent_pos_w
                 elif skew_v < -skew_th :
@@ -240,15 +240,17 @@ class RelWeight(nn.Module):
                 effect_num = 1.0 - np.power(beta, cls_num_list)
                 per_cls_weights = (1.0 - beta) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
-            elif False:
-                #"sample-ent"
+            elif True:
+                #sample-ent
                 pos_mask = (skew_v > skew_th).astype(float)
                 neg_mask = (skew_v < -skew_th).astype(float)
-                beta = 1.0 - ent_v * ent_w
-                pos_beta = beta * pos_mask
-                neg_beta = beta * neg_mask
 
-                effect_num = [1.0 - np.power(b, cls) for b,cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
+                pos_beta = (1.0 - ent_v * ent_pos_w) * pos_mask
+                neg_beta = (1.0 - ent_v * ent_neg_w) * neg_mask
+
+                beta = pos_beta + neg_beta
+
+                effect_num = [1.0 - np.power(b, cls) for b, cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
                 per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights,1)[:,None] * len(cls_num_list)
 
