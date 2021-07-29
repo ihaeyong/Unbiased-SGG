@@ -123,6 +123,7 @@ def main():
         )
         synchronize()
 
+    print(output_dir)
 
 if __name__ == "__main__":
     main()

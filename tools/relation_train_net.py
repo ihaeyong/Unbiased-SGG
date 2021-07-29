@@ -284,7 +284,7 @@ def train(cfg, local_rank, distributed, logger, writer):
             scheduler.step()
 
         if cfg.SOLVER.TO_VAL and iteration % cfg.SOLVER.VAL_PERIOD == 0:
-            if optimizer.param_groups[-1]["lr"] < 2e-3:
+            if optimizer.param_groups[-1]["lr"] < 8e-2:
 
                 logger.info("======== TEST : {} ============".format(iteration))
                 cfg.merge_from_list(['LOG.MODE', 'test'])
