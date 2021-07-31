@@ -24,7 +24,7 @@ if [ $2 == "predcls" ]; then
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
            GLOVE_DIR ./datasets/glove \
-           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/bgnn_embed_sample-skew0.9_ent0.2-0.08-predcls \
-           OUTPUT_DIR ./checkpoints/bgnn_embed_sample-skew0.9_ent0.2-0.08-predcls 
+           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/bgnn_embed_lr_sample-skew0.9_ent0.19-0.16-predcls \
+           OUTPUT_DIR ./checkpoints/bgnn_embed_lr_sample-skew0.9_ent0.19-0.16-predcls
 
 fi
