@@ -213,7 +213,7 @@ class ROIRelationHead(torch.nn.Module):
             union_features,
             logger,
         )
-        
+
         # proposals, rel_pair_idxs, rel_pn_labels,relness_net_input,roi_features,union_features, None
         # for test
         if not self.training:

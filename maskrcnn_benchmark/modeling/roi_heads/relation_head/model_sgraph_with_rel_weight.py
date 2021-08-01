@@ -58,8 +58,82 @@ class ObjWeight(nn.Module):
         self.obj_prop = np.array(obj_prop)
         self.obj_idx = self.obj_prop.argsort()[::-1]
 
+    def softmax(self, x):
+
+        max = np.max(x,axis=1,keepdims=True) #returns max of each row and keeps same dims
+        e_x = np.exp(x - max) #subtracts each row with its max value
+        sum = np.sum(e_x,axis=1,keepdims=True) #returns sum of each row and keeps same dims
+        f_x = e_x / sum
+        return f_x
+
+    # Moment with optional pre-computed mean, equal to a.mean(axis, keepdims=True)
+    def _moment(self, a, moment, axis, mean=None):
+        if np.abs(moment - np.round(moment)) > 0:
+            raise ValueError("All moment parameters must be integers")
+
+        if moment == 0 or moment == 1:
+            # By definition the zeroth moment about the mean is 1, and the first
+            # moment is 0.
+            shape = list(a.shape)
+            del shape[axis]
+            dtype = a.dtype.type if a.dtype.kind in 'fc' else np.float64
+
+            if len(shape) == 0:
+                return dtype(1.0 if moment == 0 else 0.0)
+            else:
+                return (np.ones(shape, dtype=dtype) if moment == 0
+                        else np.zeros(shape, dtype=dtype))
+        else:
+            # Exponentiation by squares: form exponent sequence
+            n_list = [moment]
+            current_n = moment
+            while current_n > 2:
+                if current_n % 2:
+                    current_n = (current_n - 1) / 2
+                else:
+                    current_n /= 2
+                    n_list.append(current_n)
+
+            # Starting point for exponentiation by squares
+            mean = a.mean(axis, keepdims=True) if mean is None else mean
+            a_zero_mean = a - mean
+            if n_list[-1] == 1:
+                s = a_zero_mean.copy()
+            else:
+                s = a_zero_mean**2
+
+            # Perform multiplications
+            for n in n_list[-2::-1]:
+                s = s**2
+                if n % 2:
+                    s *= a_zero_mean
+            return np.mean(s, axis)
+
+    def _skew(self, x, target=None, axis=1):
+
+        '''
+        The sample skewness is computed as the Fisher-Pearson coefficient
+        of skewness, i.e.
+        g_1=\frac{m_3}{m_2^{3/2}}
+        '''
+
+        if target is None:
+            mean = x.mean(axis=1, keepdims=True)
+        else:
+            mean = target
+
+        m2 = self._moment(x, moment=2, axis=axis, mean=mean)
+        m3 = self._moment(x, moment=3, axis=axis, mean=mean)
+
+        with np.errstate(all='ignore'):
+            zero = (m2 <= (np.finfo(m2.dtype).resolution * mean.squeeze(1))**2)
+            vals = np.where(zero, 0, m3 / m2**1.5)
+
+        return vals
+
     def forward(self, obj_logits, obj_labels, gamma=0.01):
 
+        batch_size = obj_logits.size(0)
         with torch.no_grad():
             freq_bias = torch.sigmoid(obj_logits)
 
@@ -77,18 +151,19 @@ class ObjWeight(nn.Module):
             else:
                 cls_num_list = self.cls_num_list
 
-            cls_order = batch_freq[:, self.obj_idx]
-
-            w_type = 'avg'
+            w_type = 'sample-target'
             if w_type == 'full':
+                cls_order = batch_freq[:, self.obj_idx]
                 ent_v = entropy(cls_order, base=151, axis=1).mean()
                 skew_v = skew(cls_order, axis=1).mean()
 
-            elif w_type == 'false':
-                ent_v = entropy(cls_order, base=151, axis=1) * topk_false_mask
-                ent_v = ent_v.sum() / (topk_false_mask.sum()+1)
-                skew_v = skew(cls_order, axis=1) * topk_false_mask
-                skew_v = skew_v.sum() / (topk_false_mask.sum()+1)
+            elif w_type == 'sample-target':
+                cls_num_list = batch_freq.sum(0)
+                cls_order_target = self.softmax(batch_freq)
+                cls_order = cls_order_target[:, self.obj_idx]
+                ent_v = entropy(cls_order, base=151, axis=1)
+                target = np.take_along_axis(cls_order_target, obj_labels.data.cpu().numpy()[:,None], axis=1)
+                skew_v = self._skew(cls_order, target, axis=1)
 
             elif w_type == 'avg':
                 ent_v = entropy(cls_order, base=151, axis=1)
@@ -105,23 +180,40 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 2.4 # default 2.2
-            ent_w = 1.0
-            if skew_v > skew_th:
-                beta = 1.0 - ent_v * ent_w
-            elif skew_v < -skew_th:
-                beta = 1.0 - ent_v * ent_w
+            skew_th = 2.1 # default 2.2
+            ent_pos_w = 1.0
+            ent_neg_w = 1.0
+
+            if False:
+                if skew_v > skew_th:
+                    beta = 1.0 - ent_v * ent_w
+                elif skew_v < -skew_th:
+                    beta = 1.0 - ent_v * ent_w
+                else:
+                    beta = 0.0
+
+                beta = np.clip(beta, 0,1)
+
+                effect_num = 1.0 - np.power(beta, cls_num_list)
+                per_cls_weights = (1.0 - beta) / np.array(effect_num)
+                per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+                obj_weight = torch.FloatTensor(per_cls_weights).cuda()
             else:
-                beta = 0.0
+                #sample-ent
+                pos_mask = (skew_v > skew_th).astype(float)
+                neg_mask = (skew_v < -skew_th).astype(float)
 
-            beta = np.clip(beta, 0,1)
+                pos_beta = (1.0 - ent_v * ent_pos_w) * pos_mask
+                neg_beta = (1.0 - ent_v * ent_neg_w) * neg_mask
 
-            effect_num = 1.0 - np.power(beta, cls_num_list)
-            per_cls_weights = (1.0 - beta) / np.array(effect_num)
-            per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
-            obj_weight = torch.FloatTensor(per_cls_weights).cuda()
+                beta = pos_beta + neg_beta
+
+                effect_num = [1.0 - np.power(b, cls) for b, cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
+                per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
+                per_cls_weights = per_cls_weights / np.sum(per_cls_weights,1)[:,None] * len(cls_num_list)
 
             obj_margin = None
+            obj_weight = torch.FloatTensor(per_cls_weights).cuda()
         return  obj_weight, obj_margin
 
 class RelWeight(nn.Module):
@@ -301,7 +393,7 @@ class RelWeight(nn.Module):
             # todo : figure out how to set beta for scene graph classification
             skew_th = 0.9 # default 0.9
             ent_pos_w = 0.19  # default 0.05
-            ent_neg_w = 0.02  # default 0.05
+            ent_neg_w = 0.06  # default 0.05
             if False:
                 if skew_v > skew_th :
                     beta = 1.0 - ent_v * ent_pos_w

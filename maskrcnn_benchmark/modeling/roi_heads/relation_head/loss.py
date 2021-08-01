@@ -45,7 +45,7 @@ class RelationLossComputation(object):
 
         self.mode = mode
         self.rel_type = 'sample-weight'
-        self.obj_type = 'weight'
+        self.obj_type = 'sample-weight'
         self.gamma = 0.02
 
         self.weight = 'batchweight'
@@ -114,7 +114,7 @@ class RelationLossComputation(object):
                                                 reduction='none',
                                                 weight=rel_weight)
                 loss_relation = self.focal_loss(loss_relation, self.gamma)
-                
+
             elif self.rel_type == 'margin':
                 loss_relation = F.cross_entropy(relation_logits - rel_margin,
                                                 rel_labels.long(),
@@ -129,9 +129,9 @@ class RelationLossComputation(object):
                 loss_relation = F.cross_entropy(relation_logits,
                                                 rel_labels.long(),
                                                 rel_weight)
-                
+
             elif self.rel_type == 'sample-weight':
-                
+
                 # label mask
                 index = torch.zeros_like(relation_logits, dtype=torch.uint8)
                 index.scatter_(1, rel_labels.data.view(-1, 1), 1)
@@ -142,7 +142,7 @@ class RelationLossComputation(object):
 
                 # weighted cross entropy
                 loss_relation = -loss.sum() / target_weight.sum()
-                
+
         else:
             loss_relation = self.criterion_rel_loss(relation_logits, rel_labels.long())
 
@@ -169,6 +169,19 @@ class RelationLossComputation(object):
             elif self.obj_type == 'none':
                 loss_refine_obj = F.cross_entropy(refine_obj_logits,
                                                   fg_labels.long())
+
+            elif self.obj_type == 'sample-weight':
+
+                # label mask
+                index = torch.zeros_like(refine_obj_logits, dtype=torch.uint8)
+                index.scatter_(1, fg_labels.data.view(-1, 1), 1)
+                target_weight = index.type(torch.cuda.FloatTensor) * obj_weight
+
+                output = self.logSoftmax(refine_obj_logits)
+                loss = output * target_weight
+
+                # weighted cross entropy
+                loss_refine_obj = -loss.sum() / target_weight.sum()
 
         else:
             loss_refine_obj = self.criterion_loss(refine_obj_logits, fg_labels.long())
