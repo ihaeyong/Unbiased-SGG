@@ -202,7 +202,7 @@ class BGNNPredictor(nn.Module):
                 if self.obj_recls_logits_update_manner == "replace":
                     obj_pred_logits = refined_obj_logits
                 refined_obj_pred_labels = obj_prediction_nms(
-                    boxes_per_cls, obj_pred_logits, nms_thresh=0.5
+                    boxes_per_cls, Variable(obj_pred_logits).data, nms_thresh=0.5
                 )
                 obj_pred_labels = refined_obj_pred_labels
             else:

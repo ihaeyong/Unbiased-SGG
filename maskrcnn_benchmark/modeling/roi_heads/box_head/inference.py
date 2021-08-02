@@ -17,17 +17,16 @@ class PostProcessor(nn.Module):
     """
 
     def __init__(
-        self,
-        score_thresh=0.05,
-        nms=0.5,
-        post_nms_per_cls_topn=300,
-        nms_filter_duplicates=True,
-        detections_per_img=100,
-        box_coder=None,
-        cls_agnostic_bbox_reg=False,
-        bbox_aug_enabled=False,
-        save_proposals=False,
-        custum_eval=False
+            self,
+            score_thresh=0.05,
+            nms=0.5,
+            post_nms_per_cls_topn=300,
+            nms_filter_duplicates=True,
+            detections_per_img=100,
+            box_coder=None,
+            cls_agnostic_bbox_reg=False,
+            bbox_aug_enabled=False,
+            save_proposals=False
     ):
         """
         Arguments:
@@ -48,7 +47,6 @@ class PostProcessor(nn.Module):
         self.cls_agnostic_bbox_reg = cls_agnostic_bbox_reg
         self.bbox_aug_enabled = bbox_aug_enabled
         self.save_proposals = save_proposals
-        self.custum_eval = custum_eval
 
     def forward(self, x, boxes, relation_mode=False):
         """
@@ -57,7 +55,6 @@ class PostProcessor(nn.Module):
                 and the box_regression from the model.
             boxes (list[BoxList]): bounding boxes that are used as
                 reference, one for ech image
-
         Returns:
             results (list[BoxList]): one BoxList for each image, containing
                 the extra fields labels and scores
@@ -75,7 +72,7 @@ class PostProcessor(nn.Module):
         # add rpn regression offset to the original proposals
         proposals = self.box_coder.decode(
             box_regression.view(sum(boxes_per_image), -1), concat_boxes
-        ) # tensor of size (num_box, 4*num_cls)
+        )  # tensor of size (num_box, 4*num_cls)
         if self.cls_agnostic_bbox_reg:
             proposals = proposals.repeat(1, class_prob.shape[1])
 
@@ -88,13 +85,14 @@ class PostProcessor(nn.Module):
         results = []
         nms_features = []
         for i, (prob, boxes_per_img, image_shape) in enumerate(zip(
-            class_prob, proposals, image_shapes
+                class_prob, proposals, image_shapes
         )):
             boxlist = self.prepare_boxlist(boxes_per_img, prob, image_shape)
             boxlist = boxlist.clip_to_image(remove_empty=False)
             assert self.bbox_aug_enabled == False
             if not self.bbox_aug_enabled:  # If bbox aug is enabled, we will do it later
-                boxlist, orig_inds, boxes_per_cls = self.filter_results(boxlist, num_classes)
+                boxlist, orig_inds, boxes_per_cls = self.filter_results(boxlist, num_classes,
+                                                                        boxes[i].get_field('predict_logits'))
             # add
             boxlist = self.add_important_fields(i, boxes, orig_inds, boxlist, boxes_per_cls, relation_mode)
 
@@ -105,35 +103,36 @@ class PostProcessor(nn.Module):
         return nms_features, results
 
     def add_important_fields(self, i, boxes, orig_inds, boxlist, boxes_per_cls, relation_mode=False):
-        if relation_mode:
-            if not self.custum_eval:
-                gt_labels = boxes[i].get_field('labels')[orig_inds]
-                gt_attributes = boxes[i].get_field('attributes')[orig_inds]
+        if relation_mode and self.training:
+            assert boxes[i].has_field("labels")
 
-                boxlist.add_field('labels', gt_labels)
-                boxlist.add_field('attributes', gt_attributes)
+            gt_labels = boxes[i].get_field('labels')[orig_inds]
+            gt_attributes = boxes[i].get_field('attributes')[orig_inds]
 
-            predict_logits = boxes[i].get_field('predict_logits')[orig_inds]
-            boxlist.add_field('boxes_per_cls', boxes_per_cls)
-            boxlist.add_field('predict_logits', predict_logits)
+            boxlist.add_field('labels', gt_labels)
+            boxlist.add_field('attributes', gt_attributes)
+
+        predict_logits = boxes[i].get_field('predict_logits')[orig_inds]
+        boxlist.add_field('boxes_per_cls', boxes_per_cls)
+        boxlist.add_field('predict_logits', predict_logits)
 
         return boxlist
 
     # discarded by kaihua
-    def jiaxin_undo_regression(self, i, boxes, orig_inds, boxlist, boxes_per_img):
-        # by Jiaxin
-        selected_boxes = boxes[i][orig_inds]
-        # replace bbox after regression with original bbox before regression
-        boxlist.bbox = selected_boxes.bbox
-        # add maintain fields
-        for field_name in boxes[i].extra_fields.keys():
-            if field_name not in boxes[i].triplet_extra_fields:
-                boxlist.add_field(field_name, selected_boxes.get_field(field_name))
-        # replace background bbox after regression with bbox before regression
-        boxes_per_cls = torch.cat((
-            boxlist.bbox, boxes_per_img[orig_inds][:,4:]), dim=1).view(len(boxlist), num_classes, 4) # tensor of size (#nms, #cls, 4) mode=xyxy
-        boxlist.add_field('boxes_per_cls', boxes_per_cls) # will be used in motif predictor
-        return boxlist
+    # def jiaxin_undo_regression(self, i, boxes, orig_inds, boxlist, boxes_per_img):
+    #     # by Jiaxin
+    #     selected_boxes = boxes[i][orig_inds]
+    #     # replace bbox after regression with original bbox before regression
+    #     boxlist.bbox = selected_boxes.bbox
+    #     # add maintain fields
+    #     for field_name in boxes[i].extra_fields.keys():
+    #         if field_name not in boxes[i].triplet_extra_fields:
+    #             boxlist.add_field(field_name, selected_boxes.get_field(field_name))
+    #     # replace background bbox after regression with bbox before regression
+    #     boxes_per_cls = torch.cat((
+    #         boxlist.bbox, boxes_per_img[orig_inds][:, 4:]), dim=1).view(len(boxlist), num_classes, 4)  # tensor of size (#nms, #cls, 4) mode=xyxy
+    #     boxlist.add_field('boxes_per_cls', boxes_per_cls)  # will be used in motif predictor
+    #     return boxlist
 
     def prepare_boxlist(self, boxes, scores, image_shape):
         """
@@ -154,7 +153,7 @@ class PostProcessor(nn.Module):
         boxlist.add_field("pred_scores", scores)
         return boxlist
 
-    def filter_results(self, boxlist, num_classes):
+    def filter_results(self, boxlist, num_classes, obj_logit=None):
         """Returns bounding-box detection results by thresholding on scores and
         applying non-maximum suppression (NMS).
         """
@@ -173,7 +172,7 @@ class PostProcessor(nn.Module):
         for j in range(1, num_classes):
             inds = inds_all[:, j].nonzero().squeeze(1)
             scores_j = scores[inds, j]
-            boxes_j = boxes[inds, j * 4 : (j + 1) * 4]
+            boxes_j = boxes[inds, j * 4: (j + 1) * 4]
             boxlist_for_class = BoxList(boxes_j, boxlist.size, mode="xyxy")
             boxlist_for_class.add_field("pred_scores", scores_j)
             boxlist_for_class, keep = boxlist_nms(
@@ -187,14 +186,14 @@ class PostProcessor(nn.Module):
             result.append(boxlist_for_class)
             orig_inds.append(inds)
 
-        #NOTE: kaihua, according to Neural-MOTIFS (and my experiments, we need remove duplicate bbox)
+        # NOTE: kaihua, according to Neural-MOTIFS (and my experiments, we need remove duplicate bbox)
         if self.nms_filter_duplicates or self.save_proposals:
             assert len(orig_inds) == (num_classes - 1)
             # set all bg to zero
-            inds_all[:, 0] = 0 
+            inds_all[:, 0] = 0
             for j in range(1, num_classes):
                 inds_all[:, j] = 0
-                orig_idx = orig_inds[j-1]
+                orig_idx = orig_inds[j - 1]
                 inds_all[orig_idx, j] = 1
             dist_scores = scores * inds_all.float()
             scores_pre, labels_pre = dist_scores.max(1)
@@ -224,6 +223,17 @@ class PostProcessor(nn.Module):
             keep = torch.nonzero(keep).squeeze(1)
             result = result[keep]
             orig_inds = orig_inds[keep]
+
+        # num_obj_bbox = len(result)
+        # obj_pred = obj_prediction_nms(boxes_per_cls[orig_inds],
+        #                               obj_logit[orig_inds],
+        #                               0.5)
+        # # obj_pred = box.get_field('pred_labels')
+        # obj_score_ind = torch.arange(num_obj_bbox, device=obj_logit.device) * obj_logit.shape[-1] + obj_pred
+        # obj_scores =  F.softmax(obj_logit[orig_inds], 1).view(-1)[obj_score_ind]
+        # result.add_field('pred_labels', obj_pred)  # (#obj, )
+        # result.add_field('pred_scores', obj_scores)  # (#obj, )
+
         return result, orig_inds, boxes_per_cls[orig_inds]
 
 
@@ -241,7 +251,6 @@ def make_roi_box_post_processor(cfg):
     post_nms_per_cls_topn = cfg.MODEL.ROI_HEADS.POST_NMS_PER_CLS_TOPN
     nms_filter_duplicates = cfg.MODEL.ROI_HEADS.NMS_FILTER_DUPLICATES
     save_proposals = cfg.TEST.SAVE_PROPOSALS
-    custum_eval = cfg.TEST.CUSTUM_EVAL
 
     postprocessor = PostProcessor(
         score_thresh,
@@ -252,7 +261,6 @@ def make_roi_box_post_processor(cfg):
         box_coder,
         cls_agnostic_bbox_reg,
         bbox_aug_enabled,
-        save_proposals,
-        custum_eval
+        save_proposals
     )
     return postprocessor

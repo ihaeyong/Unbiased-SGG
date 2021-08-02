@@ -180,7 +180,7 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 2.1 # default 2.2
+            skew_th = 2.0 # default 2.2
             ent_pos_w = 1.0
             ent_neg_w = 1.0
 
