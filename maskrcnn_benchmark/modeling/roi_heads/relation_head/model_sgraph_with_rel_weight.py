@@ -180,7 +180,7 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 2.0 # default 2.2
+            skew_th = 1.8 # default 2.2
             ent_pos_w = 1.0
             ent_neg_w = 1.0
 
@@ -231,7 +231,7 @@ class RelWeight(nn.Module):
         self.pred_idx = self.pred_prop.argsort()[::-1]
 
         self.temp = temp
-        
+
         self.register_buffer('mean', torch.zeros(51, 1))
         self.register_buffer('var', torch.zeros(51, 1))
 
@@ -393,7 +393,7 @@ class RelWeight(nn.Module):
             # todo : figure out how to set beta for scene graph classification
             skew_th = 0.9 # default 0.9
             ent_pos_w = 0.19  # default 0.05
-            ent_neg_w = 0.06  # default 0.05
+            ent_neg_w = 0.08  # default 0.05
             if False:
                 if skew_v > skew_th :
                     beta = 1.0 - ent_v * ent_pos_w
