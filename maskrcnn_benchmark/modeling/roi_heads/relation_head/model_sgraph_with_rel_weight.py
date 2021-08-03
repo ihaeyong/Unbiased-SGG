@@ -58,7 +58,8 @@ class ObjWeight(nn.Module):
         self.obj_prop = np.array(obj_prop)
         self.obj_idx = self.obj_prop.argsort()[::-1]
 
-    def softmax(self, x):
+    def softmax(self, x, temp=1.0):
+        x = x / temp
 
         max = np.max(x,axis=1,keepdims=True) #returns max of each row and keeps same dims
         e_x = np.exp(x - max) #subtracts each row with its max value
@@ -116,7 +117,6 @@ class ObjWeight(nn.Module):
         of skewness, i.e.
         g_1=\frac{m_3}{m_2^{3/2}}
         '''
-
         if target is None:
             mean = x.mean(axis=1, keepdims=True)
         else:
@@ -151,11 +151,17 @@ class ObjWeight(nn.Module):
             else:
                 cls_num_list = self.cls_num_list
 
-            w_type = 'sample-target'
+            w_type = 'sample'
             if w_type == 'full':
                 cls_order = batch_freq[:, self.obj_idx]
                 ent_v = entropy(cls_order, base=151, axis=1).mean()
                 skew_v = skew(cls_order, axis=1).mean()
+
+            elif w_type == 'sample':
+                cls_num_list = batch_freq.sum(0)
+                cls_order = self.softmax(batch_freq[:, self.obj_idx], temp=1.0)
+                ent_v = entropy(cls_order, base=151, axis=1)
+                skew_v = skew(cls_order, axis=1)
 
             elif w_type == 'sample-target':
                 cls_num_list = batch_freq.sum(0)
@@ -180,10 +186,9 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 1.8 # default 2.2
+            skew_th = 2.0 # default 2.2
             ent_pos_w = 1.0
             ent_neg_w = 1.0
-
             if False:
                 if skew_v > skew_th:
                     beta = 1.0 - ent_v * ent_w
@@ -265,7 +270,8 @@ class RelWeight(nn.Module):
         return max_margin
 
 
-    def softmax(self, x):
+    def softmax(self, x, temp=1.0):
+        x = x / temp
 
         max = np.max(x,axis=1,keepdims=True) #returns max of each row and keeps same dims
         e_x = np.exp(x - max) #subtracts each row with its max value
@@ -355,7 +361,7 @@ class RelWeight(nn.Module):
             batch_freq = freq_bias.data.cpu().numpy()
             cls_num_list = batch_freq.sum(0)
 
-            w_type = 'sample-target'
+            w_type = 'sample'
             if w_type == 'full':
                 cls_num_list = batch_freq.sum(0)
                 cls_order = batch_freq[:, self.pred_idx]
@@ -364,7 +370,7 @@ class RelWeight(nn.Module):
 
             elif w_type == 'sample':
                 cls_num_list = batch_freq.sum(0)
-                cls_order = self.softmax(batch_freq[:, self.pred_idx])
+                cls_order = self.softmax(batch_freq[:, self.pred_idx], temp=1.0)
                 ent_v = entropy(cls_order, base=51, axis=1)
                 skew_v = skew(cls_order, axis=1)
 
@@ -393,7 +399,7 @@ class RelWeight(nn.Module):
             # todo : figure out how to set beta for scene graph classification
             skew_th = 0.9 # default 0.9
             ent_pos_w = 0.19  # default 0.05
-            ent_neg_w = 0.08  # default 0.05
+            ent_neg_w = 0.06  # default 0.05
             if False:
                 if skew_v > skew_th :
                     beta = 1.0 - ent_v * ent_pos_w
