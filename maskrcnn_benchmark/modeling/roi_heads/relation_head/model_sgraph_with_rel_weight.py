@@ -100,7 +100,7 @@ class ObjWeight(nn.Module):
             if n_list[-1] == 1:
                 s = a_zero_mean.copy()
             else:
-                s = a_zero_mean**2
+                s = a_zero_mean**moment
 
             # Perform multiplications
             for n in n_list[-2::-1]:
@@ -180,7 +180,7 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 1.8 # default 2.2
+            skew_th = 1.9 # default 2.2
             ent_pos_w = 1.0
             ent_neg_w = 1.0
 
@@ -206,7 +206,10 @@ class ObjWeight(nn.Module):
                 pos_beta = (1.0 - ent_v * ent_pos_w) * pos_mask
                 neg_beta = (1.0 - ent_v * ent_neg_w) * neg_mask
 
-                beta = pos_beta + neg_beta
+                if False:
+                    beta = pos_beta + neg_beta
+                else:
+                    beta = pos_beta
 
                 effect_num = [1.0 - np.power(b, cls) for b, cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
                 per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
@@ -307,7 +310,7 @@ class RelWeight(nn.Module):
             if n_list[-1] == 1:
                 s = a_zero_mean.copy()
             else:
-                s = a_zero_mean**2
+                s = a_zero_mean**moment
 
             # Perform multiplications
             for n in n_list[-2::-1]:
@@ -413,7 +416,10 @@ class RelWeight(nn.Module):
                 pos_beta = (1.0 - ent_v * ent_pos_w) * pos_mask
                 neg_beta = (1.0 - ent_v * ent_neg_w) * neg_mask
 
-                beta = pos_beta + neg_beta
+                if False:
+                    beta = pos_beta + neg_beta
+                else:
+                    beta = pos_beta
 
                 effect_num = [1.0 - np.power(b, cls) for b, cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
                 per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
