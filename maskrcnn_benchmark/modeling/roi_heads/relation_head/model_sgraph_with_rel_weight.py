@@ -101,7 +101,7 @@ class ObjWeight(nn.Module):
             if n_list[-1] == 1:
                 s = a_zero_mean.copy()
             else:
-                s = a_zero_mean**2
+                s = a_zero_mean**moment
 
             # Perform multiplications
             for n in n_list[-2::-1]:
@@ -151,7 +151,7 @@ class ObjWeight(nn.Module):
             else:
                 cls_num_list = self.cls_num_list
 
-            w_type = 'sample'
+            w_type = 'sample-target'
             if w_type == 'full':
                 cls_order = batch_freq[:, self.obj_idx]
                 ent_v = entropy(cls_order, base=151, axis=1).mean()
@@ -186,7 +186,8 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_th = 2.0 # default 2.2
+            skew_pos_th = 1.9 # default 2.2
+            skew_neg_th = 1.9 # default 2.2
             ent_pos_w = 1.0
             ent_neg_w = 0.7
             if False:
@@ -205,13 +206,16 @@ class ObjWeight(nn.Module):
                 obj_weight = torch.FloatTensor(per_cls_weights).cuda()
             else:
                 #sample-ent
-                pos_mask = (skew_v > skew_th).astype(float)
-                neg_mask = (skew_v < -skew_th).astype(float)
+                pos_mask = (skew_v > skew_pos_th).astype(float)
+                neg_mask = (skew_v < -skew_neg_th).astype(float)
 
                 pos_beta = (1.0 - ent_v * ent_pos_w) * pos_mask
                 neg_beta = (1.0 - ent_v * ent_neg_w) * neg_mask
 
-                beta = pos_beta + neg_beta
+                if False:
+                    beta = pos_beta + neg_beta
+                else:
+                    beta = pos_beta
 
                 effect_num = [1.0 - np.power(b, cls) for b, cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
                 per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
@@ -313,7 +317,7 @@ class RelWeight(nn.Module):
             if n_list[-1] == 1:
                 s = a_zero_mean.copy()
             else:
-                s = a_zero_mean**2
+                s = a_zero_mean**moment
 
             # Perform multiplications
             for n in n_list[-2::-1]:
@@ -361,7 +365,7 @@ class RelWeight(nn.Module):
             batch_freq = freq_bias.data.cpu().numpy()
             cls_num_list = batch_freq.sum(0)
 
-            w_type = 'sample'
+            w_type = 'sample-target'
             if w_type == 'full':
                 cls_num_list = batch_freq.sum(0)
                 cls_order = batch_freq[:, self.pred_idx]
@@ -397,8 +401,9 @@ class RelWeight(nn.Module):
                 skew_v = skew_false_v * alpha + skew_true_v * (1-alpha)
 
             # todo : figure out how to set beta for scene graph classification
-            skew_th = 0.9 # default 0.9
-            ent_pos_w = 0.19  # default 0.05
+            skew_pos_th = 0.9 # default 0.9
+            skew_neg_th = 0.9 # default 0.9
+            ent_pos_w = 0.17  # default 0.05
             ent_neg_w = 0.06  # default 0.05
             if False:
                 if skew_v > skew_th :
@@ -413,13 +418,16 @@ class RelWeight(nn.Module):
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
             elif True:
                 #sample-ent
-                pos_mask = (skew_v > skew_th).astype(float)
-                neg_mask = (skew_v < -skew_th).astype(float)
+                pos_mask = (skew_v > skew_pos_th).astype(float)
+                neg_mask = (skew_v < -skew_neg_th).astype(float)
 
                 pos_beta = (1.0 - ent_v * ent_pos_w) * pos_mask
                 neg_beta = (1.0 - ent_v * ent_neg_w) * neg_mask
 
-                beta = pos_beta + neg_beta
+                if False:
+                    beta = pos_beta + neg_beta
+                else:
+                    beta = pos_beta
 
                 effect_num = [1.0 - np.power(b, cls) for b, cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
                 per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
