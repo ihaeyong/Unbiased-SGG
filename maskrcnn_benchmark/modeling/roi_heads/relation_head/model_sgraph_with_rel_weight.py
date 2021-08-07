@@ -223,7 +223,7 @@ class ObjWeight(nn.Module):
             elif True:
                 skew_neg_th = skew_v.mean() - 0.3
                 ent_neg_w = 1.0
-                neg_mask = (skew_v < -skew_neg_th).astype(float)
+                neg_mask = (skew_v > skew_neg_th).astype(float)
                 neg_beta = (1.0 - ent_v * ent_neg_w) * neg_mask
                 beta = neg_beta
 
@@ -450,7 +450,7 @@ class RelWeight(nn.Module):
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights,1)[:,None] * len(cls_num_list)
 
             elif True:
-                skew_neg_th = skew_v.mean()-0.3
+                skew_neg_th = skew_v.mean() - 0.3
                 ent_neg_w = 0.17  # default 0.05
 
                 neg_mask = (skew_v > skew_v.mean()+0.0).astype(float)
