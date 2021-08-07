@@ -186,10 +186,6 @@ class ObjWeight(nn.Module):
 
             # skew_v > 0 : more weight in the left tail
             # skew_v < 0 : more weight in the right tail
-            skew_pos_th = 1.9 # default 2.2
-            skew_neg_th = 1.9 # default 2.2
-            ent_pos_w = 1.0
-            ent_neg_w = 0.7
             if False:
                 if skew_v > skew_th:
                     beta = 1.0 - ent_v * ent_w
@@ -205,6 +201,10 @@ class ObjWeight(nn.Module):
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
                 obj_weight = torch.FloatTensor(per_cls_weights).cuda()
             elif False:
+                skew_pos_th = 1.9 # default 2.2
+                skew_neg_th = 1.9 # default 2.2
+                ent_pos_w = 1.0
+                ent_neg_w = 0.7
                 #sample-ent
                 pos_mask = (skew_v > skew_pos_th).astype(float)
                 neg_mask = (skew_v < -skew_neg_th).astype(float)
@@ -221,11 +221,11 @@ class ObjWeight(nn.Module):
                 per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights,1)[:,None] * len(cls_num_list)
             elif True:
-                skew_neg_th = skew_v.mean() - 0.2
+                skew_neg_th = skew_v.mean() - 0.3
                 ent_neg_w = 1.0
                 neg_mask = (skew_v < -skew_neg_th).astype(float)
                 neg_beta = (1.0 - ent_v * ent_neg_w) * neg_mask
-                beta = pos_beta
+                beta = neg_beta
 
                 effect_num = [1.0 - np.power(b, cls) for b, cls in zip(beta,cls_num_list[None,:].repeat(batch_size, 0))]
                 per_cls_weights = (1.0 - beta[:,None]) / np.array(effect_num)
@@ -450,7 +450,7 @@ class RelWeight(nn.Module):
                 per_cls_weights = per_cls_weights / np.sum(per_cls_weights,1)[:,None] * len(cls_num_list)
 
             elif True:
-                skew_neg_th = skew_v.mean()-0.2
+                skew_neg_th = skew_v.mean()-0.3
                 ent_neg_w = 0.17  # default 0.05
 
                 neg_mask = (skew_v > skew_v.mean()+0.0).astype(float)

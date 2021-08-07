@@ -72,5 +72,5 @@ elif [ $2 == "sgdet" ]; then
            SOLVER.CHECKPOINT_PERIOD 2000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/bgnn_embed_v3_target-skew0.9_0.9_ent0.17-sgdet
+           OUTPUT_DIR ./checkpoints/bgnn_embed_v3_target-mean_0.1_0.1_ent0.17-sgdet
 fi
