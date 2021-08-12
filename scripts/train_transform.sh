@@ -26,7 +26,7 @@ if [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 5000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/sg-transform-cls-obj2.0-rel0.9-predcls
+           OUTPUT_DIR ./checkpoints/sg-transform-embed_v3_target-skew0.7_0.7_ent0.18-predcls
 
 elif [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \
@@ -48,7 +48,7 @@ elif [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 5000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/sg-transform-cls-obj0.2-rel0.9-sgcls
+           OUTPUT_DIR ./checkpoints/sg-transform-embed_v3_target-skew0.7_0.7_ent0.18-sgcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \
@@ -70,6 +70,6 @@ elif [ $2 == "sgdet" ]; then
            SOLVER.CHECKPOINT_PERIOD 5000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/sg-transform-cls-obj0.2-rel0.9-sgdet
+           OUTPUT_DIR ./checkpoints/sg-transform-embed_v3_target-skew0.7_0.7_ent0.18-sgdet
 
 fi

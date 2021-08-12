@@ -23,8 +23,8 @@ if [ $2 == "predcls" ]; then
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
            GLOVE_DIR ./datasets/glove \
-           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/bgnn_embed_lr_sample-skew0.9_ent0.19-0.16-predcls \
-           OUTPUT_DIR ./checkpoints/bgnn_embed_lr_sample-skew0.9_ent0.19-0.16-predcls
+           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/bgnn_embed_v3_target-mean_p0.9_ent0.20-predcls \
+           OUTPUT_DIR ./checkpoints/bgnn_embed_v3_target-mean_p0.9_ent0.20-predcls
 
 
 elif [ $2 == "sgcls" ]; then
@@ -45,8 +45,8 @@ elif [ $2 == "sgcls" ]; then
            TEST.IMS_PER_BATCH $1 \
            DTYPE "float16" \
            GLOVE_DIR ./datasets/glove \
-           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/bgnn_embed_lr_v1_target-skew0.9_1.9_ent0.19-sgcls \
-           OUTPUT_DIR ./checkpoints/bgnn_embed_lr_v1_target-skew0.9_1.9_ent0.19-sgcls
+           MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/bgnn_embed_v3_target-skew0.7_0.5_ent0.18-sgcls \
+           OUTPUT_DIR ./checkpoints/bgnn_embed_v3_target-skew0.7_0.5_ent0.18-sgcls
 
 
 
