@@ -451,7 +451,7 @@ class RelWeight(nn.Module):
 
             elif True:
                 skew_neg_th = skew_v.mean() - 0.7
-                ent_neg_w = 0.17  # default 0.17
+                ent_neg_w = 0.16  # default 0.17
 
                 neg_mask = (skew_v > skew_neg_th).astype(float)
                 neg_beta = (1.0 - ent_v * ent_neg_w) * neg_mask
