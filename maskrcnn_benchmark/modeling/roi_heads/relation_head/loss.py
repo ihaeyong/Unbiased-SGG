@@ -10,7 +10,7 @@ from maskrcnn_benchmark.modeling.box_coder import BoxCoder
 from maskrcnn_benchmark.modeling.matcher import Matcher
 from maskrcnn_benchmark.structures.boxlist_ops import boxlist_iou
 from maskrcnn_benchmark.modeling.utils import cat
-from .model_sgraph_with_rel_weight import RelWeight, ObjWeight, LDAMLoss
+from .model_sgraph_with_rel_weight import RelWeight, ObjWeight, LDAMLoss, NBDTLoss
 
 class RelationLossComputation(object):
     """
@@ -48,7 +48,8 @@ class RelationLossComputation(object):
         self.obj_type = 'sample-weight'
         self.gamma = 0.02
 
-        self.weight = 'batchweight'
+        #self.weight = 'batchweight'
+        self.weight = 'weight'
 
         cls_num_list = np.load('./datasets/vg/obj_freq.npy')
 
