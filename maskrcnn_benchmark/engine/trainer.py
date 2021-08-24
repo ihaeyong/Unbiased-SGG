@@ -26,7 +26,10 @@ def reduce_loss_dict(loss_dict):
         for k in sorted(loss_dict.keys()):
             loss_names.append(k)
             all_losses.append(loss_dict[k])
-        all_losses = torch.stack(all_losses, dim=0)
+        try:
+            all_losses = torch.stack(all_losses, dim=0)
+        except:
+            return loss_dict
         dist.reduce(all_losses, dst=0)
         if dist.get_rank() == 0:
             # only main process gets accumulated, so only divide by

@@ -171,7 +171,6 @@ def train(cfg, local_rank, distributed, logger, writer):
         batch_time = time.time() - end
         end = time.time()
         meters.update(time=batch_time, data=data_time)
-
         eta_seconds = meters.time.global_avg * (max_iter - iteration)
         eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
         if iteration % 200 == 0 or iteration == max_iter:
@@ -215,6 +214,12 @@ def train(cfg, local_rank, distributed, logger, writer):
                     loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
 
             loss_str = 'nbdt_loss:'
+            if str_meters.find(loss_str) != -1:
+                idx = str_meters.find(loss_str) + len(loss_str) + 1
+                writer.add_scalar('train/{}'.format(
+                    loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
+
+            loss_str = 'loss_class_balanced:'
             if str_meters.find(loss_str) != -1:
                 idx = str_meters.find(loss_str) + len(loss_str) + 1
                 writer.add_scalar('train/{}'.format(
