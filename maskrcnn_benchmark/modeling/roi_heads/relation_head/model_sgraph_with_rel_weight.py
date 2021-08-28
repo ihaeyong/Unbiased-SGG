@@ -8,8 +8,23 @@ from .utils_motifs import to_onehot
 
 from scipy.stats import entropy, skew
 
+from nbdt.utils import maybe_install_wordnet
+from nbdt import loss as nbdtloss
+
 torch.cuda.manual_seed(2021)
 
+
+def NBDTLoss(cfg, criterion):
+    maybe_install_wordnet()
+
+    class_criterion = getattr(nbdtloss, cfg.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.TYPE)
+    NBDTloss = class_criterion(dataset='VG150',
+                               criterion=criterion,
+                               sample_nums=cfg.MODEL.ROI_RELATION_HEAD.REL_SAMPLES[1:],
+                               path_graph=cfg.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.PATH_GRAPH,
+                               path_wnids=cfg.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.PATH_WNIDS,
+                               tree_supervision_weight=cfg.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.FACTOR)
+    return NBDTloss
 
 class LDAMLoss(nn.Module):
 
@@ -451,7 +466,7 @@ class RelWeight(nn.Module):
 
             elif True:
                 skew_neg_th = skew_v.mean() - 0.7
-                ent_neg_w = 0.16  # default 0.17
+                ent_neg_w = 0.07  # default 0.17
 
                 neg_mask = (skew_v > skew_neg_th).astype(float)
                 neg_beta = (1.0 - ent_v * ent_neg_w) * neg_mask

@@ -350,7 +350,7 @@ _C.MODEL.ROI_RELATION_HEAD.LOSS.FOCAL.ALPHA = 0.25
 _C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT = CN()
 
 _C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.TYPE = 'HardTreeSupLoss'
-_C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.PATH_GRAPH = './nbdt/hierarchies/VG150/graph-induced.json'
+_C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.PATH_GRAPH = './nbdt/hierarchies/VG150/graph-cogtree.json'
 _C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.PATH_WNIDS = './nbdt/wnids/VG150.txt'
 _C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.FACTOR = 1.0
 _C.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.MODE = 'mean'
@@ -604,6 +604,11 @@ _C.MODEL.ROI_RELATION_HEAD.REL_PROP = [0.01858, 0.00057, 0.00051, 0.00109, 0.001
                                        0.01286,
                                        0.00647, 0.00084, 0.01077, 0.00132, 0.00069, 0.00376, 0.00214, 0.11424, 0.01205,
                                        0.02958]
+
+_C.MODEL.ROI_RELATION_HEAD.REL_SAMPLES = [8551699, 6712, 171, 208, 379, 504, 1829, 1413, 10011, 644, 394, 1603, 397, 460, 565, 4, 809,
+                                          163, 157, 663, 67144, 10764, 21748, 3167, 752, 676, 364, 114, 234, 15300, 31347,
+                                          109355, 333, 793, 151, 601, 429, 71, 4260, 44, 5086, 2273, 299, 3757, 551, 270, 1225,
+                                          352, 47326, 4810, 11059]
 
 _C.MODEL.VGG = CN()
 _C.MODEL.VGG.VGG16_OUT_CHANNELS = 512

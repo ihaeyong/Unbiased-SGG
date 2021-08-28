@@ -171,7 +171,6 @@ def train(cfg, local_rank, distributed, logger, writer):
         batch_time = time.time() - end
         end = time.time()
         meters.update(time=batch_time, data=data_time)
-
         eta_seconds = meters.time.global_avg * (max_iter - iteration)
         eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
         if iteration % 200 == 0 or iteration == max_iter:
@@ -214,19 +213,13 @@ def train(cfg, local_rank, distributed, logger, writer):
                 writer.add_scalar('train/{}'.format(
                     loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
 
-            loss_str = 'rel_cl_loss:'
+            loss_str = 'nbdt_loss:'
             if str_meters.find(loss_str) != -1:
                 idx = str_meters.find(loss_str) + len(loss_str) + 1
                 writer.add_scalar('train/{}'.format(
                     loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
 
-            loss_str = 'link_loss:'
-            if str_meters.find(loss_str) != -1:
-                idx = str_meters.find(loss_str) + len(loss_str) + 1
-                writer.add_scalar('train/{}'.format(
-                    loss_str[:-1]), float(str_meters[idx:idx+6]), iteration)
-
-            loss_str = 'iba_loss:'
+            loss_str = 'loss_class_balanced:'
             if str_meters.find(loss_str) != -1:
                 idx = str_meters.find(loss_str) + len(loss_str) + 1
                 writer.add_scalar('train/{}'.format(
@@ -284,7 +277,7 @@ def train(cfg, local_rank, distributed, logger, writer):
             scheduler.step()
 
         if cfg.SOLVER.TO_VAL and iteration % cfg.SOLVER.VAL_PERIOD == 0:
-            if optimizer.param_groups[-1]["lr"] < 8e-2:
+            if optimizer.param_groups[-1]["lr"] < 1e-3:
 
                 logger.info("======== TEST : {} ============".format(iteration))
                 cfg.merge_from_list(['LOG.MODE', 'test'])

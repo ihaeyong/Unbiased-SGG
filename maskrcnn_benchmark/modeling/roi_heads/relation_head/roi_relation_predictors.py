@@ -36,6 +36,9 @@ from maskrcnn_benchmark.modeling.utils import cat
 from maskrcnn_benchmark.structures.boxlist_ops import squeeze_tensor
 from .utils_motifs import to_onehot, obj_edge_vectors
 
+from .model_sgraph_with_rel_weight import NBDTLoss
+from .loss import ClassBalancedLoss, FocalLoss, ReweightLoss
+
 @registry.ROI_RELATION_PREDICTOR.register("BGNNPredictor")
 class BGNNPredictor(nn.Module):
     def __init__(self, config, in_channels):
@@ -43,10 +46,10 @@ class BGNNPredictor(nn.Module):
         self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
         self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
         self.use_bias = config.MODEL.ROI_RELATION_HEAD.FREQUENCY_BAIS
-
+        self.config = config
         # mode
-        if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
-            if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL:
+        if config.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
+            if config.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL:
                 self.mode = "predcls"
             else:
                 self.mode = "sgcls"
@@ -54,7 +57,7 @@ class BGNNPredictor(nn.Module):
             self.mode = "sgdet"
 
         assert in_channels is not None
-        self.pooling_dim = cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_POOLING_DIM
+        self.pooling_dim = config.MODEL.ROI_RELATION_HEAD.CONTEXT_POOLING_DIM
         self.input_dim = in_channels
         self.hidden_dim = config.MODEL.ROI_RELATION_HEAD.BGNN_MODULE.GRAPH_HIDDEN_DIM
 
@@ -128,6 +131,21 @@ class BGNNPredictor(nn.Module):
         self.non_vis_dists = nn.Linear(self.embed_dim * 2,
                                        self.num_rel_cls, bias=True)
         layer_init(self.non_vis_dists, xavier=True)
+
+        # cogtree loss
+        self.use_nbdt_loss = config.MODEL.ROI_RELATION_HEAD.LOSS.USE_NBDT_LOSS
+        self.use_class_balanced_loss = config.MODEL.ROI_RELATION_HEAD.LOSS.USE_CLASS_BALANCED_LOSS
+
+        if self.use_nbdt_loss:
+            criterion = nn.CrossEntropyLoss()
+            self.nbdt_loss = NBDTLoss(config, criterion)
+
+        if self.use_class_balanced_loss:
+            self.class_balanced_loss = ClassBalancedLoss(
+                self.num_rel_cls,
+                config.MODEL.ROI_RELATION_HEAD.LOSS.CB_FACTOR,
+                config.MODEL.ROI_RELATION_HEAD.REL_SAMPLES,
+                loss_type=config.MODEL.ROI_RELATION_HEAD.LOSS.CB_TYPE)
 
     def init_classifier_weight(self):
         self.rel_classifier.reset_parameters()
@@ -236,16 +254,37 @@ class BGNNPredictor(nn.Module):
             else:
                 freq_bias = torch.sigmoid(freq_dists)
 
-            rel_cls_logits = (
-                # modified by haeyong.k
-                rel_cls_logits
-                + self.freq_lambda * torch.sigmoid(freq_dists) + embed_dists
-            )
+            if False:
+                rel_cls_logits = (
+                    # modified by haeyong.k
+                    rel_cls_logits
+                    + self.freq_lambda * torch.sigmoid(freq_dists) + embed_dists
+                )
+            else:
+                rel_cls_logits = (
+                    # original
+                    rel_cls_logits
+                    + self.freq_lambda * freq_dists
+                )
+
+        add_losses = {}
+        if self.training and self.use_class_balanced_loss:
+            rel_dists = rel_cls_logits
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            class_balanced_loss = self.class_balanced_loss(rel_dists, labels)
+            add_losses.update(dict(loss_class_balanced=class_balanced_loss))
+
+        if self.training and self.use_nbdt_loss:
+            rel_dists = rel_cls_logits
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            nbdt_loss = self.nbdt_loss(rel_dists, labels, self.config.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.MODE)
+            add_losses.update(dict(nbdt_loss=nbdt_loss))
 
         obj_pred_logits = obj_pred_logits.split(num_objs, dim=0)
         rel_cls_logits = rel_cls_logits.split(num_rels, dim=0)
 
-        add_losses = {}
         ## pre clser relpn supervision
         if pre_cls_logits is not None and self.training:
             rel_labels = cat(rel_labels, dim=0)
@@ -268,6 +307,7 @@ class TransformerPredictor(nn.Module):
         # load parameters
         self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
         self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
+        self.config = config
 
         assert in_channels is not None
         num_inputs = in_channels
@@ -330,6 +370,20 @@ class TransformerPredictor(nn.Module):
             self.non_vis_dists = nn.Linear(self.embed_dim * 2,
                                            self.num_rel_cls, bias=True)
             layer_init(self.non_vis_dists, xavier=True)
+
+        # cogtree loss
+        self.use_nbdt_loss = config.MODEL.ROI_RELATION_HEAD.LOSS.USE_NBDT_LOSS
+
+        if self.use_nbdt_loss:
+            criterion = nn.CrossEntropyLoss()
+            self.nbdt_loss = NBDTLoss(config, criterion)
+
+        if self.use_class_balanced_loss:
+            self.class_balanced_loss = ClassBalancedLoss(
+                self.num_rel_cls,
+                config.MODEL.ROI_RELATION_HEAD.LOSS.CB_FACTOR,
+                config.MODEL.ROI_RELATION_HEAD.REL_SAMPLES,
+                loss_type=config.MODEL.ROI_RELATION_HEAD.LOSS.CB_TYPE)
 
     def feature_generate(self, roi_features, proposals, num_objs, rel_pair_idxs, union_features, num_rels, logger):
         obj_dists, obj_preds, obj_feats, obj_embed_out, pos_embed = self.obj_context_layer(roi_features, proposals,
@@ -417,13 +471,25 @@ class TransformerPredictor(nn.Module):
             else:
                 freq_bias = torch.sigmoid(freq_dists)
 
-            if True:
+            if False:
                 # proposed by haeyong.k
                 rel_dists = rel_dists + torch.sigmoid(freq_dists) + embed_dists
             else:
                 rel_dists = rel_dists + freq_dists
 
         add_losses = {}
+
+        if self.training and self.use_class_balanced_loss:
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            class_balanced_loss = self.class_balanced_loss(rel_dists, labels)
+            add_losses.update(dict(loss_class_balanced=class_balanced_loss))
+
+        if self.training and self.use_nbdt_loss:
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            nbdt_loss = self.nbdt_loss(rel_dists, labels, self.cfg.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.MODE)
+            add_losses.update(dict(nbdt_loss=nbdt_loss))
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
@@ -438,6 +504,7 @@ class IMPPredictor(nn.Module):
         self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
         self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
         self.use_bias = False
+        self.config = config
 
         assert in_channels is not None
 
@@ -458,6 +525,21 @@ class IMPPredictor(nn.Module):
         if self.use_bias:
             statistics = get_dataset_statistics(config)
             self.freq_bias = FrequencyBias(config, statistics)
+
+        # cogtree loss
+        self.use_nbdt_loss = config.MODEL.ROI_RELATION_HEAD.LOSS.USE_NBDT_LOSS
+        self.use_class_balanced_loss = config.MODEL.ROI_RELATION_HEAD.LOSS.USE_CLASS_BALANCED_LOSS
+
+        if self.use_nbdt_loss:
+            criterion = nn.CrossEntropyLoss()
+            self.nbdt_loss = NBDTLoss(config, criterion)
+
+        if self.use_class_balanced_loss:
+            self.class_balanced_loss = ClassBalancedLoss(
+                self.num_rel_cls,
+                config.MODEL.ROI_RELATION_HEAD.LOSS.CB_FACTOR,
+                config.MODEL.ROI_RELATION_HEAD.REL_SAMPLES,
+                loss_type=config.MODEL.ROI_RELATION_HEAD.LOSS.CB_TYPE)
 
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, union_features, logger=None):
@@ -490,18 +572,36 @@ class IMPPredictor(nn.Module):
 
             freq_dists = self.freq_bias.index_with_labels(pair_pred.long())
             freq_bias = torch.sigmoid(freq_dists)
-            if True:
+            if False:
                 # proposed by haeyong
                 rel_dists = rel_dists + torch.sigmoid(freq_dists)
             else:
                 rel_dists = rel_dists + freq_dists
 
-        obj_dists = obj_dists.split(num_objs, dim=0)
-        rel_dists = rel_dists.split(num_rels, dim=0)
-
         # we use obj_preds instead of pred from obj_dists
         # because in decoder_rnn, preds has been through a nms stage
         add_losses = {}
+
+        if self.training and self.use_nbdt_loss:
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            nbdt_loss = self.nbdt_loss(rel_dists, labels, self.cfg.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.MODE)
+            add_losses.update(dict(nbdt_loss=nbdt_loss))
+
+        if self.training and self.use_class_balanced_loss:
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            class_balanced_loss = self.class_balanced_loss(rel_dists, labels)
+            add_losses.update(dict(loss_class_balanced=class_balanced_loss))
+
+        if self.training and self.use_nbdt_loss:
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            nbdt_loss = self.nbdt_loss(rel_dists, labels, self.config.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.MODE)
+            add_losses.update(dict(nbdt_loss=nbdt_loss))
+
+        obj_dists = obj_dists.split(num_objs, dim=0)
+        rel_dists = rel_dists.split(num_rels, dim=0)
 
         return obj_dists, rel_dists, add_losses, freq_bias
 
@@ -520,6 +620,7 @@ class MotifPredictor(nn.Module):
         self.use_vision = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_VISION
         self.use_bias = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS
         self.embedding = True
+        self.config = config
 
         # load class dict
         statistics = get_dataset_statistics(config)
@@ -561,6 +662,21 @@ class MotifPredictor(nn.Module):
         if self.use_bias:
             # convey statistics into FrequencyBias to avoid loading again
             self.freq_bias = FrequencyBias(config, statistics)
+
+        # cogtree loss
+        self.use_nbdt_loss = config.MODEL.ROI_RELATION_HEAD.LOSS.USE_NBDT_LOSS
+        self.use_class_balanced_loss = config.MODEL.ROI_RELATION_HEAD.LOSS.USE_CLASS_BALANCED_LOSS
+
+        if self.use_nbdt_loss:
+            criterion = nn.CrossEntropyLoss()
+            self.nbdt_loss = NBDTLoss(config, criterion)
+
+        if self.use_class_balanced_loss:
+            self.class_balanced_loss = ClassBalancedLoss(
+                self.num_rel_cls,
+                config.MODEL.ROI_RELATION_HEAD.LOSS.CB_FACTOR,
+                config.MODEL.ROI_RELATION_HEAD.REL_SAMPLES,
+                loss_type=config.MODEL.ROI_RELATION_HEAD.LOSS.CB_TYPE)
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, union_features, logger=None):
         """
@@ -624,18 +740,30 @@ class MotifPredictor(nn.Module):
             else:
                 freq_bias = torch.sigmoid(freq_dists)
 
-            if True:
+            if False:
                 # proposed by haeyong
                 rel_dists = rel_dists + torch.sigmoid(freq_dists) + embed_dists
             else:
                 rel_dists = rel_dists + freq_dists
 
-        obj_dists = obj_dists.split(num_objs, dim=0)
-        rel_dists = rel_dists.split(num_rels, dim=0)
-
         # we use obj_preds instead of pred from obj_dists
         # because in decoder_rnn, preds has been through a nms stage
         add_losses = {}
+
+        if self.training and self.use_class_balanced_loss:
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            class_balanced_loss = self.class_balanced_loss(rel_dists, labels)
+            add_losses.update(dict(loss_class_balanced=class_balanced_loss))
+
+        if self.training and self.use_nbdt_loss:
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            nbdt_loss = self.nbdt_loss(rel_dists, labels, self.config.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.MODE)
+            add_losses.update(dict(nbdt_loss=nbdt_loss))
+
+        obj_dists = obj_dists.split(num_objs, dim=0)
+        rel_dists = rel_dists.split(num_rels, dim=0)
 
         if self.attribute_on:
             att_dists = att_dists.split(num_objs, dim=0)
@@ -652,6 +780,7 @@ class VCTreePredictor(nn.Module):
         self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
         self.num_att_cls = config.MODEL.ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES
         self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
+        self.config = config
 
         assert in_channels is not None
         num_inputs = in_channels
@@ -700,6 +829,23 @@ class VCTreePredictor(nn.Module):
             self.non_vis_dists = nn.Linear(self.embed_dim * 2,
                                            self.num_rel_cls, bias=True)
             layer_init(self.non_vis_dists, xavier=True)
+
+        # cogtree loss
+        self.use_nbdt_loss = config.MODEL.ROI_RELATION_HEAD.LOSS.USE_NBDT_LOSS
+        self.use_class_balanced_loss = config.MODEL.ROI_RELATION_HEAD.LOSS.USE_CLASS_BALANCED_LOSS
+
+        if self.use_nbdt_loss:
+            criterion = nn.CrossEntropyLoss()
+            self.nbdt_loss = NBDTLoss(config, criterion)
+
+        if self.use_class_balanced_loss:
+            self.class_balanced_loss = ClassBalancedLoss(
+                self.num_rel_cls,
+                config.MODEL.ROI_RELATION_HEAD.LOSS.CB_FACTOR,
+                config.MODEL.ROI_RELATION_HEAD.REL_SAMPLES,
+                loss_type=config.MODEL.ROI_RELATION_HEAD.LOSS.CB_TYPE)
+
+
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, union_features, logger=None):
         """
@@ -758,20 +904,31 @@ class VCTreePredictor(nn.Module):
         else:
             freq_bias = torch.sigmoid(freq_dists)
 
-        if True:
+        if False:
             # proposed by haeyong
             rel_dists = ctx_dists + torch.sigmoid(freq_dists) + embed_dists
         else:
-            rel_dists = ctx_dists + frq_dists
+            rel_dists = ctx_dists + freq_dists
 
         #rel_dists = ctx_dists + uni_gate * uni_dists + frq_gate * frq_dists
-
-        obj_dists = obj_dists.split(num_objs, dim=0)
-        rel_dists = rel_dists.split(num_rels, dim=0)
 
         # we use obj_preds instead of pred from obj_dists
         # because in decoder_rnn, preds has been through a nms stage
         add_losses = {}
+        if self.training and self.use_class_balanced_loss:
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            class_balanced_loss = self.class_balanced_loss(rel_dists, labels)
+            add_losses.update(dict(loss_class_balanced=class_balanced_loss))
+
+        if self.training and self.use_nbdt_loss:
+            labels = cat(rel_labels, dim=0)
+            assert rel_dists.shape[0] == labels.shape[0]
+            nbdt_loss = self.nbdt_loss(rel_dists, labels, self.config.MODEL.ROI_RELATION_HEAD.LOSS.NBDT.MODE)
+            add_losses.update(dict(nbdt_loss=nbdt_loss))
+
+        obj_dists = obj_dists.split(num_objs, dim=0)
+        rel_dists = rel_dists.split(num_rels, dim=0)
 
         if self.training:
             binary_loss = []
