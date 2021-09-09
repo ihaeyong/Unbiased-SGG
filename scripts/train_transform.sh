@@ -29,7 +29,7 @@ if [ $2 == "predcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 5000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/sg-transform-embed_v3_cls_cogtree-predcls
+           OUTPUT_DIR ./checkpoints/sg-transform-embed_v3_cls_skew0.7_ent0.03-predcls
 
 elif [ $2 == "sgcls" ]; then
     python -m torch.distributed.launch \
@@ -42,8 +42,8 @@ elif [ $2 == "sgcls" ]; then
            MODEL.ROI_RELATION_HEAD.PREDICTOR TransformerPredictor \
            MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS True \
            MODEL.ROI_RELATION_HEAD.RECT_BOX_EMB True \
-           MODEL.ROI_RELATION_HEAD.LOSS.USE_NBDT_LOSS True \
-           MODEL.ROI_RELATION_HEAD.LOSS.USE_CLASS_BALANCED_LOSS True \
+           MODEL.ROI_RELATION_HEAD.LOSS.USE_NBDT_LOSS False \
+           MODEL.ROI_RELATION_HEAD.LOSS.USE_CLASS_BALANCED_LOSS False \
            MODEL.ROI_RELATION_HEAD.REL_OBJ_MULTI_TASK_LOSS True \
            SOLVER.IMS_PER_BATCH 12 \
            SOLVER.BASE_LR 0.001 \
@@ -54,7 +54,7 @@ elif [ $2 == "sgcls" ]; then
            SOLVER.CHECKPOINT_PERIOD 5000 \
            GLOVE_DIR ./datasets/glove \
            MODEL.PRETRAINED_DETECTOR_CKPT ./checkpoints/pretrained_faster_rcnn/model_final.pth \
-           OUTPUT_DIR ./checkpoints/sg-transform-embed_v3_cls_cogtree-sgcls
+           OUTPUT_DIR ./checkpoints/sg-transform-embed_v3_cls_skew0.7_ent0.01-sgcls
 
 elif [ $2 == "sgdet" ]; then
     python -m torch.distributed.launch \

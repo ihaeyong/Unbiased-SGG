@@ -385,6 +385,8 @@ class TransformerPredictor(nn.Module):
                 config.MODEL.ROI_RELATION_HEAD.REL_SAMPLES,
                 loss_type=config.MODEL.ROI_RELATION_HEAD.LOSS.CB_TYPE)
 
+        self.img_idx = 0
+
     def feature_generate(self, roi_features, proposals, num_objs, rel_pair_idxs, union_features, num_rels, logger):
         obj_dists, obj_preds, obj_feats, obj_embed_out, pos_embed = self.obj_context_layer(roi_features, proposals,
                                                                                            logger)
@@ -471,7 +473,7 @@ class TransformerPredictor(nn.Module):
             else:
                 freq_bias = torch.sigmoid(freq_dists)
 
-            if False:
+            if True:
                 # proposed by haeyong.k
                 rel_dists = rel_dists + torch.sigmoid(freq_dists) + embed_dists
             else:
@@ -493,6 +495,34 @@ class TransformerPredictor(nn.Module):
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
+
+
+        if False:
+            np_obj_labels = obj_dists[0].max(1)[1].cpu().numpy()
+            np_rel_pair_idxs = rel_pair_idxs[0].cpu().numpy()
+            np_freq_bias = freq_bias.cpu().numpy()
+            np_rel_dists = rel_dists[0].cpu().numpy()
+
+            path = './checkpoints/freq_bias/test_{:06d}/'.format(self.img_idx)
+
+            try:
+                os.stat(path)
+            except:
+                os.mkdir(path)
+
+            with open(path + '{}_obj_labels.npy'.format(self.img_idx), 'wb') as f:
+                np.save(f, np_obj_labels)
+
+            with open(path + '{}_rel_pair_idxs.npy'.format(self.img_idx), 'wb') as f:
+                np.save(f, np_rel_pair_idxs)
+
+            with open(path + '{}_freq_bias.npy'.format(self.img_idx), 'wb') as f:
+                np.save(f, np_freq_bias)
+
+            with open(path + '{}_rel_dists.npy'.format(self.img_idx), 'wb') as f:
+                np.save(f, np_rel_dists)
+
+            self.img_idx += 1
 
         return obj_dists, rel_dists, add_losses, freq_bias
 
@@ -904,7 +934,7 @@ class VCTreePredictor(nn.Module):
         else:
             freq_bias = torch.sigmoid(freq_dists)
 
-        if False:
+        if True:
             # proposed by haeyong
             rel_dists = ctx_dists + torch.sigmoid(freq_dists) + embed_dists
         else:

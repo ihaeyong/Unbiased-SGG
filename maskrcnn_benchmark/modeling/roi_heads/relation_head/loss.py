@@ -48,8 +48,8 @@ class RelationLossComputation(object):
         self.obj_type = 'sample-weight'
         self.gamma = 0.02
 
-        #self.weight = 'batchweight'
-        self.weight = 'weight'
+        self.weight = 'batchweight'
+        #self.weight = 'weight'
 
         cls_num_list = np.load('./datasets/vg/obj_freq.npy')
 
