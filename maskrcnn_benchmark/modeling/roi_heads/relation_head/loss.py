@@ -11,6 +11,7 @@ from maskrcnn_benchmark.modeling.matcher import Matcher
 from maskrcnn_benchmark.structures.boxlist_ops import boxlist_iou
 from maskrcnn_benchmark.modeling.utils import cat
 from .model_sgraph_with_rel_weight import RelWeight, ObjWeight, LDAMLoss, NBDTLoss
+from .skew_class_weight import SkewBalWeight
 
 class RelationLossComputation(object):
     """
@@ -54,7 +55,10 @@ class RelationLossComputation(object):
         cls_num_list = np.load('./datasets/vg/obj_freq.npy')
 
         self.obj_weight = ObjWeight(cls_num_list)
-        self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
+        if False:
+            self.rel_weight = RelWeight(predicate_proportion, temp=1e0)
+        else:
+            self.rel_weight = SkewBalWeight()
 
         self.logSoftmax = nn.LogSoftmax(dim=1)
 
@@ -105,10 +109,15 @@ class RelationLossComputation(object):
 
         if self.weight == 'batchweight':
 
-            rel_weight, rel_margin = self.rel_weight(relation_logits,
-                                                     freq_bias,
-                                                     rel_labels,
-                                                     self.gamma)
+            if False:
+                rel_weight, rel_margin = self.rel_weight(relation_logits,
+                                                         freq_bias,
+                                                         rel_labels,
+                                                         self.gamma)
+            else:
+                rel_weight = self.rel_weight(freq_bias, rel_labels)
+                
+
             if self.rel_type == 'focal' :
                 loss_relation = F.cross_entropy(relation_logits,
                                                 rel_labels.long(),
