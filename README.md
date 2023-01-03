@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.7-blue.svg)](https://www.python.org/)
 ![PyTorch](https://img.shields.io/badge/pytorch-1.2.0-%237732a8)
 
-Our paper [Skew Class-balanced Re-weighting for Unbiased Scene Graph Generation](https://arxiv.org/abs/2002.11949) has been accepted by ....
+Our code [Skew Class-balanced Re-weighting for Unbiased Scene Graph Generation](https://arxiv.org/abs/2301.00351) has updated by [the official SGG Benchmark in Pytorch](https://github.com/KaihuaTang/Scene-Graph-Benchmark.pytorch).
 
 ## Recent Updates
 
@@ -12,7 +12,7 @@ Our paper [Skew Class-balanced Re-weighting for Unbiased Scene Graph Generation]
 - [x] 2020.06.23 Allow scene graph detection (SGDet) on custom images [\[link\]](#SGDet-on-custom-images)
 - [x] 2020.07.21 Change scene graph detection output on custom images to json files [\[link\]](#SGDet-on-custom-images)
 - [x] 2020.07.21 Visualize detected scene graphs of custom images [\[link\]](#Visualize-Detected-SGs-of-Custom-Images)
-- [ ] TODO: Using [Background-Exempted Inference](https://github.com/KaihuaTang/Long-Tailed-Recognition.pytorch/tree/master/lvis1.0#background-exempted-inference) to improve the quality of TDE Scene Graph
+- [x] 2023.01.01 Update Skew Class-balanced Re-weighting for Unbiased SGG models.
 
 ## Contents
 
@@ -145,6 +145,13 @@ where ```GLOVE_DIR``` is the directory used to save glove initializations, ```MO
 Training Example 2 : (SGCls, Causal, **TDE**, SUM Fusion, MOTIFS Model)
 ```bash
 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --master_port 10026 --nproc_per_node=2 tools/relation_train_net.py --config-file "configs/e2e_relation_X_101_32_8_FPN_1x.yaml" MODEL.ROI_RELATION_HEAD.USE_GT_BOX True MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL False MODEL.ROI_RELATION_HEAD.PREDICTOR CausalAnalysisPredictor MODEL.ROI_RELATION_HEAD.CAUSAL.EFFECT_TYPE none MODEL.ROI_RELATION_HEAD.CAUSAL.FUSION_TYPE sum MODEL.ROI_RELATION_HEAD.CAUSAL.CONTEXT_LAYER motifs  SOLVER.IMS_PER_BATCH 12 TEST.IMS_PER_BATCH 2 DTYPE "float16" SOLVER.MAX_ITER 50000 SOLVER.VAL_PERIOD 2000 SOLVER.CHECKPOINT_PERIOD 2000 GLOVE_DIR /home/kaihua/glove MODEL.PRETRAINED_DETECTOR_CKPT /home/kaihua/checkpoints/pretrained_faster_rcnn/model_final.pth OUTPUT_DIR /home/kaihua/checkpoints/causal-motifs-sgcls-exmp
+```
+Training Example 3: (PredCls, SGCls, SGDet, SCR, MOTIFS Model) using 2 gpus
+
+```bash
+./scripts/train_motif.sh 2 predcls gpu0 gpu1 port
+./scripts/train_motif.sh 2 sgcls gpu0 gpu1 port
+./scripts/train_motif.sh 2 sgdet gpu0 gpu1 port
 ```
 
 
